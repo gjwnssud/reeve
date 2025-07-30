@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚗 차량 데이터셋 생성기</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            color: #6c757d;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 40px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 16px;
+            resize: vertical;
+            min-height: 150px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-upload {
+            border: 2px dashed #e9ecef;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .file-upload.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-upload-text {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+            display: none;
+        }
+
+        .result h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .result-value {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .confidence {
+            background: #28a745;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+        }
+
+        .json-result {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #f5c6cb;
+            margin-top: 20px;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 10px;
+            margin-top: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 차량 데이터셋 생성기</h1>
+            <p>LLM 파인튜닝용 차량 데이터 추출 도구</p>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('text')">📝 텍스트 분석</div>
+            <div class="tab" onclick="switchTab('image')">🖼️ 이미지 분석</div>
+        </div>
+
+        <div id="text-tab" class="tab-content active">
+            <div class="form-group">
+                <label for="text-input">차량 설명을 입력하세요</label>
+                <textarea id="text-input" placeholder="예: 2022년식 현대 소나타 하이브리드, LED 헤드램프, 카스케이딩 그릴">2022년식 현대 소나타 하이브리드
+- 색상: 화이트
+- LED 헤드램프
+- 카스케이딩 그릴
+- 17인치 알로이 휠</textarea>
+            </div>
+            <button class="btn" onclick="analyzeText()">🔍 텍스트 분석 시작</button>
+
+            <div id="text-loading" class="loading">
+                <div class="spinner"></div>
+                <p>텍스트를 분석하고 있습니다...</p>
+            </div>
+
+            <div id="text-result" class="result"></div>
+        </div>
+
+        <div id="image-tab" class="tab-content">
+            <div class="form-group">
+            <label>차량 이미지를 선택하세요</label>
+            <div class="file-upload" onclick="document.getElementById('image-input').click()">
+            <input type="file" id="image-input" accept="image/*" multiple onchange="handleImageSelect(event)">
+            <div class="file-upload-text">
+            📁 클릭하여 이미지 선택 (다중 선택 가능) 또는 드래그 앤 드롭
+            <br><small>JPG, PNG, BMP, GIF 지원 (최대 16MB)</small>
+            </div>
+            </div>
+            <div id="selected-files-list"></div>
+                <div id="image-preview"></div>
+            </div>
+                <button class="btn" id="analyze-image-btn" onclick="analyzeImages()" disabled>🔍 이미지 분석 시작</button>
+
+            <div id="image-loading" class="loading">
+                <div class="spinner"></div>
+                <p>이미지를 분석하고 있습니다...</p>
+            </div>
+
+            <div id="image-result" class="result"></div>
+
+            <!-- 데이터셋 저장 버튼 추가 -->
+            <div id="dataset-actions" style="display: none; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                <h4>📋 데이터셋 관리</h4>
+                <button class="btn" onclick="saveToDataset()" style="margin-right: 10px;">💾 데이터셋에 저장</button>
+                <button class="btn" onclick="showDatasetStats()" style="background: #17a2b8;">📊 데이터셋 통계</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let currentResults = null;
+
+        function switchTab(tabName) {
+            // 탭 활성화
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
+
+            // 탭 컨텐츠 표시
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        function handleImageSelect(event) {
+            const files = Array.from(event.target.files);
+            if (files.length > 0) {
+                selectedFiles = files;
+
+                // 선택된 파일 목록 표시
+                updateSelectedFilesList();
+
+                // 첫 번째 이미지 미리보기
+                showImagePreview(files[0]);
+
+                document.getElementById('analyze-image-btn').disabled = false;
+            }
+        }
+
+        function displayMultipleResults(type, data) {
+            const resultDiv = document.getElementById(`${type}-result`);
+            const results = data.results;
+
+            let html = `
+                <h3>🎯 다중 분석 결과 (${results.length}개)</h3>
+                <div style="margin: 15px 0; padding: 10px; background: #e8f5e8; border-radius: 8px;">
+                    <strong>요약:</strong> 
+                    성공 ${data.success_count}개, 
+                    전체 ${data.total_count}개
+                </div>
+            `;
+
+            results.forEach((result, index) => {
+                const filename = result.input || `이미지_${index + 1}`;
+                html += `
+                    <div style="margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+                        <h4>📸 ${index + 1}. ${filename}</h4>
+                `;
+
+                if (result.error) {
+                    html += `<div style="color: #d32f2f; margin: 10px 0;">❌ 오류: ${result.error}</div>`;
+                } else {
+                    const brandKr = result.brand_kr || 'N/A';
+                    const brandEn = result.brand_en || 'N/A';
+                    const modelKr = result.model_kr || 'N/A';
+                    const modelEn = result.model_en || 'N/A';
+                    const year = result.year || 'N/A';
+                    const confidence = result.confidence || 0;
+
+                    html += `
+                        <div style="margin: 8px 0;">🏷️ <strong>브랜드:</strong> ${brandKr} (${brandEn})</div>
+                        <div style="margin: 8px 0;">🚗 <strong>차종:</strong> ${modelKr} (${modelEn})</div>
+                        <div style="margin: 8px 0;">📅 <strong>연식:</strong> ${year}</div>
+                        <div style="margin: 8px 0;">📊 <strong>신뢰도:</strong> <span style="background: #4caf50; color: white; padding: 2px 8px; border-radius: 12px;">${confidence}%</span></div>
+                    `;
+                }
+
+                html += `</div>`;
+            });
+
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+        }
+
+        async function saveToDataset() {
+            if (!currentResults || currentResults.length === 0) {
+                alert('저장할 결과가 없습니다.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/save_to_dataset', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ results: currentResults })
+                });
+
+                const result = await response.json();
+
+                if (result.save_info) {
+                    const info = result.save_info;
+                    alert(`✅ 데이터셋 저장 완료!\n\n저장 파일: ${info.saved_file.split('/').pop()}\n새로 추가: ${info.new_items}개\n전체 항목: ${info.total_items}개\n파일 크기: ${info.file_size_mb}MB`);
+                } else {
+                    alert('❌ ' + (result.error || '저장 중 오류가 발생했습니다.'));
+                }
+            } catch (error) {
+                alert('❌ 저장 중 오류: ' + error.message);
+            }
+        }
+
+        async function showDatasetStats() {
+            try {
+                const response = await fetch('/dataset_stats');
+                const stats = await response.json();
+
+                if (stats.error) {
+                    alert('❌ ' + stats.error);
+                } else {
+                    alert(`📊 데이터셋 통계\n\n📄 파일 수: ${stats.total_files}개\n📊 전체 항목: ${stats.total_items}개\n💾 전체 크기: ${stats.total_size_mb}MB\n📁 경로: ${stats.dataset_path}`);
+                }
+            } catch (error) {
+                alert('❌ 통계 조회 중 오류: ' + error.message);
+            }
+        }
+
+        function updateSelectedFilesList() {
+            const listContainer = document.getElementById('selected-files-list');
+            if (selectedFiles.length > 0) {
+                const fileList = selectedFiles.map((file, index) =>
+                    `<div style="padding: 5px; background: #f0f0f0; margin: 2px; border-radius: 5px;">
+                        ${index + 1}. ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)
+                    </div>`
+                ).join('');
+
+                listContainer.innerHTML = `
+                    <div style="margin: 10px 0; padding: 10px; background: #e8f4f8; border-radius: 8px;">
+                        <strong>선택된 파일 (${selectedFiles.length}개):</strong>
+                        ${fileList}
+                    </div>
+                `;
+            } else {
+                listContainer.innerHTML = '';
+            }
+        }
+
+        function showImagePreview(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('image-preview').innerHTML =
+                    `<img src="${e.target.result}" class="image-preview" alt="선택된 이미지 미리보기">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function analyzeText() {
+            const text = document.getElementById('text-input').value.trim();
+            if (!text) {
+                alert('분석할 텍스트를 입력해주세요.');
+                return;
+            }
+
+            showLoading('text');
+            hideResult('text');
+
+            try {
+                const response = await fetch('/analyze_text', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const result = await response.json();
+                hideLoading('text');
+                displayResult('text', result);
+            } catch (error) {
+                hideLoading('text');
+                displayError('text', '분석 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        async function analyzeImages() {
+            if (selectedFiles.length === 0) {
+                alert('분석할 이미지를 선택해주세요.');
+                return;
+            }
+
+            showLoading('image');
+            hideResult('image');
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('images', file);
+            });
+
+            try {
+                const response = await fetch('/analyze_multiple_images', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                hideLoading('image');
+
+                if (result.results) {
+                    currentResults = result.results;
+                    displayMultipleResults('image', result);
+                    // 데이터셋 액션 버튼 표시
+                    document.getElementById('dataset-actions').style.display = 'block';
+                } else {
+                    displayError('image', result.error || '분석 중 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                hideLoading('image');
+                displayError('image', '분석 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        function showLoading(type) {
+            document.getElementById(`${type}-loading`).style.display = 'block';
+        }
+
+        function hideLoading(type) {
+            document.getElementById(`${type}-loading`).style.display = 'none';
+        }
+
+        function hideResult(type) {
+            document.getElementById(`${type}-result`).style.display = 'none';
+        }
+
+        function displayResult(type, result) {
+            const resultDiv = document.getElementById(`${type}-result`);
+
+            if (result.error) {
+                displayError(type, result.error);
+                return;
+            }
+
+            const brandKr = result.brand_kr || 'N/A';
+            const brandEn = result.brand_en || 'N/A';
+            const model = result.model || 'N/A';
+            const year = result.year || 'N/A';
+            const yearInfo = result.year_info || 'N/A';
+            const confidence = result.confidence || 0;
+
+            resultDiv.innerHTML = `
+                <h3>🎯 분석 결과</h3>
+                <div class="result-item">
+                    <span class="result-label">🏷️ 브랜드 (한글)</span>
+                    <span class="result-value">${brandKr}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">🏷️ 브랜드 (영문)</span>
+                    <span class="result-value">${brandEn}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">🚗 차종</span>
+                    <span class="result-value">${model}</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">📅 연식</span>
+                    <span class="result-value">${year}</span>
+                </div>
+                ${yearInfo !== 'N/A' ? `
+                <div class="result-item">
+                    <span class="result-label">📋 연식 근거</span>
+                    <span class="result-value">${yearInfo}</span>
+                </div>
+                ` : ''}
+                <div class="result-item">
+                    <span class="result-label">📊 신뢰도</span>
+                    <span class="confidence">${confidence}%</span>
+                </div>
+                <div class="json-result">
+                    <strong>JSON 결과:</strong><br>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                </div>
+            `;
+
+            resultDiv.style.display = 'block';
+        }
+
+        function displayError(type, errorMessage) {
+            const resultDiv = document.getElementById(`${type}-result`);
+            resultDiv.innerHTML = `
+                <div class="error">
+                    <strong>❌ 오류:</strong> ${errorMessage}
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        }
+
+        // 드래그 앤 드롭 기능
+        const fileUpload = document.querySelector('.file-upload');
+
+        fileUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUpload.classList.add('dragover');
+        });
+
+        fileUpload.addEventListener('dragleave', () => {
+            fileUpload.classList.remove('dragover');
+        });
+
+        fileUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    selectedFile = file;
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        document.getElementById('image-preview').innerHTML =
+                            `<img src="${e.target.result}" class="image-preview" alt="드롭된 이미지">`;
+                        document.getElementById('analyze-image-btn').disabled = false;
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    alert('이미지 파일만 업로드할 수 있습니다.');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
