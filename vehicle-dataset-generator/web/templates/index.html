@@ -263,41 +263,41 @@
         </div>
 
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('text')">📝 텍스트 분석</div>
-            <div class="tab" onclick="switchTab('image')">🖼️ 이미지 분석</div>
+{#            <div class="tab active" onclick="switchTab('text')">📝 텍스트 분석</div>#}
+            <div class="tab active" onclick="switchTab('image')">🖼️ 이미지 분석</div>
         </div>
 
-        <div id="text-tab" class="tab-content active">
-            <div class="form-group">
-                <label for="text-input">차량 설명을 입력하세요</label>
-                <textarea id="text-input" placeholder="예: 2022년식 현대 소나타 하이브리드, LED 헤드램프, 카스케이딩 그릴">2022년식 현대 소나타 하이브리드
-- 색상: 화이트
-- LED 헤드램프
-- 카스케이딩 그릴
-- 17인치 알로이 휠</textarea>
-            </div>
-            <button class="btn" onclick="analyzeText()">🔍 텍스트 분석 시작</button>
+{#        <div id="text-tab" class="tab-content active">#}
+{#            <div class="form-group">#}
+{#                <label for="text-input">차량 설명을 입력하세요</label>#}
+{#                <textarea id="text-input" placeholder="예: 2022년식 현대 소나타 하이브리드, LED 헤드램프, 카스케이딩 그릴">2022년식 현대 소나타 하이브리드#}
+{#- 색상: 화이트#}
+{#- LED 헤드램프#}
+{#- 카스케이딩 그릴#}
+{#- 17인치 알로이 휠</textarea>#}
+{#            </div>#}
+{#            <button class="btn" onclick="analyzeText()">🔍 텍스트 분석 시작</button>#}
+{##}
+{#            <div id="text-loading" class="loading">#}
+{#                <div class="spinner"></div>#}
+{#                <p>텍스트를 분석하고 있습니다...</p>#}
+{#            </div>#}
+{##}
+{#            <div id="text-result" class="result"></div>#}
+{#        </div>#}
 
-            <div id="text-loading" class="loading">
-                <div class="spinner"></div>
-                <p>텍스트를 분석하고 있습니다...</p>
-            </div>
-
-            <div id="text-result" class="result"></div>
-        </div>
-
-        <div id="image-tab" class="tab-content">
+        <div id="image-tab" class="tab-content active">
             <div class="form-group">
             <label>차량 이미지를 선택하세요</label>
             <div class="file-upload" onclick="document.getElementById('image-input').click()">
             <input type="file" id="image-input" accept="image/*" multiple onchange="handleImageSelect(event)">
             <div class="file-upload-text">
-            📁 클릭하여 이미지 선택 (다중 선택 가능) 또는 드래그 앤 드롭
-            <br><small>JPG, PNG, BMP, GIF 지원 (최대 16MB)</small>
+            📁 클릭하여 이미지 선택 (다중 선택 가능) {#또는 드래그 앤 드롭#}
+            <br><small>JPG, PNG, BMP, GIF 지원 (최대 200MB)</small>
             </div>
             </div>
             <div id="selected-files-list"></div>
-                <div id="image-preview"></div>
+{#                <div id="image-preview"></div>#}
             </div>
                 <button class="btn" id="analyze-image-btn" onclick="analyzeImages()" disabled>🔍 이미지 분석 시작</button>
 
@@ -309,9 +309,12 @@
             <div id="image-result" class="result"></div>
 
             <!-- 데이터셋 저장 버튼 추가 -->
-            <div id="dataset-actions" style="display: none; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+            <div id="dataset-actions" style="display: block; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
                 <h4>📋 데이터셋 관리</h4>
-                <button class="btn" onclick="saveToDataset()" style="margin-right: 10px;">💾 데이터셋에 저장</button>
+                <div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border-radius: 5px; font-size: 0.9em;">
+                    💡 <strong>팁:</strong> 분석 결과의 각 필드를 수정한 후 저장하세요. 수정된 내용이 데이터셋에 반영됩니다.
+                </div>
+                <button class="btn" onclick="saveToDataset()" style="margin-right: 10px;">💾 수정된 결과로 데이터셋에 저장</button>
                 <button class="btn" onclick="showDatasetStats()" style="background: #17a2b8;">📊 데이터셋 통계</button>
             </div>
         </div>
@@ -320,6 +323,9 @@
     <script>
         let selectedFiles = [];
         let currentResults = null;
+        let currentPage = 1;
+        let itemsPerPage = 20;
+        let totalPages = 0;
 
         function switchTab(tabName) {
             // 탭 활성화
@@ -340,7 +346,7 @@
                 updateSelectedFilesList();
 
                 // 첫 번째 이미지 미리보기
-                showImagePreview(files[0]);
+                {#showImagePreview(files[0]);#}
 
                 document.getElementById('analyze-image-btn').disabled = false;
             }
@@ -349,7 +355,12 @@
         function displayMultipleResults(type, data) {
             const resultDiv = document.getElementById(`${type}-result`);
             const results = data.results;
-
+            currentResults = results;
+            
+            // 페이지네이션 계산
+            totalPages = Math.ceil(results.length / itemsPerPage);
+            currentPage = 1;
+            
             let html = `
                 <h3>🎯 다중 분석 결과 (${results.length}개)</h3>
                 <div style="margin: 15px 0; padding: 10px; background: #e8f5e8; border-radius: 8px;">
@@ -358,45 +369,274 @@
                     전체 ${data.total_count}개
                 </div>
             `;
-
-            results.forEach((result, index) => {
-                const filename = result.input || `이미지_${index + 1}`;
-                html += `
-                    <div style="margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
-                        <h4>📸 ${index + 1}. ${filename}</h4>
-                `;
-
-                if (result.error) {
-                    html += `<div style="color: #d32f2f; margin: 10px 0;">❌ 오류: ${result.error}</div>`;
-                } else {
-                    const brandKr = result.brand_kr || 'N/A';
-                    const brandEn = result.brand_en || 'N/A';
-                    const modelKr = result.model_kr || 'N/A';
-                    const modelEn = result.model_en || 'N/A';
-                    const year = result.year || 'N/A';
-                    const confidence = result.confidence || 0;
-
-                    html += `
-                        <div style="margin: 8px 0;">🏷️ <strong>브랜드:</strong> ${brandKr} (${brandEn})</div>
-                        <div style="margin: 8px 0;">🚗 <strong>차종:</strong> ${modelKr} (${modelEn})</div>
-                        <div style="margin: 8px 0;">📅 <strong>연식:</strong> ${year}</div>
-                        <div style="margin: 8px 0;">📊 <strong>신뢰도:</strong> <span style="background: #4caf50; color: white; padding: 2px 8px; border-radius: 12px;">${confidence}%</span></div>
-                    `;
-                }
-
-                html += `</div>`;
-            });
-
+            
+            // 페이지네이션 컨트롤 추가 (상단)
+            if (totalPages > 1) {
+                html += createPaginationHTML('top');
+            }
+            
+            html += `<div id="editable-results"></div>`;
+            
+            // 페이지네이션 컨트롤 추가 (하단)
+            if (totalPages > 1) {
+                html += createPaginationHTML('bottom');
+            }
+            
             resultDiv.innerHTML = html;
             resultDiv.style.display = 'block';
+            
+            // 첫 페이지 표시
+            displayCurrentPage();
+        }
+        
+        function createPaginationHTML(position) {
+            return `
+                <div class="pagination-controls" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">
+                        페이지 ${currentPage} / ${totalPages} (한 페이지에 ${itemsPerPage}개씩 표시)
+                    </div>
+                    <div class="pagination-buttons">
+                        <button onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''} 
+                                style="margin: 0 2px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: ${currentPage === 1 ? '#f5f5f5' : 'white'}; cursor: ${currentPage === 1 ? 'not-allowed' : 'pointer'};">
+                            ⏪ 처음
+                        </button>
+                        <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} 
+                                style="margin: 0 2px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: ${currentPage === 1 ? '#f5f5f5' : 'white'}; cursor: ${currentPage === 1 ? 'not-allowed' : 'pointer'};">
+                            ◀ 이전
+                        </button>
+                        <span style="margin: 0 15px; font-weight: 600; color: #333;">${currentPage}</span>
+                        <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} 
+                                style="margin: 0 2px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: ${currentPage === totalPages ? '#f5f5f5' : 'white'}; cursor: ${currentPage === totalPages ? 'not-allowed' : 'pointer'};">
+                            다음 ▶
+                        </button>
+                        <button onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''} 
+                                style="margin: 0 2px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: ${currentPage === totalPages ? '#f5f5f5' : 'white'}; cursor: ${currentPage === totalPages ? 'not-allowed' : 'pointer'};">
+                            마지막 ⏩
+                        </button>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <select onchange="changeItemsPerPage(this.value)" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="10" ${itemsPerPage === 10 ? 'selected' : ''}>페이지당 10개</option>
+                            <option value="20" ${itemsPerPage === 20 ? 'selected' : ''}>페이지당 20개</option>
+                            <option value="50" ${itemsPerPage === 50 ? 'selected' : ''}>페이지당 50개</option>
+                            <option value="100" ${itemsPerPage === 100 ? 'selected' : ''}>페이지당 100개</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function displayCurrentPage() {
+            if (!currentResults) return;
+            
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, currentResults.length);
+            const pageResults = currentResults.slice(startIndex, endIndex);
+            
+            let html = '';
+            
+            pageResults.forEach((result, pageIndex) => {
+                const actualIndex = startIndex + pageIndex;
+                const filename = result.input || `이미지_${actualIndex + 1}`;
+                
+                html += `
+                    <div class="result-card" style="margin: 20px 0; border: 2px solid #ddd; border-radius: 12px; overflow: hidden; background: white; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" data-index="${actualIndex}">
+                        <div style="background: #f8f9fa; padding: 15px; border-bottom: 1px solid #ddd;">
+                            <h4 style="margin: 0; color: #333;">📸 ${actualIndex + 1}. ${filename}</h4>
+                        </div>
+                        <div style="display: flex; min-height: 400px;">
+                            <!-- 이미지 영역 -->
+                            <div style="flex: 1; padding: 20px; border-right: 1px solid #eee; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fafafa;">
+                `;
+                
+                if (result.error) {
+                    html += `
+                        <div style="color: #d32f2f; text-align: center; padding: 20px;">
+                            <i style="font-size: 48px;">❌</i>
+                            <div style="margin-top: 10px; font-weight: 600;">오류 발생</div>
+                            <div style="margin-top: 5px; font-size: 0.9em;">${result.error}</div>
+                        </div>
+                    `;
+                } else {
+                    // 이미지 표시 영역
+                    html += `
+                        <div id="image-display-${actualIndex}" style="max-width: 100%; max-height: 350px; display: flex; align-items: center; justify-content: center; border: 2px dashed #ddd; border-radius: 8px; padding: 20px; background: white;">
+                            <div style="text-align: center; color: #666;">
+                                <i style="font-size: 48px;">🖼️</i>
+                                <div style="margin-top: 10px;">이미지 로딩 중...</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px; text-align: center; font-size: 0.9em; color: #666;">
+                            <strong>파일명:</strong> ${filename}
+                        </div>
+                    `;
+                }
+                
+                html += `
+                            </div>
+                            <!-- 입력란 영역 -->
+                            <div style="flex: 1; padding: 20px;">
+                `;
+                
+                if (!result.error) {
+                    const brandKr = result.brand_kr || '';
+                    const brandEn = result.brand_en || '';
+                    const modelKr = result.model_kr || '';
+                    const modelEn = result.model_en || '';
+                    const year = result.year || '';
+                    const yearInfo = result.year_info || '';
+                    const confidence = result.confidence || 0;
+                    
+                    html += `
+                        <div class="editable-fields">
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">🏷️ 브랜드 (한글)</label>
+                                <input type="text" class="field-input" data-field="brand_kr" value="${brandKr}" data-index="${actualIndex}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">🏷️ 브랜드 (영문)</label>
+                                <input type="text" class="field-input" data-field="brand_en" value="${brandEn}" data-index="${actualIndex}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">🚗 차종 (한글)</label>
+                                <input type="text" class="field-input" data-field="model_kr" value="${modelKr}" data-index="${actualIndex}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">🚗 차종 (영문)</label>
+                                <input type="text" class="field-input" data-field="model_en" value="${modelEn}" data-index="${actualIndex}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">📅 연식</label>
+                                <input type="text" class="field-input" data-field="year" value="${year}" data-index="${actualIndex}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">📊 신뢰도 (%)</label>
+                                <input type="number" class="field-input" data-field="confidence" value="${confidence}" data-index="${actualIndex}" min="0" max="100" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #333;">📋 연식 근거/추가정보</label>
+                                <textarea class="field-input" data-field="year_info" data-index="${actualIndex}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 80px; resize: vertical; font-size: 14px; font-family: inherit;" placeholder="연식 판단 근거나 추가 정보를 입력하세요...">${yearInfo}</textarea>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div style="padding: 20px; text-align: center; color: #999;">
+                            <i>오류로 인해 수정 불가</i>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('editable-results').innerHTML = html;
+            
+            // 현재 페이지의 이미지만 로드
+            loadCurrentPageImages(startIndex, endIndex);
+            
+            // 입력 필드 변경 감지
+            addFieldChangeListeners();
+            
+            // 페이지네이션 컨트롤 업데이트
+            updatePaginationControls();
+        }
+        
+        function loadCurrentPageImages(startIndex, endIndex) {
+            for (let i = startIndex; i < endIndex; i++) {
+                if (selectedFiles[i]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const imageDisplay = document.getElementById(`image-display-${i}`);
+                        if (imageDisplay) {
+                            imageDisplay.innerHTML = `
+                                <img src="${e.target.result}" 
+                                     style="max-width: 100%; max-height: 350px; object-fit: contain; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" 
+                                     alt="업로드된 이미지 ${i + 1}">
+                            `;
+                        }
+                    };
+                    reader.readAsDataURL(selectedFiles[i]);
+                }
+            }
+        }
+        
+        function goToPage(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            displayCurrentPage();
+        }
+        
+        function changeItemsPerPage(newItemsPerPage) {
+            itemsPerPage = parseInt(newItemsPerPage);
+            totalPages = Math.ceil(currentResults.length / itemsPerPage);
+            currentPage = 1;
+            displayCurrentPage();
+        }
+        
+        function updatePaginationControls() {
+            const paginationControls = document.querySelectorAll('.pagination-controls');
+            paginationControls.forEach(control => {
+                control.innerHTML = createPaginationHTML().replace(/<div class="pagination-controls"[^>]*>/, '').replace(/<\/div>$/, '');
+            });
         }
 
+        function addFieldChangeListeners() {
+            const inputs = document.querySelectorAll('.field-input');
+            inputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    updateCurrentResults();
+                });
+            });
+        }
+        
+        function updateCurrentResults() {
+            if (!currentResults) return;
+            
+            const inputs = document.querySelectorAll('.field-input');
+            inputs.forEach(input => {
+                const index = parseInt(input.dataset.index);
+                const field = input.dataset.field;
+                
+                if (currentResults[index] && !currentResults[index].error) {
+                    let value = input.value;
+                    
+                    // 숫자 필드 처리
+                    if (field === 'confidence') {
+                        value = parseInt(value) || 0;
+                    }
+                    
+                    currentResults[index][field] = value;
+                }
+            });
+        }
+        
         async function saveToDataset() {
             if (!currentResults || currentResults.length === 0) {
                 alert('저장할 결과가 없습니다.');
                 return;
             }
-
+            
+            // 최신 수정 내용 반영
+            updateCurrentResults();
+            
+            // 저장 전 확인
+            const validResults = currentResults.filter(result => !result.error);
+            if (validResults.length === 0) {
+                alert('저장할 유효한 결과가 없습니다.');
+                return;
+            }
+            
+            const confirmMessage = `${validResults.length}개의 결과를 데이터셋에 저장하시겠습니까?\n\n저장될 데이터:\n${validResults.map((r, i) => `${i+1}. ${r.input || 'N/A'} - ${r.brand_kr || 'N/A'} ${r.model_kr || 'N/A'} (${r.year || 'N/A'})`).join('\n')}`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
             try {
                 const response = await fetch('/save_to_dataset', {
                     method: 'POST',
@@ -405,12 +645,13 @@
                     },
                     body: JSON.stringify({ results: currentResults })
                 });
-
+                
                 const result = await response.json();
-
+                
                 if (result.save_info) {
                     const info = result.save_info;
                     alert(`✅ 데이터셋 저장 완료!\n\n저장 파일: ${info.saved_file.split('/').pop()}\n새로 추가: ${info.new_items}개\n전체 항목: ${info.total_items}개\n파일 크기: ${info.file_size_mb}MB`);
+                    clearFilesAndResult();
                 } else {
                     alert('❌ ' + (result.error || '저장 중 오류가 발생했습니다.'));
                 }
@@ -463,6 +704,15 @@
             reader.readAsDataURL(file);
         }
 
+        function clearFilesAndResult() {
+          selectedFiles = [];
+          currentResults = null;
+          document.getElementById('selected-files-list').innerHTML = '';
+          const imageResultContainer = document.getElementById('image-result');
+          imageResultContainer.innerHTML = '';
+          imageResultContainer.style.display = 'none';
+        }
+
         async function analyzeText() {
             const text = document.getElementById('text-input').value.trim();
             if (!text) {
@@ -500,31 +750,165 @@
             showLoading('image');
             hideResult('image');
 
+            // 결과 초기화
+            currentResults = [];
+            
+            // 진행 상황 표시 영역 추가
+            const loadingDiv = document.getElementById('image-loading');
+            loadingDiv.innerHTML = `
+                <div class="spinner"></div>
+                <div id="progress-info">
+                    <p id="progress-text">준비 중...</p>
+                    <div style="background: #f0f0f0; border-radius: 10px; overflow: hidden; margin: 10px 0;">
+                        <div id="progress-bar" style="height: 20px; background: linear-gradient(45deg, #667eea, #764ba2); width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="batch-info" style="font-size: 0.9em; color: #666;"></p>
+                    <div id="real-time-results" style="margin-top: 15px; max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 0.8em;"></div>
+                </div>
+            `;
+
             const formData = new FormData();
             selectedFiles.forEach(file => {
                 formData.append('images', file);
             });
 
             try {
-                const response = await fetch('/analyze_multiple_images', {
+                const response = await fetch('/analyze_multiple_images_stream', {
                     method: 'POST',
                     body: formData
                 });
 
-                const result = await response.json();
-                hideLoading('image');
-
-                if (result.results) {
-                    currentResults = result.results;
-                    displayMultipleResults('image', result);
-                    // 데이터셋 액션 버튼 표시
-                    document.getElementById('dataset-actions').style.display = 'block';
-                } else {
-                    displayError('image', result.error || '분석 중 오류가 발생했습니다.');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop() || ''; // 마지막 불완전한 라인 보존
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                handleStreamData(data);
+                            } catch (e) {
+                                console.warn('스트림 데이터 파싱 오류:', e);
+                            }
+                        }
+                    }
+                }
+
             } catch (error) {
                 hideLoading('image');
                 displayError('image', '분석 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+        
+        function handleStreamData(data) {
+            const progressText = document.getElementById('progress-text');
+            const progressBar = document.getElementById('progress-bar');
+            const batchInfo = document.getElementById('batch-info');
+            const realTimeResults = document.getElementById('real-time-results');
+            
+            switch (data.type) {
+                case 'start':
+                    progressText.textContent = `분석 시작! 전체 ${data.total_count}개 이미지를 ${data.batch_size}개씩 배치 처리`;
+                    batchInfo.textContent = `예상 소요 시간: 약 ${data.estimated_time}분`;
+                    break;
+                    
+                case 'saving_files':
+                    progressText.textContent = data.message;
+                    batchInfo.textContent = '파일 업로드 및 임시 저장 중...';
+                    break;
+                    
+                case 'files_saved':
+                    progressText.textContent = data.message;
+                    batchInfo.textContent = '분석 준비 완료';
+                    break;
+                    
+                case 'file_error':
+                    realTimeResults.innerHTML += `<div style="color: #dc3545; margin: 2px 0;">❌ 파일 오류 ${data.index + 1}. ${data.filename}: ${data.error}</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'batch_start':
+                    batchInfo.textContent = `배치 ${data.batch_number} 시작 (${data.batch_start + 1}-${data.batch_end} 번째 이미지)`;
+                    const fileList = data.processing_files.join(', ');
+                    realTimeResults.innerHTML += `<div style="color: #0066cc; margin: 5px 0; font-weight: 600;">▶ 배치 ${data.batch_number}: ${data.processing_files.length}개 파일</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'analyzing':
+                    realTimeResults.innerHTML += `<div style="color: #6c757d; margin: 2px 0;">🔍 ${data.index + 1}. ${data.filename} 분석 중...</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'result':
+                case 'error':
+                    // 결과를 currentResults에 저장 (인덱스 순서대로)
+                    while (currentResults.length <= data.index) {
+                        currentResults.push(null);
+                    }
+                    currentResults[data.index] = data.result;
+                    
+                    const progress = (data.completed / data.total) * 100;
+                    progressBar.style.width = `${progress}%`;
+                    progressText.textContent = `진행 중... ${data.completed}/${data.total} (${progress.toFixed(1)}%)`;
+                    
+                    const resultIcon = data.type === 'result' ? '✅' : '❌';
+                    const resultText = data.type === 'result' ? 
+                        `${data.result.brand_kr || 'N/A'} ${data.result.model_kr || 'N/A'}` : 
+                        data.result.error;
+                    realTimeResults.innerHTML += `<div style="color: ${data.type === 'result' ? '#28a745' : '#dc3545'}; margin: 2px 0;">${resultIcon} ${data.index + 1}. ${data.result.input}: ${resultText}</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'batch_complete':
+                    batchInfo.textContent = `배치 ${data.batch_number} 완료! (${data.batch_results}개 처리됨, 전체 ${data.total_completed}개 완료)`;
+                    realTimeResults.innerHTML += `<div style="color: #28a745; margin: 5px 0; font-weight: 600;">✓ 배치 ${data.batch_number} 완료</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'waiting':
+                    progressText.textContent = data.message;
+                    batchInfo.textContent = `다음: 배치 ${data.next_batch}`;
+                    realTimeResults.innerHTML += `<div style="color: #ffc107; margin: 3px 0;">⏳ ${data.message}</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'complete':
+                    hideLoading('image');
+                    progressText.textContent = data.message;
+                    
+                    // 빈 슬롯 제거 및 인덱스 재정렬
+                    currentResults = currentResults.filter(r => r !== null);
+                    
+                    // 결과 표시
+                    displayMultipleResults('image', {
+                        results: currentResults,
+                        total_count: data.total_count,
+                        success_count: data.success_count
+                    });
+                    
+                    // 성공 알림
+                    realTimeResults.innerHTML += `<div style="color: #28a745; margin: 10px 0; padding: 10px; background: #d4edda; border-radius: 5px; font-weight: 600;">🎉 ${data.message}</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
+                    
+                case 'fatal_error':
+                    hideLoading('image');
+                    displayError('image', '심각한 오류 발생: ' + data.error);
+                    realTimeResults.innerHTML += `<div style="color: #dc3545; margin: 10px 0; padding: 10px; background: #f8d7da; border-radius: 5px; font-weight: 600;">❌ 심각한 오류: ${data.error}</div>`;
+                    realTimeResults.scrollTop = realTimeResults.scrollHeight;
+                    break;
             }
         }
 
@@ -603,7 +987,7 @@
         }
 
         // 드래그 앤 드롭 기능
-        const fileUpload = document.querySelector('.file-upload');
+        {#const fileUpload = document.querySelector('.file-upload');
 
         fileUpload.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -622,7 +1006,6 @@
             if (files.length > 0) {
                 const file = files[0];
                 if (file.type.startsWith('image/')) {
-                    selectedFile = file;
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         document.getElementById('image-preview').innerHTML =
@@ -634,7 +1017,7 @@
                     alert('이미지 파일만 업로드할 수 있습니다.');
                 }
             }
-        });
+        });#}
     </script>
 </body>
 </html>
