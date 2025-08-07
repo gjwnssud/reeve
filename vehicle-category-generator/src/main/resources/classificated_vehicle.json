@@ -1,0 +1,5965 @@
+{
+  "models": [
+    {
+      "code": "mazda_3",
+      "manufacturer_code": "mazda",
+      "english": "Mazda 3",
+      "korean": "마쯔다 3"
+    },
+    {
+      "code": "vue",
+      "manufacturer_code": "saturn",
+      "english": "Vue",
+      "korean": "뷰"
+    },
+    {
+      "code": "tracker",
+      "manufacturer_code": "chevrolet",
+      "english": "Tracker",
+      "korean": "트랙커"
+    },
+    {
+      "code": "208",
+      "manufacturer_code": "peugeot",
+      "english": "208",
+      "korean": "208"
+    },
+    {
+      "code": "trax",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Trax",
+      "korean": "트랙스"
+    },
+    {
+      "code": "q60",
+      "manufacturer_code": "infinity",
+      "english": "Q60",
+      "korean": "Q60"
+    },
+    {
+      "code": "q70",
+      "manufacturer_code": "infinity",
+      "english": "Q70",
+      "korean": "Q70"
+    },
+    {
+      "code": "qx50",
+      "manufacturer_code": "infinity",
+      "english": "QX50",
+      "korean": "QX50"
+    },
+    {
+      "code": "qx70",
+      "manufacturer_code": "infinity",
+      "english": "QX70",
+      "korean": "QX70"
+    },
+    {
+      "code": "terios",
+      "manufacturer_code": "daihatsu",
+      "english": "Terios",
+      "korean": "테리오스"
+    },
+    {
+      "code": "multipla",
+      "manufacturer_code": "fiat",
+      "english": "Multipla",
+      "korean": "멀티피아"
+    },
+    {
+      "code": "ioniq",
+      "manufacturer_code": "hyundai",
+      "english": "Ioniq",
+      "korean": "아이오닉"
+    },
+    {
+      "code": "i3",
+      "manufacturer_code": "bmw",
+      "english": "i3",
+      "korean": "i3"
+    },
+    {
+      "code": "nv",
+      "manufacturer_code": "nissan",
+      "english": "NV",
+      "korean": "NV"
+    },
+    {
+      "code": "v70",
+      "manufacturer_code": "volvo",
+      "english": "V70",
+      "korean": "V70"
+    },
+    {
+      "code": "alero",
+      "manufacturer_code": "oldsmoblie",
+      "english": "Alero",
+      "korean": "알레로"
+    },
+    {
+      "code": "retona",
+      "manufacturer_code": "kia",
+      "english": "Retona",
+      "korean": "레토나"
+    },
+    {
+      "code": "aslan",
+      "manufacturer_code": "hyundai",
+      "english": "Aslan",
+      "korean": "아슬란"
+    },
+    {
+      "code": "tiboli",
+      "manufacturer_code": "ssangyong",
+      "english": "TIBOLI",
+      "korean": "티볼리"
+    },
+    {
+      "code": "terrain",
+      "manufacturer_code": "gm",
+      "english": "Terrain",
+      "korean": "터레인"
+    },
+    {
+      "code": "esse",
+      "manufacturer_code": "daihatsu",
+      "english": "Esse",
+      "korean": "에쎄"
+    },
+    {
+      "code": "range_rover",
+      "manufacturer_code": "land_rover",
+      "english": "Range Rover",
+      "korean": "레인지로버"
+    },
+    {
+      "code": "806",
+      "manufacturer_code": "peugeot",
+      "english": "806",
+      "korean": "806"
+    },
+    {
+      "code": "ds3",
+      "manufacturer_code": "citroen",
+      "english": "DS3",
+      "korean": "DS3"
+    },
+    {
+      "code": "plymouth_laser",
+      "manufacturer_code": "chrysler",
+      "english": "Plymouth Laser",
+      "korean": "플리머스 레이저"
+    },
+    {
+      "code": "eagle_talon",
+      "manufacturer_code": "chrysler",
+      "english": "Eagle Talon",
+      "korean": "이글 탈론"
+    },
+    {
+      "code": "five_hundred",
+      "manufacturer_code": "ford",
+      "english": "Five Hundred",
+      "korean": "파이브 헌드레드"
+    },
+    {
+      "code": "bronco",
+      "manufacturer_code": "ford",
+      "english": "Bronco",
+      "korean": "브롱코"
+    },
+    {
+      "code": "inspire",
+      "manufacturer_code": "honda",
+      "english": "Inspire",
+      "korean": "인스파이어"
+    },
+    {
+      "code": "pilot",
+      "manufacturer_code": "honda",
+      "english": "Pilot",
+      "korean": "파일럿"
+    },
+    {
+      "code": "protege",
+      "manufacturer_code": "mazda",
+      "english": "Protege",
+      "korean": "프로티지"
+    },
+    {
+      "code": "lancer",
+      "manufacturer_code": "mitsubishi",
+      "english": "Lancer",
+      "korean": "랜서"
+    },
+    {
+      "code": "land_cruiser",
+      "manufacturer_code": "toyota",
+      "english": "Land Cruiser",
+      "korean": "랜드크루저"
+    },
+    {
+      "code": "matrix",
+      "manufacturer_code": "toyota",
+      "english": "Matrix",
+      "korean": "매트릭스"
+    },
+    {
+      "code": "will",
+      "manufacturer_code": "toyota",
+      "english": "WiLL",
+      "korean": "WiLL"
+    },
+    {
+      "code": "sienna",
+      "manufacturer_code": "toyota",
+      "english": "Sienna",
+      "korean": "시에나"
+    },
+    {
+      "code": "cadillac",
+      "manufacturer_code": "gm",
+      "english": "Cadillac",
+      "korean": "캐딜락"
+    },
+    {
+      "code": "park_avenue",
+      "manufacturer_code": "gm",
+      "english": "Park Avenue",
+      "korean": "파크애비뉴"
+    },
+    {
+      "code": "grand_am",
+      "manufacturer_code": "gm",
+      "english": "Grand AM",
+      "korean": "그랜드 앰"
+    },
+    {
+      "code": "firebird",
+      "manufacturer_code": "gm",
+      "english": "Firebird",
+      "korean": "파이어버드"
+    },
+    {
+      "code": "lumina",
+      "manufacturer_code": "gm",
+      "english": "Lumina",
+      "korean": "루미나"
+    },
+    {
+      "code": "safari",
+      "manufacturer_code": "gm",
+      "english": "Safari",
+      "korean": "사파리"
+    },
+    {
+      "code": "sunfire",
+      "manufacturer_code": "gm",
+      "english": "Sunfire",
+      "korean": "선파이어"
+    },
+    {
+      "code": "chevrolet_pickup",
+      "manufacturer_code": "gm",
+      "english": "Chevrolet Pickup",
+      "korean": "시보레 픽업"
+    },
+    {
+      "code": "chevrolet_van",
+      "manufacturer_code": "gm",
+      "english": "Chevrolet Van",
+      "korean": "시보레 밴"
+    },
+    {
+      "code": "chevrolet_camaro",
+      "manufacturer_code": "gm",
+      "english": "Chevrolet Camaro",
+      "korean": "시보레 카마로"
+    },
+    {
+      "code": "bonneville",
+      "manufacturer_code": "gm",
+      "english": "Bonneville",
+      "korean": "보네빌"
+    },
+    {
+      "code": "gmc_vandura",
+      "manufacturer_code": "gm",
+      "english": "GMC Vandura",
+      "korean": "GMC 밴츄라"
+    },
+    {
+      "code": "previa",
+      "manufacturer_code": "toyota",
+      "english": "Previa",
+      "korean": "프리비아"
+    },
+    {
+      "code": "maxima",
+      "manufacturer_code": "nissan",
+      "english": "Maxima",
+      "korean": "맥시마"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "scania",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "mantruck",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "iveco",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "hino",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "bluebird_sylphy",
+      "manufacturer_code": "nissan",
+      "english": "Bluebird Sylphy",
+      "korean": "블루버드 실피"
+    },
+    {
+      "code": "gt_r",
+      "manufacturer_code": "nissan",
+      "english": "GT-R",
+      "korean": "GT-R"
+    },
+    {
+      "code": "ram_van",
+      "manufacturer_code": "dodge",
+      "english": "Ram Van",
+      "korean": "램밴"
+    },
+    {
+      "code": "ram_pick_up",
+      "manufacturer_code": "dodge",
+      "english": "Ram Pick Up",
+      "korean": "램픽업"
+    },
+    {
+      "code": "torrent",
+      "manufacturer_code": "pontiac",
+      "english": "Torrent",
+      "korean": "토렌트"
+    },
+    {
+      "code": "solstice",
+      "manufacturer_code": "pontiac",
+      "english": "Solstice",
+      "korean": "솔스티스"
+    },
+    {
+      "code": "dts",
+      "manufacturer_code": "cadillac",
+      "english": "DTS",
+      "korean": "DTS"
+    },
+    {
+      "code": "bls",
+      "manufacturer_code": "cadillac",
+      "english": "BLS",
+      "korean": "BLS"
+    },
+    {
+      "code": "aviator",
+      "manufacturer_code": "lincoln",
+      "english": "Aviator",
+      "korean": "에비에이터"
+    },
+    {
+      "code": "navigator",
+      "manufacturer_code": "lincoln",
+      "english": "Navigator",
+      "korean": "네비게이터"
+    },
+    {
+      "code": "corniche",
+      "manufacturer_code": "rolls_royce",
+      "english": "Corniche",
+      "korean": "코니쉬"
+    },
+    {
+      "code": "silver_spur",
+      "manufacturer_code": "rolls_royce",
+      "english": "Silver Spur",
+      "korean": "실버스퍼"
+    },
+    {
+      "code": "reventon",
+      "manufacturer_code": "lamborghini",
+      "english": "Reventon",
+      "korean": "레벤톤"
+    },
+    {
+      "code": "continental",
+      "manufacturer_code": "bentley",
+      "english": "Continental",
+      "korean": "컨티넨탈"
+    },
+    {
+      "code": "move",
+      "manufacturer_code": "daihatsu",
+      "english": "Move",
+      "korean": "무브"
+    },
+    {
+      "code": "mira_gino",
+      "manufacturer_code": "daihatsu",
+      "english": "Mira Gino",
+      "korean": "미라지노"
+    },
+    {
+      "code": "brz",
+      "manufacturer_code": "subaru",
+      "english": "BRZ",
+      "korean": "BRZ"
+    },
+    {
+      "code": "quattroporte",
+      "manufacturer_code": "maserati",
+      "english": "Quattroporte",
+      "korean": "콰트로포르테"
+    },
+    {
+      "code": "roadster",
+      "manufacturer_code": "smart",
+      "english": "Roadster",
+      "korean": "로드스터"
+    },
+    {
+      "code": "coupe",
+      "manufacturer_code": "maserati",
+      "english": "Coupe",
+      "korean": "쿠페"
+    },
+    {
+      "code": "sierra",
+      "manufacturer_code": "gm",
+      "english": "Sierra",
+      "korean": "시에라"
+    },
+    {
+      "code": "m",
+      "manufacturer_code": "infinity",
+      "english": "M",
+      "korean": "M"
+    },
+    {
+      "code": "galue",
+      "manufacturer_code": "mitsuoka",
+      "english": "Galue",
+      "korean": "가류"
+    },
+    {
+      "code": "le_seyde",
+      "manufacturer_code": "mitsuoka",
+      "english": "Le-seyde",
+      "korean": "라세드"
+    },
+    {
+      "code": "europa",
+      "manufacturer_code": "lotus",
+      "english": "Europa",
+      "korean": "유로파"
+    },
+    {
+      "code": "2_eleven",
+      "manufacturer_code": "lotus",
+      "english": "2-Eleven",
+      "korean": "2-Eleven"
+    },
+    {
+      "code": "megane",
+      "manufacturer_code": "renault",
+      "english": "Megane",
+      "korean": "메간"
+    },
+    {
+      "code": "laguna",
+      "manufacturer_code": "renault",
+      "english": "Laguna",
+      "korean": "라구나"
+    },
+    {
+      "code": "niro",
+      "manufacturer_code": "kia",
+      "english": "Niro",
+      "korean": "니로"
+    },
+    {
+      "code": "scirocco",
+      "manufacturer_code": "volkswagen",
+      "english": "Scirocco",
+      "korean": "시로코"
+    },
+    {
+      "code": "pickup",
+      "manufacturer_code": "toyota",
+      "english": "Pickup",
+      "korean": "픽업"
+    },
+    {
+      "code": "928",
+      "manufacturer_code": "porsche",
+      "english": "928",
+      "korean": "928"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "saab",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "960",
+      "manufacturer_code": "volvo",
+      "english": "960",
+      "korean": "960"
+    },
+    {
+      "code": "c70",
+      "manufacturer_code": "volvo",
+      "english": "C70",
+      "korean": "C70"
+    },
+    {
+      "code": "740",
+      "manufacturer_code": "volvo",
+      "english": "740",
+      "korean": "740"
+    },
+    {
+      "code": "xc60",
+      "manufacturer_code": "volvo",
+      "english": "XC60",
+      "korean": "XC60"
+    },
+    {
+      "code": "lancia",
+      "manufacturer_code": "fiat",
+      "english": "Lancia",
+      "korean": "란치아"
+    },
+    {
+      "code": "xj_6",
+      "manufacturer_code": "jaguar",
+      "english": "XJ-6",
+      "korean": "XJ-6"
+    },
+    {
+      "code": "xj_8",
+      "manufacturer_code": "jaguar",
+      "english": "XJ-8",
+      "korean": "XJ-8"
+    },
+    {
+      "code": "defender",
+      "manufacturer_code": "land_rover",
+      "english": "Defender",
+      "korean": "디펜더"
+    },
+    {
+      "code": "306",
+      "manufacturer_code": "peugeot",
+      "english": "306",
+      "korean": "306"
+    },
+    {
+      "code": "1007",
+      "manufacturer_code": "peugeot",
+      "english": "1007",
+      "korean": "1007"
+    },
+    {
+      "code": "xantia",
+      "manufacturer_code": "citroen",
+      "english": "Xantia",
+      "korean": "잔티아"
+    },
+    {
+      "code": "caravan",
+      "manufacturer_code": "chrysler",
+      "english": "Caravan",
+      "korean": "캐러밴"
+    },
+    {
+      "code": "pt_crusier",
+      "manufacturer_code": "chrysler",
+      "english": "PT Crusier",
+      "korean": "PT 크루저"
+    },
+    {
+      "code": "lebaron",
+      "manufacturer_code": "chrysler",
+      "english": "Lebaron",
+      "korean": "레바론"
+    },
+    {
+      "code": "towncontry",
+      "manufacturer_code": "chrysler",
+      "english": "TownContry",
+      "korean": "타운 앤 컨트리"
+    },
+    {
+      "code": "explorer",
+      "manufacturer_code": "ford",
+      "english": "Explorer",
+      "korean": "익스플로러"
+    },
+    {
+      "code": "explorer_spot_trac",
+      "manufacturer_code": "ford",
+      "english": "Explorer Spot Trac",
+      "korean": "익스플로러 스포츠트랙"
+    },
+    {
+      "code": "f250",
+      "manufacturer_code": "ford",
+      "english": "F250",
+      "korean": "F250"
+    },
+    {
+      "code": "mulsanne",
+      "manufacturer_code": "bentley",
+      "english": "Mulsanne",
+      "korean": "뮬산"
+    },
+    {
+      "code": "odyssey",
+      "manufacturer_code": "honda",
+      "english": "Odyssey",
+      "korean": "오딧세이"
+    },
+    {
+      "code": "crossroad",
+      "manufacturer_code": "honda",
+      "english": "CROSSROAD",
+      "korean": "크로스로드"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "honda",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "mx_3",
+      "manufacturer_code": "mazda",
+      "english": "MX-3",
+      "korean": "MX-3"
+    },
+    {
+      "code": "eunons",
+      "manufacturer_code": "mazda",
+      "english": "Eunons",
+      "korean": "유노스"
+    },
+    {
+      "code": "cx_9",
+      "manufacturer_code": "mazda",
+      "english": "CX-9",
+      "korean": "CX-9"
+    },
+    {
+      "code": "galant",
+      "manufacturer_code": "mitsubishi",
+      "english": "Galant",
+      "korean": "갤랑"
+    },
+    {
+      "code": "lancer_evolution",
+      "manufacturer_code": "mitsubishi",
+      "english": "Lancer Evolution",
+      "korean": "랜서 에볼루션"
+    },
+    {
+      "code": "corolla",
+      "manufacturer_code": "toyota",
+      "english": "Corolla",
+      "korean": "코롤라"
+    },
+    {
+      "code": "sera",
+      "manufacturer_code": "toyota",
+      "english": "Sera",
+      "korean": "세라"
+    },
+    {
+      "code": "carina",
+      "manufacturer_code": "toyota",
+      "english": "Carina",
+      "korean": "카리나"
+    },
+    {
+      "code": "celsior",
+      "manufacturer_code": "toyota",
+      "english": "Celsior",
+      "korean": "셀시오"
+    },
+    {
+      "code": "solara",
+      "manufacturer_code": "toyota",
+      "english": "Solara",
+      "korean": "솔라라"
+    },
+    {
+      "code": "estima",
+      "manufacturer_code": "toyota",
+      "english": "Estima",
+      "korean": "에스티마"
+    },
+    {
+      "code": "markx",
+      "manufacturer_code": "toyota",
+      "english": "MarkX",
+      "korean": "마크X"
+    },
+    {
+      "code": "alphard",
+      "manufacturer_code": "toyota",
+      "english": "Alphard",
+      "korean": "알파드"
+    },
+    {
+      "code": "altima",
+      "manufacturer_code": "nissan",
+      "english": "Altima",
+      "korean": "알티마"
+    },
+    {
+      "code": "skyline",
+      "manufacturer_code": "nissan",
+      "english": "Skyline",
+      "korean": "스카이라인"
+    },
+    {
+      "code": "frontier",
+      "manufacturer_code": "nissan",
+      "english": "Frontier",
+      "korean": "프론티어"
+    },
+    {
+      "code": "180sx",
+      "manufacturer_code": "nissan",
+      "english": "180SX",
+      "korean": "180SX"
+    },
+    {
+      "code": "titan",
+      "manufacturer_code": "nissan",
+      "english": "Titan",
+      "korean": "타이탄"
+    },
+    {
+      "code": "avenger",
+      "manufacturer_code": "dodge",
+      "english": "Avenger",
+      "korean": "어벤저"
+    },
+    {
+      "code": "caravan",
+      "manufacturer_code": "dodge",
+      "english": "Caravan",
+      "korean": "캐러밴"
+    },
+    {
+      "code": "challenger",
+      "manufacturer_code": "dodge",
+      "english": "Challenger",
+      "korean": "챌린저"
+    },
+    {
+      "code": "mkx",
+      "manufacturer_code": "lincoln",
+      "english": "MKX",
+      "korean": "MKX"
+    },
+    {
+      "code": "roadster",
+      "manufacturer_code": "mini",
+      "english": "Roadster",
+      "korean": "로드스터"
+    },
+    {
+      "code": "s_series",
+      "manufacturer_code": "saturn",
+      "english": "S-Series",
+      "korean": "S시리즈"
+    },
+    {
+      "code": "62s",
+      "manufacturer_code": "maybach",
+      "english": "62s",
+      "korean": "62s"
+    },
+    {
+      "code": "xa",
+      "manufacturer_code": "scion",
+      "english": "xA",
+      "korean": "xA"
+    },
+    {
+      "code": "venture",
+      "manufacturer_code": "chevrolet",
+      "english": "Venture",
+      "korean": "벤처"
+    },
+    {
+      "code": "expert",
+      "manufacturer_code": "peugeot",
+      "english": "Expert",
+      "korean": "익스퍼트"
+    },
+    {
+      "code": "macan",
+      "manufacturer_code": "porsche",
+      "english": "Macan",
+      "korean": "마칸"
+    },
+    {
+      "code": "x4",
+      "manufacturer_code": "bmw",
+      "english": "X4",
+      "korean": "X4"
+    },
+    {
+      "code": "n_box",
+      "manufacturer_code": "honda",
+      "english": "N-BOX",
+      "korean": "N-BOX"
+    },
+    {
+      "code": "ds4",
+      "manufacturer_code": "citroen",
+      "english": "DS4",
+      "korean": "DS4"
+    },
+    {
+      "code": "countryman",
+      "manufacturer_code": "mini",
+      "english": "Countryman",
+      "korean": "컨트리맨"
+    },
+    {
+      "code": "x6",
+      "manufacturer_code": "bmw",
+      "english": "X6",
+      "korean": "X6"
+    },
+    {
+      "code": "ds5",
+      "manufacturer_code": "citroen",
+      "english": "DS5",
+      "korean": "DS5"
+    },
+    {
+      "code": "truck_van",
+      "manufacturer_code": "chevrolet",
+      "english": "Truck Van",
+      "korean": "트럭밴"
+    },
+    {
+      "code": "2_series",
+      "manufacturer_code": "bmw",
+      "english": "2-Series",
+      "korean": "2시리즈"
+    },
+    {
+      "code": "integra",
+      "manufacturer_code": "acura",
+      "english": "Integra",
+      "korean": "인테그라"
+    },
+    {
+      "code": "equinox",
+      "manufacturer_code": "chevrolet",
+      "english": "Equinox",
+      "korean": "에퀴녹스"
+    },
+    {
+      "code": "rc",
+      "manufacturer_code": "lexus",
+      "english": "RC",
+      "korean": "RC"
+    },
+    {
+      "code": "405",
+      "manufacturer_code": "peugeot",
+      "english": "405",
+      "korean": "405"
+    },
+    {
+      "code": "fx",
+      "manufacturer_code": "infinity",
+      "english": "FX",
+      "korean": "FX"
+    },
+    {
+      "code": "s90",
+      "manufacturer_code": "volvo",
+      "english": "S90",
+      "korean": "S90"
+    },
+    {
+      "code": "qx60",
+      "manufacturer_code": "infinity",
+      "english": "QX60",
+      "korean": "QX60"
+    },
+    {
+      "code": "croma",
+      "manufacturer_code": "fiat",
+      "english": "Croma",
+      "korean": "크로마"
+    },
+    {
+      "code": "barchetta",
+      "manufacturer_code": "fiat",
+      "english": "Barchetta",
+      "korean": "바르게타"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "fiat",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "daimler",
+      "manufacturer_code": "jaguar",
+      "english": "Daimler",
+      "korean": "다임러"
+    },
+    {
+      "code": "s_type",
+      "manufacturer_code": "jaguar",
+      "english": "S-TYPE",
+      "korean": "S-TYPE"
+    },
+    {
+      "code": "xjr",
+      "manufacturer_code": "jaguar",
+      "english": "XJR",
+      "korean": "XJR"
+    },
+    {
+      "code": "xk",
+      "manufacturer_code": "jaguar",
+      "english": "XK",
+      "korean": "XK"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "jaguar",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "wrangler",
+      "manufacturer_code": "jeep",
+      "english": "Wrangler",
+      "korean": "랭글러"
+    },
+    {
+      "code": "range_rover_evoque",
+      "manufacturer_code": "land_rover",
+      "english": "Range Rover Evoque",
+      "korean": "레인지로버 이보크"
+    },
+    {
+      "code": "605",
+      "manufacturer_code": "peugeot",
+      "english": "605",
+      "korean": "605"
+    },
+    {
+      "code": "807",
+      "manufacturer_code": "peugeot",
+      "english": "807",
+      "korean": "807"
+    },
+    {
+      "code": "107",
+      "manufacturer_code": "peugeot",
+      "english": "107",
+      "korean": "107"
+    },
+    {
+      "code": "rcz",
+      "manufacturer_code": "peugeot",
+      "english": "RCZ",
+      "korean": "RCZ"
+    },
+    {
+      "code": "xm",
+      "manufacturer_code": "citroen",
+      "english": "XM",
+      "korean": "XM"
+    },
+    {
+      "code": "c2",
+      "manufacturer_code": "citroen",
+      "english": "C2",
+      "korean": "C2"
+    },
+    {
+      "code": "c3",
+      "manufacturer_code": "citroen",
+      "english": "C3",
+      "korean": "C3"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "citroen",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "maxcruz",
+      "manufacturer_code": "hyundai",
+      "english": "Maxcruz",
+      "korean": "맥스크루즈"
+    },
+    {
+      "code": "vision",
+      "manufacturer_code": "chrysler",
+      "english": "Vision",
+      "korean": "비전"
+    },
+    {
+      "code": "300m",
+      "manufacturer_code": "chrysler",
+      "english": "300M",
+      "korean": "300M"
+    },
+    {
+      "code": "voyager",
+      "manufacturer_code": "chrysler",
+      "english": "Voyager",
+      "korean": "보이저"
+    },
+    {
+      "code": "concorde",
+      "manufacturer_code": "chrysler",
+      "english": "Concorde",
+      "korean": "콩코드"
+    },
+    {
+      "code": "grand_voyager",
+      "manufacturer_code": "chrysler",
+      "english": "Grand Voyager",
+      "korean": "그랜드 보이저"
+    },
+    {
+      "code": "i",
+      "manufacturer_code": "infinity",
+      "english": "I",
+      "korean": "I"
+    },
+    {
+      "code": "cirrus",
+      "manufacturer_code": "chrysler",
+      "english": "Cirrus",
+      "korean": "시러스"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "chrysler",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "windstar",
+      "manufacturer_code": "ford",
+      "english": "Windstar",
+      "korean": "윈드스타"
+    },
+    {
+      "code": "escape",
+      "manufacturer_code": "ford",
+      "english": "Escape",
+      "korean": "이스케이프"
+    },
+    {
+      "code": "expedition",
+      "manufacturer_code": "ford",
+      "english": "Expedition",
+      "korean": "익스피디션"
+    },
+    {
+      "code": "thunderbird",
+      "manufacturer_code": "ford",
+      "english": "Thunderbird",
+      "korean": "썬더버드"
+    },
+    {
+      "code": "gt",
+      "manufacturer_code": "ford",
+      "english": "GT",
+      "korean": "GT"
+    },
+    {
+      "code": "freestyle",
+      "manufacturer_code": "ford",
+      "english": "Freestyle",
+      "korean": "프리스타일"
+    },
+    {
+      "code": "ranger",
+      "manufacturer_code": "ford",
+      "english": "Ranger",
+      "korean": "레인저"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "ford",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "s7",
+      "manufacturer_code": "audi",
+      "english": "S7",
+      "korean": "S7"
+    },
+    {
+      "code": "commander",
+      "manufacturer_code": "jeep",
+      "english": "Commander",
+      "korean": "커맨더"
+    },
+    {
+      "code": "insight",
+      "manufacturer_code": "honda",
+      "english": "Insight",
+      "korean": "인사이트"
+    },
+    {
+      "code": "prelude",
+      "manufacturer_code": "honda",
+      "english": "Prelude",
+      "korean": "프렐류드"
+    },
+    {
+      "code": "element",
+      "manufacturer_code": "honda",
+      "english": "Element",
+      "korean": "엘리멘트"
+    },
+    {
+      "code": "integra",
+      "manufacturer_code": "honda",
+      "english": "Integra",
+      "korean": "인테그라"
+    },
+    {
+      "code": "stream",
+      "manufacturer_code": "honda",
+      "english": "Stream",
+      "korean": "스트림"
+    },
+    {
+      "code": "cr_z",
+      "manufacturer_code": "honda",
+      "english": "CR-Z",
+      "korean": "CR-Z"
+    },
+    {
+      "code": "vehicross",
+      "manufacturer_code": "isuzu",
+      "english": "Vehicross",
+      "korean": "비크로스"
+    },
+    {
+      "code": "mx_6",
+      "manufacturer_code": "mazda",
+      "english": "MX-6",
+      "korean": "MX-6"
+    },
+    {
+      "code": "mx_5_miata",
+      "manufacturer_code": "mazda",
+      "english": "MX-5 Miata",
+      "korean": "MX-5 MIATA"
+    },
+    {
+      "code": "626",
+      "manufacturer_code": "mazda",
+      "english": "626",
+      "korean": "626"
+    },
+    {
+      "code": "rx_8",
+      "manufacturer_code": "mazda",
+      "english": "RX-8",
+      "korean": "RX-8"
+    },
+    {
+      "code": "demio",
+      "manufacturer_code": "mazda",
+      "english": "Demio",
+      "korean": "데미오"
+    },
+    {
+      "code": "cx_7",
+      "manufacturer_code": "mazda",
+      "english": "CX-7",
+      "korean": "CX-7"
+    },
+    {
+      "code": "mpv",
+      "manufacturer_code": "mazda",
+      "english": "MPV",
+      "korean": "MPV"
+    },
+    {
+      "code": "3000gt",
+      "manufacturer_code": "mitsubishi",
+      "english": "3000GT",
+      "korean": "3000GT"
+    },
+    {
+      "code": "fto",
+      "manufacturer_code": "mitsubishi",
+      "english": "FTO",
+      "korean": "FTO"
+    },
+    {
+      "code": "pajero",
+      "manufacturer_code": "mitsubishi",
+      "english": "Pajero",
+      "korean": "파제로"
+    },
+    {
+      "code": "patriot",
+      "manufacturer_code": "jeep",
+      "english": "Patriot",
+      "korean": "패트리어트"
+    },
+    {
+      "code": "montero",
+      "manufacturer_code": "mitsubishi",
+      "english": "Montero",
+      "korean": "몬테로"
+    },
+    {
+      "code": "avalon",
+      "manufacturer_code": "toyota",
+      "english": "Avalon",
+      "korean": "아발론"
+    },
+    {
+      "code": "celica",
+      "manufacturer_code": "toyota",
+      "english": "Celica",
+      "korean": "셀리카"
+    },
+    {
+      "code": "mr_2",
+      "manufacturer_code": "toyota",
+      "english": "MR-2",
+      "korean": "MR-2"
+    },
+    {
+      "code": "supra",
+      "manufacturer_code": "toyota",
+      "english": "Supra",
+      "korean": "수프라"
+    },
+    {
+      "code": "mr_s",
+      "manufacturer_code": "toyota",
+      "english": "MR-S",
+      "korean": "MR-S"
+    },
+    {
+      "code": "corona",
+      "manufacturer_code": "toyota",
+      "english": "Corona",
+      "korean": "코로나"
+    },
+    {
+      "code": "vista",
+      "manufacturer_code": "toyota",
+      "english": "Vista",
+      "korean": "비스타"
+    },
+    {
+      "code": "crown",
+      "manufacturer_code": "toyota",
+      "english": "Crown",
+      "korean": "크라운"
+    },
+    {
+      "code": "tacoma",
+      "manufacturer_code": "toyota",
+      "english": "Tacoma",
+      "korean": "타코마"
+    },
+    {
+      "code": "fj_cruiser",
+      "manufacturer_code": "toyota",
+      "english": "FJ Cruiser",
+      "korean": "FJ 크루져"
+    },
+    {
+      "code": "porte",
+      "manufacturer_code": "toyota",
+      "english": "Porte",
+      "korean": "포르테"
+    },
+    {
+      "code": "yaris_vitz",
+      "manufacturer_code": "toyota",
+      "english": "Yaris(Vitz)",
+      "korean": "야리스(비츠)"
+    },
+    {
+      "code": "ist",
+      "manufacturer_code": "toyota",
+      "english": "IST",
+      "korean": "이스트"
+    },
+    {
+      "code": "sequoia",
+      "manufacturer_code": "toyota",
+      "english": "Sequoia",
+      "korean": "세콰이어"
+    },
+    {
+      "code": "4runner",
+      "manufacturer_code": "toyota",
+      "english": "4Runner",
+      "korean": "4Runner"
+    },
+    {
+      "code": "fun_cargo",
+      "manufacturer_code": "toyota",
+      "english": "Fun Cargo",
+      "korean": "펀 카고"
+    },
+    {
+      "code": "86",
+      "manufacturer_code": "toyota",
+      "english": "86",
+      "korean": "86"
+    },
+    {
+      "code": "qx80",
+      "manufacturer_code": "infinity",
+      "english": "QX80",
+      "korean": "QX80"
+    },
+    {
+      "code": "200sx",
+      "manufacturer_code": "nissan",
+      "english": "200SX",
+      "korean": "200SX"
+    },
+    {
+      "code": "300zx",
+      "manufacturer_code": "nissan",
+      "english": "300ZX",
+      "korean": "300ZX"
+    },
+    {
+      "code": "pathfinder",
+      "manufacturer_code": "nissan",
+      "english": "Pathfinder",
+      "korean": "패스파인더"
+    },
+    {
+      "code": "xterra",
+      "manufacturer_code": "nissan",
+      "english": "Xterra",
+      "korean": "엑스테라"
+    },
+    {
+      "code": "cima",
+      "manufacturer_code": "nissan",
+      "english": "Cima",
+      "korean": "시마"
+    },
+    {
+      "code": "silvia",
+      "manufacturer_code": "nissan",
+      "english": "Silvia",
+      "korean": "실비아"
+    },
+    {
+      "code": "350z",
+      "manufacturer_code": "nissan",
+      "english": "350Z",
+      "korean": "350Z"
+    },
+    {
+      "code": "cube",
+      "manufacturer_code": "nissan",
+      "english": "Cube",
+      "korean": "큐브"
+    },
+    {
+      "code": "rogue",
+      "manufacturer_code": "nissan",
+      "english": "Rogue",
+      "korean": "로그"
+    },
+    {
+      "code": "president",
+      "manufacturer_code": "nissan",
+      "english": "PRESIDENT",
+      "korean": "프레지던트"
+    },
+    {
+      "code": "cefiro",
+      "manufacturer_code": "nissan",
+      "english": "CEFIRO",
+      "korean": "세피로"
+    },
+    {
+      "code": "armada",
+      "manufacturer_code": "nissan",
+      "english": "Armada",
+      "korean": "알마다"
+    },
+    {
+      "code": "teana",
+      "manufacturer_code": "nissan",
+      "english": "Teana",
+      "korean": "티아나"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "nissan",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "intrepid",
+      "manufacturer_code": "dodge",
+      "english": "Intrepid",
+      "korean": "인트레피드"
+    },
+    {
+      "code": "van",
+      "manufacturer_code": "dodge",
+      "english": "Van",
+      "korean": "밴"
+    },
+    {
+      "code": "viper",
+      "manufacturer_code": "dodge",
+      "english": "Viper",
+      "korean": "바이퍼"
+    },
+    {
+      "code": "caliber",
+      "manufacturer_code": "dodge",
+      "english": "Caliber",
+      "korean": "캘리버"
+    },
+    {
+      "code": "magnum",
+      "manufacturer_code": "dodge",
+      "english": "Magnum",
+      "korean": "매그넘"
+    },
+    {
+      "code": "j30",
+      "manufacturer_code": "infinity",
+      "english": "J30",
+      "korean": "J30"
+    },
+    {
+      "code": "n_one",
+      "manufacturer_code": "honda",
+      "english": "N-ONE",
+      "korean": "N-ONE"
+    },
+    {
+      "code": "grand_vitara",
+      "manufacturer_code": "suzuki",
+      "english": "Grand Vitara",
+      "korean": "그랜드 비타라"
+    },
+    {
+      "code": "wake",
+      "manufacturer_code": "daihatsu",
+      "english": "WAKE",
+      "korean": "웨이크"
+    },
+    {
+      "code": "eq900",
+      "manufacturer_code": "genesis",
+      "english": "EQ900",
+      "korean": "EQ900"
+    },
+    {
+      "code": "canyon",
+      "manufacturer_code": "gm",
+      "english": "Canyon",
+      "korean": "캐니언"
+    },
+    {
+      "code": "tunland",
+      "manufacturer_code": "foton",
+      "english": "Tunland",
+      "korean": "툰랜드"
+    },
+    {
+      "code": "x5",
+      "manufacturer_code": "bmw",
+      "english": "X5",
+      "korean": "X5"
+    },
+    {
+      "code": "f350",
+      "manufacturer_code": "ford",
+      "english": "F350",
+      "korean": "F350"
+    },
+    {
+      "code": "62s_landaulet",
+      "manufacturer_code": "maybach",
+      "english": "62s Landaulet",
+      "korean": "62s 렌들렛"
+    },
+    {
+      "code": "57_zeppelin",
+      "manufacturer_code": "maybach",
+      "english": "57 Zeppelin",
+      "korean": "57 제플린"
+    },
+    {
+      "code": "f150",
+      "manufacturer_code": "ford",
+      "english": "F150",
+      "korean": "F150"
+    },
+    {
+      "code": "eclipse",
+      "manufacturer_code": "mitsubishi",
+      "english": "Eclipse",
+      "korean": "이클립스"
+    },
+    {
+      "code": "cherokee",
+      "manufacturer_code": "jeep",
+      "english": "Cherokee",
+      "korean": "체로키"
+    },
+    {
+      "code": "nitro",
+      "manufacturer_code": "dodge",
+      "english": "Nitro",
+      "korean": "니트로"
+    },
+    {
+      "code": "bongo_iii_minibus",
+      "manufacturer_code": "kia",
+      "english": "Bongo III Minibus",
+      "korean": "봉고III 미니버스"
+    },
+    {
+      "code": "opirus",
+      "manufacturer_code": "kia",
+      "english": "OPIRUS",
+      "korean": "오피러스"
+    },
+    {
+      "code": "pregio",
+      "manufacturer_code": "kia",
+      "english": "Pregio",
+      "korean": "프레지오"
+    },
+    {
+      "code": "super_salon",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Super Salon",
+      "korean": "슈퍼살롱"
+    },
+    {
+      "code": "chairman",
+      "manufacturer_code": "ssangyong",
+      "english": "Chairman",
+      "korean": "체어맨"
+    },
+    {
+      "code": "alpheon",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Alpheon",
+      "korean": "알페온"
+    },
+    {
+      "code": "xf",
+      "manufacturer_code": "jaguar",
+      "english": "XF",
+      "korean": "XF"
+    },
+    {
+      "code": "g",
+      "manufacturer_code": "infinity",
+      "english": "G",
+      "korean": "G"
+    },
+    {
+      "code": "a6",
+      "manufacturer_code": "audi",
+      "english": "A6",
+      "korean": "A6"
+    },
+    {
+      "code": "mystique",
+      "manufacturer_code": "mercury",
+      "english": "Mystique",
+      "korean": "미스틱"
+    },
+    {
+      "code": "scoupe",
+      "manufacturer_code": "hyundai",
+      "english": "Scoupe",
+      "korean": "스쿠프"
+    },
+    {
+      "code": "terracan",
+      "manufacturer_code": "hyundai",
+      "english": "Terracan",
+      "korean": "테라칸"
+    },
+    {
+      "code": "bluebird",
+      "manufacturer_code": "nissan",
+      "english": "Bluebird",
+      "korean": "블루버드"
+    },
+    {
+      "code": "camaro",
+      "manufacturer_code": "chevrolet",
+      "english": "Camaro",
+      "korean": "카마로"
+    },
+    {
+      "code": "brera",
+      "manufacturer_code": "alfa_romeo",
+      "english": "Brera",
+      "korean": "브레라"
+    },
+    {
+      "code": "grand_am",
+      "manufacturer_code": "pontiac",
+      "english": "Grand AM",
+      "korean": "그랜드 앰"
+    },
+    {
+      "code": "lesable",
+      "manufacturer_code": "buick",
+      "english": "LeSable",
+      "korean": "르사블"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "bentley",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "mc12",
+      "manufacturer_code": "maserati",
+      "english": "MC12",
+      "korean": "MC12"
+    },
+    {
+      "code": "q",
+      "manufacturer_code": "infinity",
+      "english": "Q",
+      "korean": "Q"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "astonmartin",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "compass",
+      "manufacturer_code": "jeep",
+      "english": "Compass",
+      "korean": "컴패스"
+    },
+    {
+      "code": "qashqai",
+      "manufacturer_code": "nissan",
+      "english": "Qashqai",
+      "korean": "캐시카이"
+    },
+    {
+      "code": "moco",
+      "manufacturer_code": "nissan",
+      "english": "Moco",
+      "korean": "모코"
+    },
+    {
+      "code": "a1",
+      "manufacturer_code": "audi",
+      "english": "A1",
+      "korean": "A1"
+    },
+    {
+      "code": "sm6",
+      "manufacturer_code": "renault_samsung",
+      "english": "SM6",
+      "korean": "SM6"
+    },
+    {
+      "code": "ck_mini_van",
+      "manufacturer_code": "mini",
+      "english": "CK Mini Van",
+      "korean": "CK 미니밴"
+    },
+    {
+      "code": "80",
+      "manufacturer_code": "audi",
+      "english": "80",
+      "korean": "80"
+    },
+    {
+      "code": "100",
+      "manufacturer_code": "audi",
+      "english": "100",
+      "korean": "100"
+    },
+    {
+      "code": "v8",
+      "manufacturer_code": "audi",
+      "english": "V8",
+      "korean": "V8"
+    },
+    {
+      "code": "90",
+      "manufacturer_code": "audi",
+      "english": "90",
+      "korean": "90"
+    },
+    {
+      "code": "allroad_quattro",
+      "manufacturer_code": "audi",
+      "english": "Allroad Quattro",
+      "korean": "올로드 콰트로"
+    },
+    {
+      "code": "s3",
+      "manufacturer_code": "audi",
+      "english": "S3",
+      "korean": "S3"
+    },
+    {
+      "code": "s4",
+      "manufacturer_code": "audi",
+      "english": "S4",
+      "korean": "S4"
+    },
+    {
+      "code": "q7",
+      "manufacturer_code": "audi",
+      "english": "Q7",
+      "korean": "Q7"
+    },
+    {
+      "code": "s6",
+      "manufacturer_code": "audi",
+      "english": "S6",
+      "korean": "S6"
+    },
+    {
+      "code": "rs4",
+      "manufacturer_code": "audi",
+      "english": "RS4",
+      "korean": "RS4"
+    },
+    {
+      "code": "rs6",
+      "manufacturer_code": "audi",
+      "english": "RS6",
+      "korean": "RS6"
+    },
+    {
+      "code": "r8",
+      "manufacturer_code": "audi",
+      "english": "R8",
+      "korean": "R8"
+    },
+    {
+      "code": "s5",
+      "manufacturer_code": "audi",
+      "english": "S5",
+      "korean": "S5"
+    },
+    {
+      "code": "s8",
+      "manufacturer_code": "audi",
+      "english": "S8",
+      "korean": "S8"
+    },
+    {
+      "code": "q5",
+      "manufacturer_code": "audi",
+      "english": "Q5",
+      "korean": "Q5"
+    },
+    {
+      "code": "a5",
+      "manufacturer_code": "audi",
+      "english": "A5",
+      "korean": "A5"
+    },
+    {
+      "code": "tts",
+      "manufacturer_code": "audi",
+      "english": "TTS",
+      "korean": "TTS"
+    },
+    {
+      "code": "rs5",
+      "manufacturer_code": "audi",
+      "english": "RS5",
+      "korean": "RS5"
+    },
+    {
+      "code": "ttrs",
+      "manufacturer_code": "audi",
+      "english": "TTRS",
+      "korean": "TTRS"
+    },
+    {
+      "code": "a7",
+      "manufacturer_code": "audi",
+      "english": "A7",
+      "korean": "A7"
+    },
+    {
+      "code": "q3",
+      "manufacturer_code": "audi",
+      "english": "Q3",
+      "korean": "Q3"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "audi",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "z3",
+      "manufacturer_code": "bmw",
+      "english": "Z3",
+      "korean": "Z3"
+    },
+    {
+      "code": "z8",
+      "manufacturer_code": "bmw",
+      "english": "Z8",
+      "korean": "Z8"
+    },
+    {
+      "code": "x1",
+      "manufacturer_code": "bmw",
+      "english": "X1",
+      "korean": "X1"
+    },
+    {
+      "code": "gran_turismo",
+      "manufacturer_code": "bmw",
+      "english": "Gran Turismo",
+      "korean": "그란투리스모 (GT)"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "bmw",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "190_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "190-Class",
+      "korean": "190-클래스"
+    },
+    {
+      "code": "clk_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "CLK-Class",
+      "korean": "CLK-클래스"
+    },
+    {
+      "code": "g_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "G-Class",
+      "korean": "G-클래스 (G바겐)"
+    },
+    {
+      "code": "v_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "V-Class",
+      "korean": "V-클래스"
+    },
+    {
+      "code": "slr",
+      "manufacturer_code": "mercedes_benz",
+      "english": "SLR",
+      "korean": "SLR"
+    },
+    {
+      "code": "r_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "R-Class",
+      "korean": "R-클래스"
+    },
+    {
+      "code": "gl_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "GL-Class",
+      "korean": "GL-클래스"
+    },
+    {
+      "code": "sel_sec",
+      "manufacturer_code": "mercedes_benz",
+      "english": "SEL-SEC",
+      "korean": "SEL/SEC"
+    },
+    {
+      "code": "glk_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "GLK-Class",
+      "korean": "GLK-클래스"
+    },
+    {
+      "code": "sls_amg",
+      "manufacturer_code": "mercedes_benz",
+      "english": "SLS AMG",
+      "korean": "SLS AMG"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "mercedes_benz",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "golf",
+      "manufacturer_code": "volkswagen",
+      "english": "Golf",
+      "korean": "골프"
+    },
+    {
+      "code": "vento",
+      "manufacturer_code": "volkswagen",
+      "english": "Vento",
+      "korean": "벤토"
+    },
+    {
+      "code": "sharan",
+      "manufacturer_code": "volkswagen",
+      "english": "Sharan",
+      "korean": "사란"
+    },
+    {
+      "code": "bora",
+      "manufacturer_code": "volkswagen",
+      "english": "Bora",
+      "korean": "보라"
+    },
+    {
+      "code": "phaeton",
+      "manufacturer_code": "volkswagen",
+      "english": "Phaeton",
+      "korean": "페이톤"
+    },
+    {
+      "code": "rialta",
+      "manufacturer_code": "volkswagen",
+      "english": "Rialta",
+      "korean": "리알타"
+    },
+    {
+      "code": "eos",
+      "manufacturer_code": "volkswagen",
+      "english": "EOS",
+      "korean": "EOS"
+    },
+    {
+      "code": "polo",
+      "manufacturer_code": "volkswagen",
+      "english": "Polo",
+      "korean": "폴로"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "volkswagen",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "boxster",
+      "manufacturer_code": "porsche",
+      "english": "Boxster",
+      "korean": "박스터"
+    },
+    {
+      "code": "944",
+      "manufacturer_code": "porsche",
+      "english": "944",
+      "korean": "944"
+    },
+    {
+      "code": "968",
+      "manufacturer_code": "porsche",
+      "english": "968",
+      "korean": "968"
+    },
+    {
+      "code": "carrera_gt",
+      "manufacturer_code": "porsche",
+      "english": "Carrera GT",
+      "korean": "카레라 GT"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "porsche",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "900",
+      "manufacturer_code": "saab",
+      "english": "900",
+      "korean": "900"
+    },
+    {
+      "code": "9000",
+      "manufacturer_code": "saab",
+      "english": "9000",
+      "korean": "9000"
+    },
+    {
+      "code": "850",
+      "manufacturer_code": "volvo",
+      "english": "850",
+      "korean": "850"
+    },
+    {
+      "code": "940",
+      "manufacturer_code": "volvo",
+      "english": "940",
+      "korean": "940"
+    },
+    {
+      "code": "s40",
+      "manufacturer_code": "volvo",
+      "english": "S40",
+      "korean": "S40"
+    },
+    {
+      "code": "s70",
+      "manufacturer_code": "volvo",
+      "english": "S70",
+      "korean": "S70"
+    },
+    {
+      "code": "s80",
+      "manufacturer_code": "volvo",
+      "english": "S80",
+      "korean": "S80"
+    },
+    {
+      "code": "s60",
+      "manufacturer_code": "volvo",
+      "english": "S60",
+      "korean": "S60"
+    },
+    {
+      "code": "xc90",
+      "manufacturer_code": "volvo",
+      "english": "XC90",
+      "korean": "XC90"
+    },
+    {
+      "code": "v50",
+      "manufacturer_code": "volvo",
+      "english": "V50",
+      "korean": "V50"
+    },
+    {
+      "code": "c30",
+      "manufacturer_code": "volvo",
+      "english": "C30",
+      "korean": "C30"
+    },
+    {
+      "code": "760",
+      "manufacturer_code": "volvo",
+      "english": "760",
+      "korean": "760"
+    },
+    {
+      "code": "v60",
+      "manufacturer_code": "volvo",
+      "english": "V60",
+      "korean": "V60"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "volvo",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "punto",
+      "manufacturer_code": "fiat",
+      "english": "Punto",
+      "korean": "푼토"
+    },
+    {
+      "code": "coupe",
+      "manufacturer_code": "fiat",
+      "english": "Coupe",
+      "korean": "쿠페"
+    },
+    {
+      "code": "500",
+      "manufacturer_code": "fiat",
+      "english": "500",
+      "korean": "500"
+    },
+    {
+      "code": "sovereign",
+      "manufacturer_code": "jaguar",
+      "english": "Sovereign",
+      "korean": "소버린"
+    },
+    {
+      "code": "x_type",
+      "manufacturer_code": "jaguar",
+      "english": "X-TYPE",
+      "korean": "X-TYPE"
+    },
+    {
+      "code": "xk8",
+      "manufacturer_code": "jaguar",
+      "english": "XK8",
+      "korean": "XK8"
+    },
+    {
+      "code": "xkr",
+      "manufacturer_code": "jaguar",
+      "english": "XKR",
+      "korean": "XKR"
+    },
+    {
+      "code": "xjs",
+      "manufacturer_code": "jaguar",
+      "english": "XJS",
+      "korean": "XJS"
+    },
+    {
+      "code": "range_rover_sport",
+      "manufacturer_code": "land_rover",
+      "english": "Range Rover Sport",
+      "korean": "레인지로버 스포츠"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "land_rover",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "205",
+      "manufacturer_code": "peugeot",
+      "english": "205",
+      "korean": "205"
+    },
+    {
+      "code": "406",
+      "manufacturer_code": "peugeot",
+      "english": "406",
+      "korean": "406"
+    },
+    {
+      "code": "3008",
+      "manufacturer_code": "peugeot",
+      "english": "3008",
+      "korean": "3008"
+    },
+    {
+      "code": "508",
+      "manufacturer_code": "peugeot",
+      "english": "508",
+      "korean": "508"
+    },
+    {
+      "code": "c5",
+      "manufacturer_code": "citroen",
+      "english": "C5",
+      "korean": "C5"
+    },
+    {
+      "code": "neon",
+      "manufacturer_code": "chrysler",
+      "english": "Neon",
+      "korean": "네온"
+    },
+    {
+      "code": "stratus",
+      "manufacturer_code": "chrysler",
+      "english": "Stratus",
+      "korean": "스트라투스"
+    },
+    {
+      "code": "new_yorker",
+      "manufacturer_code": "chrysler",
+      "english": "New Yorker",
+      "korean": "뉴요커"
+    },
+    {
+      "code": "lhs",
+      "manufacturer_code": "chrysler",
+      "english": "LHS",
+      "korean": "LHS"
+    },
+    {
+      "code": "intrepid",
+      "manufacturer_code": "chrysler",
+      "english": "Intrepid",
+      "korean": "인트리피드"
+    },
+    {
+      "code": "pacifica",
+      "manufacturer_code": "chrysler",
+      "english": "Pacifica",
+      "korean": "퍼시피카"
+    },
+    {
+      "code": "crossfire",
+      "manufacturer_code": "chrysler",
+      "english": "Crossfire",
+      "korean": "크로스파이어"
+    },
+    {
+      "code": "probe",
+      "manufacturer_code": "ford",
+      "english": "Probe",
+      "korean": "프로브"
+    },
+    {
+      "code": "mustang",
+      "manufacturer_code": "ford",
+      "english": "Mustang",
+      "korean": "머스탱"
+    },
+    {
+      "code": "econoline",
+      "manufacturer_code": "ford",
+      "english": "Econoline",
+      "korean": "이코노라인"
+    },
+    {
+      "code": "contour",
+      "manufacturer_code": "ford",
+      "english": "Contour",
+      "korean": "컨투어"
+    },
+    {
+      "code": "focus",
+      "manufacturer_code": "ford",
+      "english": "Focus",
+      "korean": "포커스"
+    },
+    {
+      "code": "s_max",
+      "manufacturer_code": "ford",
+      "english": "S-MAX",
+      "korean": "S-MAX"
+    },
+    {
+      "code": "e_series",
+      "manufacturer_code": "ford",
+      "english": "E-Series",
+      "korean": "E-Series"
+    },
+    {
+      "code": "fusion",
+      "manufacturer_code": "ford",
+      "english": "Fusion",
+      "korean": "퓨전"
+    },
+    {
+      "code": "civic",
+      "manufacturer_code": "honda",
+      "english": "Civic",
+      "korean": "시빅"
+    },
+    {
+      "code": "del_sol",
+      "manufacturer_code": "honda",
+      "english": "Del sol",
+      "korean": "델솔"
+    },
+    {
+      "code": "passport",
+      "manufacturer_code": "honda",
+      "english": "Passport",
+      "korean": "패스포트"
+    },
+    {
+      "code": "s2000",
+      "manufacturer_code": "honda",
+      "english": "S2000",
+      "korean": "S2000"
+    },
+    {
+      "code": "fit",
+      "manufacturer_code": "honda",
+      "english": "Fit",
+      "korean": "Fit"
+    },
+    {
+      "code": "fit_aria",
+      "manufacturer_code": "honda",
+      "english": "Fit Aria",
+      "korean": "Fit Aria"
+    },
+    {
+      "code": "ridgeline",
+      "manufacturer_code": "honda",
+      "english": "Ridgeline",
+      "korean": "리지라인"
+    },
+    {
+      "code": "rodeo",
+      "manufacturer_code": "isuzu",
+      "english": "Rodeo",
+      "korean": "로데오"
+    },
+    {
+      "code": "trooper",
+      "manufacturer_code": "isuzu",
+      "english": "Trooper",
+      "korean": "트루퍼"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "isuzu",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "rx_7",
+      "manufacturer_code": "mazda",
+      "english": "RX-7",
+      "korean": "RX-7"
+    },
+    {
+      "code": "millenia",
+      "manufacturer_code": "mazda",
+      "english": "Millenia",
+      "korean": "밀레니아"
+    },
+    {
+      "code": "az_1",
+      "manufacturer_code": "mazda",
+      "english": "AZ-1",
+      "korean": "AZ-1"
+    },
+    {
+      "code": "mazda_6",
+      "manufacturer_code": "mazda",
+      "english": "MAZDA 6",
+      "korean": "마쯔다 6"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "mazda",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "gto",
+      "manufacturer_code": "mitsubishi",
+      "english": "GTO",
+      "korean": "GTO"
+    },
+    {
+      "code": "i",
+      "manufacturer_code": "mitsubishi",
+      "english": "i",
+      "korean": "아이"
+    },
+    {
+      "code": "outlander",
+      "manufacturer_code": "mitsubishi",
+      "english": "Outlander",
+      "korean": "아웃랜더"
+    },
+    {
+      "code": "rvr",
+      "manufacturer_code": "mitsubishi",
+      "english": "RVR",
+      "korean": "RVR"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "mitsubishi",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "xtracab",
+      "manufacturer_code": "toyota",
+      "english": "Xtracab",
+      "korean": "액스트라캡"
+    },
+    {
+      "code": "rav4",
+      "manufacturer_code": "toyota",
+      "english": "RAV4",
+      "korean": "RAV4"
+    },
+    {
+      "code": "soarer",
+      "manufacturer_code": "toyota",
+      "english": "Soarer",
+      "korean": "소아라"
+    },
+    {
+      "code": "hilux_surf",
+      "manufacturer_code": "toyota",
+      "english": "Hilux Surf",
+      "korean": "하이럭스 써프"
+    },
+    {
+      "code": "ipsum",
+      "manufacturer_code": "toyota",
+      "english": "Ipsum",
+      "korean": "입섬"
+    },
+    {
+      "code": "mark2",
+      "manufacturer_code": "toyota",
+      "english": "Mark2",
+      "korean": "마크2"
+    },
+    {
+      "code": "chaser",
+      "manufacturer_code": "toyota",
+      "english": "Chaser",
+      "korean": "체이서"
+    },
+    {
+      "code": "prius",
+      "manufacturer_code": "toyota",
+      "english": "Prius",
+      "korean": "프리우스"
+    },
+    {
+      "code": "bb",
+      "manufacturer_code": "toyota",
+      "english": "bB",
+      "korean": "bB"
+    },
+    {
+      "code": "passo",
+      "manufacturer_code": "toyota",
+      "english": "Passo",
+      "korean": "파쏘"
+    },
+    {
+      "code": "altezza",
+      "manufacturer_code": "toyota",
+      "english": "Altezza",
+      "korean": "알테자"
+    },
+    {
+      "code": "highlander",
+      "manufacturer_code": "toyota",
+      "english": "Highlander",
+      "korean": "하이랜더"
+    },
+    {
+      "code": "tundra",
+      "manufacturer_code": "toyota",
+      "english": "Tundra",
+      "korean": "툰드라"
+    },
+    {
+      "code": "ractis",
+      "manufacturer_code": "toyota",
+      "english": "Ractis",
+      "korean": "락티스"
+    },
+    {
+      "code": "iq",
+      "manufacturer_code": "toyota",
+      "english": "iQ",
+      "korean": "iQ"
+    },
+    {
+      "code": "harrier",
+      "manufacturer_code": "toyota",
+      "english": "Harrier",
+      "korean": "해리어"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "toyota",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "240sx",
+      "manufacturer_code": "nissan",
+      "english": "240SX",
+      "korean": "240SX"
+    },
+    {
+      "code": "280zx",
+      "manufacturer_code": "nissan",
+      "english": "280ZX",
+      "korean": "280ZX"
+    },
+    {
+      "code": "quest",
+      "manufacturer_code": "nissan",
+      "english": "Quest",
+      "korean": "퀘스트"
+    },
+    {
+      "code": "sentra",
+      "manufacturer_code": "nissan",
+      "english": "Sentra",
+      "korean": "센트라"
+    },
+    {
+      "code": "pao",
+      "manufacturer_code": "nissan",
+      "english": "Pao",
+      "korean": "파오"
+    },
+    {
+      "code": "figaro",
+      "manufacturer_code": "nissan",
+      "english": "Figaro",
+      "korean": "휘가로"
+    },
+    {
+      "code": "march",
+      "manufacturer_code": "nissan",
+      "english": "March",
+      "korean": "마치"
+    },
+    {
+      "code": "cedric",
+      "manufacturer_code": "nissan",
+      "english": "Cedric",
+      "korean": "세드릭"
+    },
+    {
+      "code": "versa",
+      "manufacturer_code": "nissan",
+      "english": "Versa",
+      "korean": "버사"
+    },
+    {
+      "code": "370z",
+      "manufacturer_code": "nissan",
+      "english": "370Z",
+      "korean": "370Z"
+    },
+    {
+      "code": "wingroad",
+      "manufacturer_code": "nissan",
+      "english": "Wingroad",
+      "korean": "윙로드"
+    },
+    {
+      "code": "laurel",
+      "manufacturer_code": "nissan",
+      "english": "Laurel",
+      "korean": "로렐"
+    },
+    {
+      "code": "prairie",
+      "manufacturer_code": "nissan",
+      "english": "Prairie",
+      "korean": "프레리"
+    },
+    {
+      "code": "elgrand",
+      "manufacturer_code": "nissan",
+      "english": "Elgrand",
+      "korean": "엘그란드"
+    },
+    {
+      "code": "dakoda",
+      "manufacturer_code": "dodge",
+      "english": "Dakoda",
+      "korean": "다코타"
+    },
+    {
+      "code": "durango",
+      "manufacturer_code": "dodge",
+      "english": "Durango",
+      "korean": "듀랑고"
+    },
+    {
+      "code": "grand_caravan",
+      "manufacturer_code": "dodge",
+      "english": "Grand Caravan",
+      "korean": "그랜드 캐러밴"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "dodge",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "brisa",
+      "manufacturer_code": "kia",
+      "english": "Brisa",
+      "korean": "브리샤"
+    },
+    {
+      "code": "visto",
+      "manufacturer_code": "kia",
+      "english": "Visto",
+      "korean": "비스토"
+    },
+    {
+      "code": "sephia",
+      "manufacturer_code": "kia",
+      "english": "Sephia",
+      "korean": "세피아"
+    },
+    {
+      "code": "shuma",
+      "manufacturer_code": "kia",
+      "english": "Shuma",
+      "korean": "슈마"
+    },
+    {
+      "code": "spectra",
+      "manufacturer_code": "kia",
+      "english": "Spectra",
+      "korean": "스펙트라"
+    },
+    {
+      "code": "sportage",
+      "manufacturer_code": "kia",
+      "english": "Sportage",
+      "korean": "스포티지"
+    },
+    {
+      "code": "cerato",
+      "manufacturer_code": "kia",
+      "english": "Cerato",
+      "korean": "쎄라토"
+    },
+    {
+      "code": "soul",
+      "manufacturer_code": "kia",
+      "english": "Soul",
+      "korean": "쏘울"
+    },
+    {
+      "code": "avella",
+      "manufacturer_code": "kia",
+      "english": "Avella",
+      "korean": "아벨라"
+    },
+    {
+      "code": "enterprise",
+      "manufacturer_code": "kia",
+      "english": "Enterprise",
+      "korean": "엔터프라이즈"
+    },
+    {
+      "code": "elan",
+      "manufacturer_code": "kia",
+      "english": "Elan",
+      "korean": "엘란"
+    },
+    {
+      "code": "optima",
+      "manufacturer_code": "kia",
+      "english": "Optima",
+      "korean": "옵티마"
+    },
+    {
+      "code": "canival",
+      "manufacturer_code": "kia",
+      "english": "Canival",
+      "korean": "카니발"
+    },
+    {
+      "code": "carens",
+      "manufacturer_code": "kia",
+      "english": "Carens",
+      "korean": "카렌스"
+    },
+    {
+      "code": "carstar",
+      "manufacturer_code": "kia",
+      "english": "Carstar",
+      "korean": "카스타"
+    },
+    {
+      "code": "capital",
+      "manufacturer_code": "kia",
+      "english": "Capital",
+      "korean": "캐피탈"
+    },
+    {
+      "code": "concorde",
+      "manufacturer_code": "kia",
+      "english": "Concorde",
+      "korean": "콩코드"
+    },
+    {
+      "code": "credos",
+      "manufacturer_code": "kia",
+      "english": "Credos",
+      "korean": "크레도스"
+    },
+    {
+      "code": "towner",
+      "manufacturer_code": "kia",
+      "english": "Towner",
+      "korean": "타우너"
+    },
+    {
+      "code": "topic",
+      "manufacturer_code": "kia",
+      "english": "Topic",
+      "korean": "토픽"
+    },
+    {
+      "code": "parktown",
+      "manufacturer_code": "kia",
+      "english": "Parktown",
+      "korean": "파크타운"
+    },
+    {
+      "code": "porte",
+      "manufacturer_code": "kia",
+      "english": "Porte",
+      "korean": "포르테"
+    },
+    {
+      "code": "potentia",
+      "manufacturer_code": "kia",
+      "english": "Potentia",
+      "korean": "포텐샤"
+    },
+    {
+      "code": "pride",
+      "manufacturer_code": "kia",
+      "english": "pride",
+      "korean": "프라이드"
+    },
+    {
+      "code": "fiat_132",
+      "manufacturer_code": "kia",
+      "english": "Fiat 132",
+      "korean": "피아트132"
+    },
+    {
+      "code": "nexia",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Nexia",
+      "korean": "넥시아"
+    },
+    {
+      "code": "malibu",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Malibu",
+      "korean": "말리부"
+    },
+    {
+      "code": "nubira",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Nubira",
+      "korean": "누비라"
+    },
+    {
+      "code": "damas",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "damas",
+      "korean": "다마스"
+    },
+    {
+      "code": "cl_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "CL-Class",
+      "korean": "CL-클래스"
+    },
+    {
+      "code": "lanos",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Lanos",
+      "korean": "라노스"
+    },
+    {
+      "code": "labo",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "labo",
+      "korean": "라보"
+    },
+    {
+      "code": "lacetti",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Lacetti",
+      "korean": "라세티"
+    },
+    {
+      "code": "leganza",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Leganza",
+      "korean": "레간자"
+    },
+    {
+      "code": "rezzo",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Rezzo",
+      "korean": "레조"
+    },
+    {
+      "code": "royal_salon",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Royal Salon",
+      "korean": "로얄살롱"
+    },
+    {
+      "code": "lemans",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Lemans",
+      "korean": "르망"
+    },
+    {
+      "code": "matiz",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Matiz",
+      "korean": "마티즈"
+    },
+    {
+      "code": "magnus",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Magnus",
+      "korean": "매그너스"
+    },
+    {
+      "code": "maepsy",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Maepsy",
+      "korean": "맵시"
+    },
+    {
+      "code": "veritas",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "VERITAS",
+      "korean": "베리타스"
+    },
+    {
+      "code": "brougham",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Brougham",
+      "korean": "브로엄"
+    },
+    {
+      "code": "statesman",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Statesman",
+      "korean": "스테이츠맨"
+    },
+    {
+      "code": "ciero",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Ciero",
+      "korean": "씨에로"
+    },
+    {
+      "code": "acadia",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Acadia",
+      "korean": "아카디아"
+    },
+    {
+      "code": "espero",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Espero",
+      "korean": "에스페로"
+    },
+    {
+      "code": "winstorm",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Winstorm",
+      "korean": "윈스톰"
+    },
+    {
+      "code": "imperial",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Imperial",
+      "korean": "임페리얼"
+    },
+    {
+      "code": "gentra",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Gentra",
+      "korean": "젠트라"
+    },
+    {
+      "code": "kalos",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Kalos",
+      "korean": "칼로스"
+    },
+    {
+      "code": "tosca",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Tosca",
+      "korean": "토스카"
+    },
+    {
+      "code": "tico",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Tico",
+      "korean": "티코"
+    },
+    {
+      "code": "prince",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Prince",
+      "korean": "프린스"
+    },
+    {
+      "code": "g2x",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "G2X",
+      "korean": "G2X"
+    },
+    {
+      "code": "new_family",
+      "manufacturer_code": "ssangyong",
+      "english": "New Family",
+      "korean": "뉴훼미리"
+    },
+    {
+      "code": "rexton",
+      "manufacturer_code": "ssangyong",
+      "english": "Rexton",
+      "korean": "렉스턴"
+    },
+    {
+      "code": "rodius",
+      "manufacturer_code": "ssangyong",
+      "english": "Rodius",
+      "korean": "로디우스"
+    },
+    {
+      "code": "musso",
+      "manufacturer_code": "ssangyong",
+      "english": "Musso",
+      "korean": "무쏘"
+    },
+    {
+      "code": "actyon",
+      "manufacturer_code": "ssangyong",
+      "english": "Actyon",
+      "korean": "액티언"
+    },
+    {
+      "code": "istana",
+      "manufacturer_code": "ssangyong",
+      "english": "Istana",
+      "korean": "이스타나"
+    },
+    {
+      "code": "caristar",
+      "manufacturer_code": "ssangyong",
+      "english": "Caristar",
+      "korean": "칼리스타"
+    },
+    {
+      "code": "kyron",
+      "manufacturer_code": "ssangyong",
+      "english": "Kyron",
+      "korean": "카이런"
+    },
+    {
+      "code": "korando",
+      "manufacturer_code": "ssangyong",
+      "english": "KORANDO",
+      "korean": "코란도"
+    },
+    {
+      "code": "sm3",
+      "manufacturer_code": "renault_samsung",
+      "english": "SM3",
+      "korean": "SM3"
+    },
+    {
+      "code": "sm5_",
+      "manufacturer_code": "renault_samsung",
+      "english": "SM5 ",
+      "korean": "SM5"
+    },
+    {
+      "code": "sm7",
+      "manufacturer_code": "renault_samsung",
+      "english": "SM7",
+      "korean": "SM7"
+    },
+    {
+      "code": "qm5_",
+      "manufacturer_code": "renault_samsung",
+      "english": "QM5 ",
+      "korean": "QM5"
+    },
+    {
+      "code": "spark",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Spark",
+      "korean": "스파크"
+    },
+    {
+      "code": "camaro",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Camaro",
+      "korean": "카마로"
+    },
+    {
+      "code": "orlando",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Orlando",
+      "korean": "올란도"
+    },
+    {
+      "code": "i40",
+      "manufacturer_code": "hyundai",
+      "english": "i40",
+      "korean": "i40"
+    },
+    {
+      "code": "x3",
+      "manufacturer_code": "bmw",
+      "english": "X3",
+      "korean": "X3"
+    },
+    {
+      "code": "s_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "S-Class",
+      "korean": "S-클래스"
+    },
+    {
+      "code": "sl_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "SL-Class",
+      "korean": "SL-클래스"
+    },
+    {
+      "code": "slk_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "SLK-Class",
+      "korean": "SLK-클래스"
+    },
+    {
+      "code": "m_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "M-class",
+      "korean": "M-클래스"
+    },
+    {
+      "code": "a4",
+      "manufacturer_code": "audi",
+      "english": "A4",
+      "korean": "A4"
+    },
+    {
+      "code": "a8",
+      "manufacturer_code": "audi",
+      "english": "A8",
+      "korean": "A8"
+    },
+    {
+      "code": "tt",
+      "manufacturer_code": "audi",
+      "english": "TT",
+      "korean": "TT"
+    },
+    {
+      "code": "camry",
+      "manufacturer_code": "toyota",
+      "english": "Camry",
+      "korean": "캠리"
+    },
+    {
+      "code": "discovery",
+      "manufacturer_code": "land_rover",
+      "english": "Discovery",
+      "korean": "디스커버리"
+    },
+    {
+      "code": "gs",
+      "manufacturer_code": "lexus",
+      "english": "GS",
+      "korean": "GS"
+    },
+    {
+      "code": "ls",
+      "manufacturer_code": "lexus",
+      "english": "LS",
+      "korean": "LS"
+    },
+    {
+      "code": "sc",
+      "manufacturer_code": "lexus",
+      "english": "SC",
+      "korean": "SC"
+    },
+    {
+      "code": "cooper",
+      "manufacturer_code": "mini",
+      "english": "Cooper",
+      "korean": "쿠퍼"
+    },
+    {
+      "code": "clubman",
+      "manufacturer_code": "mini",
+      "english": "Clubman",
+      "korean": "클럽맨"
+    },
+    {
+      "code": "xj",
+      "manufacturer_code": "jaguar",
+      "english": "XJ",
+      "korean": "XJ"
+    },
+    {
+      "code": "srx",
+      "manufacturer_code": "cadillac",
+      "english": "SRX",
+      "korean": "SRX"
+    },
+    {
+      "code": "sebring",
+      "manufacturer_code": "chrysler",
+      "english": "Sebring",
+      "korean": "세브링"
+    },
+    {
+      "code": "mondeo",
+      "manufacturer_code": "ford",
+      "english": "Mondeo",
+      "korean": "몬데오"
+    },
+    {
+      "code": "taurus",
+      "manufacturer_code": "ford",
+      "english": "Taurus",
+      "korean": "토러스"
+    },
+    {
+      "code": "cayenne",
+      "manufacturer_code": "porsche",
+      "english": "Cayenne",
+      "korean": "카이엔"
+    },
+    {
+      "code": "cc",
+      "manufacturer_code": "volkswagen",
+      "english": "CC",
+      "korean": "CC"
+    },
+    {
+      "code": "touareg",
+      "manufacturer_code": "volkswagen",
+      "english": "Touareg",
+      "korean": "투아렉"
+    },
+    {
+      "code": "passat",
+      "manufacturer_code": "volkswagen",
+      "english": "Passat",
+      "korean": "파사트"
+    },
+    {
+      "code": "206",
+      "manufacturer_code": "peugeot",
+      "english": "206",
+      "korean": "206"
+    },
+    {
+      "code": "307",
+      "manufacturer_code": "peugeot",
+      "english": "307",
+      "korean": "307"
+    },
+    {
+      "code": "308",
+      "manufacturer_code": "peugeot",
+      "english": "308",
+      "korean": "308"
+    },
+    {
+      "code": "607",
+      "manufacturer_code": "peugeot",
+      "english": "607",
+      "korean": "607"
+    },
+    {
+      "code": "cr_v",
+      "manufacturer_code": "honda",
+      "english": "CR-V",
+      "korean": "CR-V"
+    },
+    {
+      "code": "legend",
+      "manufacturer_code": "honda",
+      "english": "Legend",
+      "korean": "레전드"
+    },
+    {
+      "code": "my_b",
+      "manufacturer_code": "mercedes_benz",
+      "english": "My B",
+      "korean": "B-클래스 (MY B)"
+    },
+    {
+      "code": "fortwo",
+      "manufacturer_code": "smart",
+      "english": "Fortwo",
+      "korean": "포투"
+    },
+    {
+      "code": "cruze",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Cruze",
+      "korean": "크루즈"
+    },
+    {
+      "code": "veloster",
+      "manufacturer_code": "hyundai",
+      "english": "Veloster",
+      "korean": "벨로스터"
+    },
+    {
+      "code": "captiva",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Captiva",
+      "korean": "캡티바"
+    },
+    {
+      "code": "k9",
+      "manufacturer_code": "kia",
+      "english": "K9",
+      "korean": "K9"
+    },
+    {
+      "code": "1_series",
+      "manufacturer_code": "bmw",
+      "english": "1-Series",
+      "korean": "1시리즈"
+    },
+    {
+      "code": "5_series",
+      "manufacturer_code": "bmw",
+      "english": "5-Series",
+      "korean": "5시리즈"
+    },
+    {
+      "code": "7_series",
+      "manufacturer_code": "bmw",
+      "english": "7-Series",
+      "korean": "7시리즈"
+    },
+    {
+      "code": "e_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "E-Class",
+      "korean": "E-클래스"
+    },
+    {
+      "code": "a3",
+      "manufacturer_code": "audi",
+      "english": "A3",
+      "korean": "A3"
+    },
+    {
+      "code": "es",
+      "manufacturer_code": "lexus",
+      "english": "ES",
+      "korean": "ES"
+    },
+    {
+      "code": "rx",
+      "manufacturer_code": "lexus",
+      "english": "RX",
+      "korean": "RX"
+    },
+    {
+      "code": "mkz",
+      "manufacturer_code": "lincoln",
+      "english": "MKZ",
+      "korean": "MKZ"
+    },
+    {
+      "code": "xc70",
+      "manufacturer_code": "volvo",
+      "english": "XC70",
+      "korean": "XC70"
+    },
+    {
+      "code": "9_3",
+      "manufacturer_code": "saab",
+      "english": "9-3",
+      "korean": "9-3"
+    },
+    {
+      "code": "9_5",
+      "manufacturer_code": "saab",
+      "english": "9-5",
+      "korean": "9-5"
+    },
+    {
+      "code": "cts",
+      "manufacturer_code": "cadillac",
+      "english": "CTS",
+      "korean": "CTS"
+    },
+    {
+      "code": "sts",
+      "manufacturer_code": "cadillac",
+      "english": "STS",
+      "korean": "STS"
+    },
+    {
+      "code": "911",
+      "manufacturer_code": "porsche",
+      "english": "911",
+      "korean": "911"
+    },
+    {
+      "code": "cayman",
+      "manufacturer_code": "porsche",
+      "english": "Cayman",
+      "korean": "카이맨"
+    },
+    {
+      "code": "panamera",
+      "manufacturer_code": "porsche",
+      "english": "Panamera",
+      "korean": "파나메라"
+    },
+    {
+      "code": "tiguan",
+      "manufacturer_code": "volkswagen",
+      "english": "Tiguan",
+      "korean": "티구안"
+    },
+    {
+      "code": "407",
+      "manufacturer_code": "peugeot",
+      "english": "407",
+      "korean": "407"
+    },
+    {
+      "code": "gx",
+      "manufacturer_code": "lexus",
+      "english": "GX",
+      "korean": "GX"
+    },
+    {
+      "code": "lx",
+      "manufacturer_code": "lexus",
+      "english": "LX",
+      "korean": "LX"
+    },
+    {
+      "code": "ct200h",
+      "manufacturer_code": "lexus",
+      "english": "CT200h",
+      "korean": "CT200h"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "lexus",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "villager",
+      "manufacturer_code": "mercury",
+      "english": "Villager",
+      "korean": "빌리저"
+    },
+    {
+      "code": "grand_marquis",
+      "manufacturer_code": "mercury",
+      "english": "Grand Marquis",
+      "korean": "그랜드 마퀴스"
+    },
+    {
+      "code": "cooper_convertible",
+      "manufacturer_code": "mini",
+      "english": "Cooper Convertible",
+      "korean": "쿠퍼 컨버터블"
+    },
+    {
+      "code": "i30",
+      "manufacturer_code": "hyundai",
+      "english": "i30",
+      "korean": "i30"
+    },
+    {
+      "code": "galloper",
+      "manufacturer_code": "hyundai",
+      "english": "Galloper",
+      "korean": "갤로퍼"
+    },
+    {
+      "code": "granada",
+      "manufacturer_code": "hyundai",
+      "english": "Granada",
+      "korean": "그라나다"
+    },
+    {
+      "code": "grandeur",
+      "manufacturer_code": "hyundai",
+      "english": "Grandeur",
+      "korean": "그랜저"
+    },
+    {
+      "code": "grace",
+      "manufacturer_code": "hyundai",
+      "english": "Grace",
+      "korean": "그레이스"
+    },
+    {
+      "code": "dynasty",
+      "manufacturer_code": "hyundai",
+      "english": "Dynasty",
+      "korean": "다이너스티"
+    },
+    {
+      "code": "lavita",
+      "manufacturer_code": "hyundai",
+      "english": "Lavita",
+      "korean": "라비타"
+    },
+    {
+      "code": "marcia",
+      "manufacturer_code": "hyundai",
+      "english": "Marcia",
+      "korean": "마르샤"
+    },
+    {
+      "code": "veracruz",
+      "manufacturer_code": "hyundai",
+      "english": "Veracruz",
+      "korean": "베라크루즈"
+    },
+    {
+      "code": "verna",
+      "manufacturer_code": "hyundai",
+      "english": "Verna",
+      "korean": "베르나"
+    },
+    {
+      "code": "santamo",
+      "manufacturer_code": "hyundai",
+      "english": "Santamo",
+      "korean": "산타모"
+    },
+    {
+      "code": "starex",
+      "manufacturer_code": "hyundai",
+      "english": "Starex",
+      "korean": "스타렉스"
+    },
+    {
+      "code": "stella",
+      "manufacturer_code": "hyundai",
+      "english": "Stella",
+      "korean": "스텔라"
+    },
+    {
+      "code": "santafe",
+      "manufacturer_code": "hyundai",
+      "english": "Santafe",
+      "korean": "싼타페"
+    },
+    {
+      "code": "sonata",
+      "manufacturer_code": "hyundai",
+      "english": "Sonata",
+      "korean": "쏘나타"
+    },
+    {
+      "code": "avante",
+      "manufacturer_code": "hyundai",
+      "english": "AVANTE",
+      "korean": "아반떼"
+    },
+    {
+      "code": "atoz",
+      "manufacturer_code": "hyundai",
+      "english": "Atoz",
+      "korean": "아토스"
+    },
+    {
+      "code": "equus",
+      "manufacturer_code": "hyundai",
+      "english": "Equus",
+      "korean": "에쿠스"
+    },
+    {
+      "code": "accent",
+      "manufacturer_code": "hyundai",
+      "english": "Accent",
+      "korean": "엑센트"
+    },
+    {
+      "code": "excel",
+      "manufacturer_code": "hyundai",
+      "english": "Excel",
+      "korean": "엑셀"
+    },
+    {
+      "code": "elantra",
+      "manufacturer_code": "hyundai",
+      "english": "Elantra",
+      "korean": "엘란트라"
+    },
+    {
+      "code": "genesis",
+      "manufacturer_code": "hyundai",
+      "english": "Genesis",
+      "korean": "제네시스"
+    },
+    {
+      "code": "cotina",
+      "manufacturer_code": "hyundai",
+      "english": "Cotina",
+      "korean": "코티나"
+    },
+    {
+      "code": "click",
+      "manufacturer_code": "hyundai",
+      "english": "Click",
+      "korean": "클릭"
+    },
+    {
+      "code": "tuscani",
+      "manufacturer_code": "hyundai",
+      "english": "Tuscani",
+      "korean": "투스카니"
+    },
+    {
+      "code": "tucson",
+      "manufacturer_code": "hyundai",
+      "english": "Tucson",
+      "korean": "투싼"
+    },
+    {
+      "code": "traget_xg",
+      "manufacturer_code": "hyundai",
+      "english": "Traget XG",
+      "korean": "트라제 XG"
+    },
+    {
+      "code": "tiburon",
+      "manufacturer_code": "hyundai",
+      "english": "Tiburon",
+      "korean": "티뷰론"
+    },
+    {
+      "code": "pony",
+      "manufacturer_code": "hyundai",
+      "english": "Pony",
+      "korean": "포니"
+    },
+    {
+      "code": "presto",
+      "manufacturer_code": "hyundai",
+      "english": "Presto",
+      "korean": "프레스토"
+    },
+    {
+      "code": "k5",
+      "manufacturer_code": "kia",
+      "english": "K5",
+      "korean": "K5"
+    },
+    {
+      "code": "k7",
+      "manufacturer_code": "kia",
+      "english": "K7",
+      "korean": "K7"
+    },
+    {
+      "code": "x_trek",
+      "manufacturer_code": "kia",
+      "english": "X-TREK",
+      "korean": "X-TREK"
+    },
+    {
+      "code": "delta",
+      "manufacturer_code": "kia",
+      "english": "Delta",
+      "korean": "델타"
+    },
+    {
+      "code": "lotze",
+      "manufacturer_code": "kia",
+      "english": "LOTZE",
+      "korean": "로체"
+    },
+    {
+      "code": "rocksta",
+      "manufacturer_code": "kia",
+      "english": "Rocksta",
+      "korean": "록스타"
+    },
+    {
+      "code": "regal",
+      "manufacturer_code": "kia",
+      "english": "Regal",
+      "korean": "리갈"
+    },
+    {
+      "code": "rio",
+      "manufacturer_code": "kia",
+      "english": "Rio",
+      "korean": "리오"
+    },
+    {
+      "code": "morning",
+      "manufacturer_code": "kia",
+      "english": "morning",
+      "korean": "모닝"
+    },
+    {
+      "code": "mohave",
+      "manufacturer_code": "kia",
+      "english": "Mohave",
+      "korean": "모하비"
+    },
+    {
+      "code": "besta",
+      "manufacturer_code": "kia",
+      "english": "Besta",
+      "korean": "베스타"
+    },
+    {
+      "code": "m_series",
+      "manufacturer_code": "bmw",
+      "english": "M-Series",
+      "korean": "M시리즈"
+    },
+    {
+      "code": "aveo",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Aveo",
+      "korean": "아베오"
+    },
+    {
+      "code": "c_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "C-Class",
+      "korean": "C-클래스"
+    },
+    {
+      "code": "cls_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "CLS-Class",
+      "korean": "CLS-클래스"
+    },
+    {
+      "code": "freelander",
+      "manufacturer_code": "land_rover",
+      "english": "Freelander",
+      "korean": "프리랜더"
+    },
+    {
+      "code": "is",
+      "manufacturer_code": "lexus",
+      "english": "IS",
+      "korean": "IS"
+    },
+    {
+      "code": "coupe",
+      "manufacturer_code": "mini",
+      "english": "Coupe",
+      "korean": "쿠페"
+    },
+    {
+      "code": "300c",
+      "manufacturer_code": "chrysler",
+      "english": "300C",
+      "korean": "300C"
+    },
+    {
+      "code": "q50",
+      "manufacturer_code": "infinity",
+      "english": "Q50",
+      "korean": "Q50"
+    },
+    {
+      "code": "beatle",
+      "manufacturer_code": "volkswagen",
+      "english": "Beatle",
+      "korean": "비틀"
+    },
+    {
+      "code": "jetta",
+      "manufacturer_code": "volkswagen",
+      "english": "Jetta",
+      "korean": "제타"
+    },
+    {
+      "code": "207",
+      "manufacturer_code": "peugeot",
+      "english": "207",
+      "korean": "207"
+    },
+    {
+      "code": "accord",
+      "manufacturer_code": "honda",
+      "english": "Accord",
+      "korean": "어코드"
+    },
+    {
+      "code": "ray",
+      "manufacturer_code": "kia",
+      "english": "RAY",
+      "korean": "레이"
+    },
+    {
+      "code": "rs7",
+      "manufacturer_code": "audi",
+      "english": "RS7",
+      "korean": "RS7"
+    },
+    {
+      "code": "tanto",
+      "manufacturer_code": "daihatsu",
+      "english": "Tanto",
+      "korean": "탄토"
+    },
+    {
+      "code": "c4_picasso",
+      "manufacturer_code": "citroen",
+      "english": "C4 Picasso",
+      "korean": "C4 피카소"
+    },
+    {
+      "code": "corsa",
+      "manufacturer_code": "toyota",
+      "english": "Corsa",
+      "korean": "코르사"
+    },
+    {
+      "code": "nx",
+      "manufacturer_code": "lexus",
+      "english": "NX",
+      "korean": "NX"
+    },
+    {
+      "code": "oullimmotors",
+      "manufacturer_code": "others",
+      "english": "Oullimmotors",
+      "korean": "어울림모터스"
+    },
+    {
+      "code": "8_series",
+      "manufacturer_code": "bmw",
+      "english": "8-Series",
+      "korean": "8시리즈"
+    },
+    {
+      "code": "3_series",
+      "manufacturer_code": "bmw",
+      "english": "3-Series",
+      "korean": "3시리즈"
+    },
+    {
+      "code": "6_series",
+      "manufacturer_code": "bmw",
+      "english": "6-Series",
+      "korean": "6시리즈"
+    },
+    {
+      "code": "z4",
+      "manufacturer_code": "bmw",
+      "english": "Z4",
+      "korean": "Z4"
+    },
+    {
+      "code": "sable",
+      "manufacturer_code": "mercury",
+      "english": "Sable",
+      "korean": "세이블"
+    },
+    {
+      "code": "cougar",
+      "manufacturer_code": "mercury",
+      "english": "Cougar",
+      "korean": "쿠거"
+    },
+    {
+      "code": "sidekick",
+      "manufacturer_code": "suzuki",
+      "english": "Sidekick",
+      "korean": "사이드킥"
+    },
+    {
+      "code": "twin",
+      "manufacturer_code": "suzuki",
+      "english": "Twin",
+      "korean": "트윈"
+    },
+    {
+      "code": "cappucino",
+      "manufacturer_code": "suzuki",
+      "english": "Cappucino",
+      "korean": "카푸치노"
+    },
+    {
+      "code": "x_90",
+      "manufacturer_code": "suzuki",
+      "english": "X-90",
+      "korean": "X-90"
+    },
+    {
+      "code": "swift",
+      "manufacturer_code": "suzuki",
+      "english": "Swift",
+      "korean": "스위프트"
+    },
+    {
+      "code": "wagon_r",
+      "manufacturer_code": "suzuki",
+      "english": "Wagon R",
+      "korean": "웨건 R"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "suzuki",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "alto_lapin",
+      "manufacturer_code": "suzuki",
+      "english": "Alto Lapin",
+      "korean": "알토라팡"
+    },
+    {
+      "code": "corvette",
+      "manufacturer_code": "chevrolet",
+      "english": "Corvette",
+      "korean": "콜벳"
+    },
+    {
+      "code": "chevy_van",
+      "manufacturer_code": "chevrolet",
+      "english": "Chevy Van",
+      "korean": "체비밴"
+    },
+    {
+      "code": "surburban",
+      "manufacturer_code": "chevrolet",
+      "english": "Surburban",
+      "korean": "서버밴"
+    },
+    {
+      "code": "astro_van",
+      "manufacturer_code": "chevrolet",
+      "english": "Astro Van",
+      "korean": "아스트로밴"
+    },
+    {
+      "code": "blazer",
+      "manufacturer_code": "chevrolet",
+      "english": "Blazer",
+      "korean": "블레이저"
+    },
+    {
+      "code": "tahoe",
+      "manufacturer_code": "chevrolet",
+      "english": "Tahoe",
+      "korean": "타호"
+    },
+    {
+      "code": "hhr",
+      "manufacturer_code": "chevrolet",
+      "english": "HHR",
+      "korean": "HHR"
+    },
+    {
+      "code": "silverado",
+      "manufacturer_code": "chevrolet",
+      "english": "Silverado",
+      "korean": "실버라도"
+    },
+    {
+      "code": "avalanche",
+      "manufacturer_code": "chevrolet",
+      "english": "Avalanche",
+      "korean": "아발란치"
+    },
+    {
+      "code": "lumina",
+      "manufacturer_code": "chevrolet",
+      "english": "Lumina",
+      "korean": "루미나"
+    },
+    {
+      "code": "express_van",
+      "manufacturer_code": "chevrolet",
+      "english": "Express Van",
+      "korean": "익스프레스밴"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "chevrolet",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "colorado",
+      "manufacturer_code": "chevrolet",
+      "english": "Colorado",
+      "korean": "콜로라도"
+    },
+    {
+      "code": "ssr",
+      "manufacturer_code": "chevrolet",
+      "english": "SSR",
+      "korean": "SSR"
+    },
+    {
+      "code": "speedster",
+      "manufacturer_code": "opel",
+      "english": "SpeedSter",
+      "korean": "스피드스터"
+    },
+    {
+      "code": "tigra",
+      "manufacturer_code": "opel",
+      "english": "Tigra",
+      "korean": "티그라"
+    },
+    {
+      "code": "corsa",
+      "manufacturer_code": "opel",
+      "english": "Corsa",
+      "korean": "코르사"
+    },
+    {
+      "code": "astra",
+      "manufacturer_code": "opel",
+      "english": "Astra",
+      "korean": "아스트라"
+    },
+    {
+      "code": "vita",
+      "manufacturer_code": "opel",
+      "english": "Vita",
+      "korean": "비타"
+    },
+    {
+      "code": "vectra",
+      "manufacturer_code": "opel",
+      "english": "Vectra",
+      "korean": "벡트라"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "opel",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "spyder",
+      "manufacturer_code": "alfa_romeo",
+      "english": "Spyder",
+      "korean": "스파이더"
+    },
+    {
+      "code": "147",
+      "manufacturer_code": "alfa_romeo",
+      "english": "147",
+      "korean": "147"
+    },
+    {
+      "code": "166",
+      "manufacturer_code": "alfa_romeo",
+      "english": "166",
+      "korean": "166"
+    },
+    {
+      "code": "156",
+      "manufacturer_code": "alfa_romeo",
+      "english": "156",
+      "korean": "156"
+    },
+    {
+      "code": "f355",
+      "manufacturer_code": "ferrari",
+      "english": "F355",
+      "korean": "F355"
+    },
+    {
+      "code": "550",
+      "manufacturer_code": "ferrari",
+      "english": "550",
+      "korean": "550"
+    },
+    {
+      "code": "360",
+      "manufacturer_code": "ferrari",
+      "english": "360",
+      "korean": "360"
+    },
+    {
+      "code": "f40",
+      "manufacturer_code": "ferrari",
+      "english": "F40",
+      "korean": "F40"
+    },
+    {
+      "code": "f50",
+      "manufacturer_code": "ferrari",
+      "english": "F50",
+      "korean": "F50"
+    },
+    {
+      "code": "575m",
+      "manufacturer_code": "ferrari",
+      "english": "575M",
+      "korean": "575M"
+    },
+    {
+      "code": "456",
+      "manufacturer_code": "ferrari",
+      "english": "456",
+      "korean": "456"
+    },
+    {
+      "code": "612",
+      "manufacturer_code": "ferrari",
+      "english": "612",
+      "korean": "612"
+    },
+    {
+      "code": "f430",
+      "manufacturer_code": "ferrari",
+      "english": "F430",
+      "korean": "F430"
+    },
+    {
+      "code": "enzo_ferrari",
+      "manufacturer_code": "ferrari",
+      "english": "ENZO FERRARI",
+      "korean": "엔초페라리"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "ferrari",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "california",
+      "manufacturer_code": "ferrari",
+      "english": "California",
+      "korean": "캘리포니아"
+    },
+    {
+      "code": "599",
+      "manufacturer_code": "ferrari",
+      "english": "599",
+      "korean": "599"
+    },
+    {
+      "code": "458",
+      "manufacturer_code": "ferrari",
+      "english": "458",
+      "korean": "458"
+    },
+    {
+      "code": "348",
+      "manufacturer_code": "ferrari",
+      "english": "348",
+      "korean": "348"
+    },
+    {
+      "code": "f12_berlinetta",
+      "manufacturer_code": "ferrari",
+      "english": "F12 Berlinetta",
+      "korean": "F12 베를리네타"
+    },
+    {
+      "code": "trans_sport",
+      "manufacturer_code": "pontiac",
+      "english": "Trans Sport",
+      "korean": "트랜스포트"
+    },
+    {
+      "code": "grand_prix",
+      "manufacturer_code": "pontiac",
+      "english": "Grand Prix",
+      "korean": "그랑프리"
+    },
+    {
+      "code": "trans_am",
+      "manufacturer_code": "pontiac",
+      "english": "Trans AM",
+      "korean": "트랜스 앰"
+    },
+    {
+      "code": "bonneville",
+      "manufacturer_code": "pontiac",
+      "english": "Bonneville",
+      "korean": "보네빌"
+    },
+    {
+      "code": "sunfire",
+      "manufacturer_code": "pontiac",
+      "english": "Sunfire",
+      "korean": "선파이어"
+    },
+    {
+      "code": "firebird",
+      "manufacturer_code": "pontiac",
+      "english": "Firebird",
+      "korean": "파이어버드"
+    },
+    {
+      "code": "fiero",
+      "manufacturer_code": "pontiac",
+      "english": "Fiero",
+      "korean": "피에로"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "pontiac",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "deville",
+      "manufacturer_code": "cadillac",
+      "english": "DeVille",
+      "korean": "드빌"
+    },
+    {
+      "code": "seville",
+      "manufacturer_code": "cadillac",
+      "english": "SeVille",
+      "korean": "스빌"
+    },
+    {
+      "code": "eldorao",
+      "manufacturer_code": "cadillac",
+      "english": "Eldorao",
+      "korean": "엘도라도"
+    },
+    {
+      "code": "fleetwood",
+      "manufacturer_code": "cadillac",
+      "english": "Fleetwood",
+      "korean": "플리트우드"
+    },
+    {
+      "code": "escalade",
+      "manufacturer_code": "cadillac",
+      "english": "Escalade",
+      "korean": "에스컬레이드"
+    },
+    {
+      "code": "concour",
+      "manufacturer_code": "cadillac",
+      "english": "Concour",
+      "korean": "컨코어"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "cadillac",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "xlr",
+      "manufacturer_code": "cadillac",
+      "english": "XLR",
+      "korean": "XLR"
+    },
+    {
+      "code": "cts_v",
+      "manufacturer_code": "cadillac",
+      "english": "CTS-V",
+      "korean": "CTS-V"
+    },
+    {
+      "code": "ls",
+      "manufacturer_code": "lincoln",
+      "english": "LS",
+      "korean": "LS"
+    },
+    {
+      "code": "continental",
+      "manufacturer_code": "lincoln",
+      "english": "Continental",
+      "korean": "컨티넨탈"
+    },
+    {
+      "code": "town_car",
+      "manufacturer_code": "lincoln",
+      "english": "Town Car",
+      "korean": "타운카"
+    },
+    {
+      "code": "mks",
+      "manufacturer_code": "lincoln",
+      "english": "MKS",
+      "korean": "MKS"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "lincoln",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "mkt",
+      "manufacturer_code": "lincoln",
+      "english": "MKT",
+      "korean": "MKT"
+    },
+    {
+      "code": "regal",
+      "manufacturer_code": "buick",
+      "english": "Regal",
+      "korean": "리갈"
+    },
+    {
+      "code": "riviera",
+      "manufacturer_code": "buick",
+      "english": "Riviera",
+      "korean": "리비에라"
+    },
+    {
+      "code": "park_avenue",
+      "manufacturer_code": "buick",
+      "english": "Park Avenue",
+      "korean": "파크애비뉴"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "buick",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "terraza",
+      "manufacturer_code": "buick",
+      "english": "Terraza",
+      "korean": "테라자"
+    },
+    {
+      "code": "silhuette",
+      "manufacturer_code": "oldsmoblie",
+      "english": "Silhuette",
+      "korean": "실루엣"
+    },
+    {
+      "code": "aurora",
+      "manufacturer_code": "oldsmoblie",
+      "english": "Aurora",
+      "korean": "오로라"
+    },
+    {
+      "code": "cutlass",
+      "manufacturer_code": "oldsmoblie",
+      "english": "Cutlass",
+      "korean": "커트라스"
+    },
+    {
+      "code": "phantom",
+      "manufacturer_code": "rolls_royce",
+      "english": "Phantom",
+      "korean": "팬텀"
+    },
+    {
+      "code": "ghost",
+      "manufacturer_code": "rolls_royce",
+      "english": "Ghost",
+      "korean": "고스트"
+    },
+    {
+      "code": "h1",
+      "manufacturer_code": "hummer",
+      "english": "H1",
+      "korean": "H1"
+    },
+    {
+      "code": "h2",
+      "manufacturer_code": "hummer",
+      "english": "H2",
+      "korean": "H2"
+    },
+    {
+      "code": "h3",
+      "manufacturer_code": "hummer",
+      "english": "H3",
+      "korean": "H3"
+    },
+    {
+      "code": "murcielago",
+      "manufacturer_code": "lamborghini",
+      "english": "Murcielago",
+      "korean": "무르시엘라고"
+    },
+    {
+      "code": "diablo",
+      "manufacturer_code": "lamborghini",
+      "english": "Diablo",
+      "korean": "디아블로"
+    },
+    {
+      "code": "gallardo",
+      "manufacturer_code": "lamborghini",
+      "english": "Gallardo",
+      "korean": "가야르도"
+    },
+    {
+      "code": "jalpa",
+      "manufacturer_code": "lamborghini",
+      "english": "Jalpa",
+      "korean": "잘파"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "lamborghini",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "arnage",
+      "manufacturer_code": "bentley",
+      "english": "Arnage",
+      "korean": "아르나지"
+    },
+    {
+      "code": "eight",
+      "manufacturer_code": "bentley",
+      "english": "Eight",
+      "korean": "에이트"
+    },
+    {
+      "code": "azure",
+      "manufacturer_code": "bentley",
+      "english": "Azure",
+      "korean": "아주르"
+    },
+    {
+      "code": "brooklands",
+      "manufacturer_code": "bentley",
+      "english": "Brooklands",
+      "korean": "브룩랜즈"
+    },
+    {
+      "code": "mira",
+      "manufacturer_code": "daihatsu",
+      "english": "Mira",
+      "korean": "미라"
+    },
+    {
+      "code": "copen",
+      "manufacturer_code": "daihatsu",
+      "english": "Copen",
+      "korean": "코펜"
+    },
+    {
+      "code": "boon",
+      "manufacturer_code": "daihatsu",
+      "english": "Boon",
+      "korean": "분"
+    },
+    {
+      "code": "materia",
+      "manufacturer_code": "daihatsu",
+      "english": "MATERIA",
+      "korean": "마테리아"
+    },
+    {
+      "code": "impreza",
+      "manufacturer_code": "subaru",
+      "english": "Impreza",
+      "korean": "임프레자"
+    },
+    {
+      "code": "forester",
+      "manufacturer_code": "subaru",
+      "english": "Forester",
+      "korean": "포레스터"
+    },
+    {
+      "code": "outback",
+      "manufacturer_code": "subaru",
+      "english": "Outback",
+      "korean": "아웃백"
+    },
+    {
+      "code": "legacy",
+      "manufacturer_code": "subaru",
+      "english": "Legacy",
+      "korean": "레거시"
+    },
+    {
+      "code": "r1",
+      "manufacturer_code": "subaru",
+      "english": "R1",
+      "korean": "R1"
+    },
+    {
+      "code": "spyder",
+      "manufacturer_code": "maserati",
+      "english": "Spyder",
+      "korean": "스파이더"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "maserati",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "granturismo",
+      "manufacturer_code": "maserati",
+      "english": "GranTurismo",
+      "korean": "그란투리스모"
+    },
+    {
+      "code": "3200",
+      "manufacturer_code": "maserati",
+      "english": "3200",
+      "korean": "3200"
+    },
+    {
+      "code": "gran_cabrio",
+      "manufacturer_code": "maserati",
+      "english": "Gran Cabrio",
+      "korean": "그란카브리오"
+    },
+    {
+      "code": "gran_sport",
+      "manufacturer_code": "maserati",
+      "english": "Gran Sport",
+      "korean": "그란스포츠"
+    },
+    {
+      "code": "rover_mini",
+      "manufacturer_code": "mini",
+      "english": "Rover Mini",
+      "korean": "로버 미니"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "mini",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "75",
+      "manufacturer_code": "rover",
+      "english": "75",
+      "korean": "75"
+    },
+    {
+      "code": "mgf",
+      "manufacturer_code": "rover",
+      "english": "MGF",
+      "korean": "MGF"
+    },
+    {
+      "code": "sonoma",
+      "manufacturer_code": "gm",
+      "english": "Sonoma",
+      "korean": "소노마"
+    },
+    {
+      "code": "vandura",
+      "manufacturer_code": "gm",
+      "english": "Vandura",
+      "korean": "밴츄라"
+    },
+    {
+      "code": "savana",
+      "manufacturer_code": "gm",
+      "english": "Savana",
+      "korean": "사바나"
+    },
+    {
+      "code": "yukon",
+      "manufacturer_code": "gm",
+      "english": "Yukon",
+      "korean": "유콘"
+    },
+    {
+      "code": "jimmy",
+      "manufacturer_code": "gm",
+      "english": "Jimmy",
+      "korean": "지미"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "gm",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "safari",
+      "manufacturer_code": "gm",
+      "english": "Safari",
+      "korean": "사파리"
+    },
+    {
+      "code": "nsx",
+      "manufacturer_code": "acura",
+      "english": "NSX",
+      "korean": "NSX"
+    },
+    {
+      "code": "rsx",
+      "manufacturer_code": "acura",
+      "english": "RSX",
+      "korean": "RSX"
+    },
+    {
+      "code": "tl",
+      "manufacturer_code": "acura",
+      "english": "TL",
+      "korean": "TL"
+    },
+    {
+      "code": "rl",
+      "manufacturer_code": "acura",
+      "english": "RL",
+      "korean": "RL"
+    },
+    {
+      "code": "tsx",
+      "manufacturer_code": "acura",
+      "english": "TSX",
+      "korean": "TSX"
+    },
+    {
+      "code": "mdx",
+      "manufacturer_code": "acura",
+      "english": "MDX",
+      "korean": "MDX"
+    },
+    {
+      "code": "rdx",
+      "manufacturer_code": "acura",
+      "english": "RDX",
+      "korean": "RDX"
+    },
+    {
+      "code": "cl",
+      "manufacturer_code": "acura",
+      "english": "CL",
+      "korean": "CL"
+    },
+    {
+      "code": "qx",
+      "manufacturer_code": "infinity",
+      "english": "QX",
+      "korean": "QX"
+    },
+    {
+      "code": "ex",
+      "manufacturer_code": "infinity",
+      "english": "EX",
+      "korean": "EX"
+    },
+    {
+      "code": "jx",
+      "manufacturer_code": "infinity",
+      "english": "JX",
+      "korean": "JX"
+    },
+    {
+      "code": "orochi",
+      "manufacturer_code": "mitsuoka",
+      "english": "Orochi",
+      "korean": "오로치"
+    },
+    {
+      "code": "nouera",
+      "manufacturer_code": "mitsuoka",
+      "english": "Nouera",
+      "korean": "누에라"
+    },
+    {
+      "code": "viewt",
+      "manufacturer_code": "mitsuoka",
+      "english": "Viewt",
+      "korean": "뷰트"
+    },
+    {
+      "code": "esprit",
+      "manufacturer_code": "lotus",
+      "english": "Esprit",
+      "korean": "에스프리"
+    },
+    {
+      "code": "elise",
+      "manufacturer_code": "lotus",
+      "english": "Elise",
+      "korean": "엘리스"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "lotus",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "exige",
+      "manufacturer_code": "lotus",
+      "english": "Exige",
+      "korean": "엑시지"
+    },
+    {
+      "code": "evora",
+      "manufacturer_code": "lotus",
+      "english": "Evora",
+      "korean": "에보라"
+    },
+    {
+      "code": "vanquish",
+      "manufacturer_code": "astonmartin",
+      "english": "Vanquish",
+      "korean": "뱅퀴시"
+    },
+    {
+      "code": "db9",
+      "manufacturer_code": "astonmartin",
+      "english": "DB9",
+      "korean": "DB9"
+    },
+    {
+      "code": "vantage",
+      "manufacturer_code": "astonmartin",
+      "english": "Vantage",
+      "korean": "밴티지"
+    },
+    {
+      "code": "dbs",
+      "manufacturer_code": "astonmartin",
+      "english": "DBS",
+      "korean": "DBS"
+    },
+    {
+      "code": "zonda",
+      "manufacturer_code": "pagani",
+      "english": "Zonda",
+      "korean": "존다"
+    },
+    {
+      "code": "cc",
+      "manufacturer_code": "koenigsegg",
+      "english": "CC",
+      "korean": "CC"
+    },
+    {
+      "code": "veyron_16.4",
+      "manufacturer_code": "bugatti",
+      "english": "Veyron 16.4",
+      "korean": "베이론 16.4"
+    },
+    {
+      "code": "eb110",
+      "manufacturer_code": "bugatti",
+      "english": "EB110",
+      "korean": "EB110"
+    },
+    {
+      "code": "57",
+      "manufacturer_code": "maybach",
+      "english": "57",
+      "korean": "57"
+    },
+    {
+      "code": "57s",
+      "manufacturer_code": "maybach",
+      "english": "57s",
+      "korean": "57s"
+    },
+    {
+      "code": "62",
+      "manufacturer_code": "maybach",
+      "english": "62",
+      "korean": "62"
+    },
+    {
+      "code": "forfour",
+      "manufacturer_code": "smart",
+      "english": "Forfour",
+      "korean": "포포"
+    },
+    {
+      "code": "tc",
+      "manufacturer_code": "scion",
+      "english": "tC",
+      "korean": "tC"
+    },
+    {
+      "code": "xd",
+      "manufacturer_code": "scion",
+      "english": "xD",
+      "korean": "xD"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "etc",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "a_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "A-Class",
+      "korean": "A-클래스"
+    },
+    {
+      "code": "rapide",
+      "manufacturer_code": "astonmartin",
+      "english": "Rapide",
+      "korean": "라피드"
+    },
+    {
+      "code": "v40",
+      "manufacturer_code": "volvo",
+      "english": "V40",
+      "korean": "V40"
+    },
+    {
+      "code": "agera",
+      "manufacturer_code": "koenigsegg",
+      "english": "Agera",
+      "korean": "아제라"
+    },
+    {
+      "code": "astra",
+      "manufacturer_code": "saturn",
+      "english": "Astra",
+      "korean": "아스트라"
+    },
+    {
+      "code": "corvette",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Corvette",
+      "korean": "콜벳"
+    },
+    {
+      "code": "k3",
+      "manufacturer_code": "kia",
+      "english": "K3",
+      "korean": "K3"
+    },
+    {
+      "code": "venza",
+      "manufacturer_code": "toyota",
+      "english": "Venza",
+      "korean": "벤자"
+    },
+    {
+      "code": "paceman",
+      "manufacturer_code": "mini",
+      "english": "Paceman",
+      "korean": "페이스맨"
+    },
+    {
+      "code": "pulsar",
+      "manufacturer_code": "nissan",
+      "english": "Pulsar",
+      "korean": "펄사"
+    },
+    {
+      "code": "f_type",
+      "manufacturer_code": "jaguar",
+      "english": "F-TYPE",
+      "korean": "F-TYPE"
+    },
+    {
+      "code": "clio",
+      "manufacturer_code": "renault",
+      "english": "Clio",
+      "korean": "클리오"
+    },
+    {
+      "code": "4_series",
+      "manufacturer_code": "bmw",
+      "english": "4-Series",
+      "korean": "4시리즈"
+    },
+    {
+      "code": "wraith",
+      "manufacturer_code": "rolls_royce",
+      "english": "Wraith",
+      "korean": "레이스"
+    },
+    {
+      "code": "cla_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "CLA-Class",
+      "korean": "CLA-클래스"
+    },
+    {
+      "code": "gaia",
+      "manufacturer_code": "toyota",
+      "english": "Gaia",
+      "korean": "가이아"
+    },
+    {
+      "code": "thats",
+      "manufacturer_code": "honda",
+      "english": "That's",
+      "korean": "댓츠"
+    },
+    {
+      "code": "huracan",
+      "manufacturer_code": "lamborghini",
+      "english": "Huracan",
+      "korean": "우라칸"
+    },
+    {
+      "code": "gla_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "GLA-Class",
+      "korean": "GLA-클래스"
+    },
+    {
+      "code": "2008",
+      "manufacturer_code": "peugeot",
+      "english": "2008",
+      "korean": "2008"
+    },
+    {
+      "code": "himiko",
+      "manufacturer_code": "mitsuoka",
+      "english": "Himiko",
+      "korean": "히미코"
+    },
+    {
+      "code": "fuga",
+      "manufacturer_code": "nissan",
+      "english": "FUGA",
+      "korean": "푸가"
+    },
+    {
+      "code": "i8",
+      "manufacturer_code": "bmw",
+      "english": "i8",
+      "korean": "i8"
+    },
+    {
+      "code": "beat",
+      "manufacturer_code": "honda",
+      "english": "Beat",
+      "korean": "비트"
+    },
+    {
+      "code": "650s",
+      "manufacturer_code": "mclaren",
+      "english": "650S",
+      "korean": "650S"
+    },
+    {
+      "code": "discovery_sport",
+      "manufacturer_code": "land_rover",
+      "english": "Discovery Sport",
+      "korean": "디스커버리 스포츠"
+    },
+    {
+      "code": "488",
+      "manufacturer_code": "ferrari",
+      "english": "488",
+      "korean": "488"
+    },
+    {
+      "code": "rs3",
+      "manufacturer_code": "audi",
+      "english": "RS3",
+      "korean": "RS3"
+    },
+    {
+      "code": "xe",
+      "manufacturer_code": "jaguar",
+      "english": "XE",
+      "korean": "XE"
+    },
+    {
+      "code": "rrnegade",
+      "manufacturer_code": "jeep",
+      "english": "Rrnegade",
+      "korean": "레니게이드"
+    },
+    {
+      "code": "solati",
+      "manufacturer_code": "hyundai",
+      "english": "Solati",
+      "korean": "쏠라티"
+    },
+    {
+      "code": "alto",
+      "manufacturer_code": "suzuki",
+      "english": "ALTO",
+      "korean": "알토"
+    },
+    {
+      "code": "glc_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "GLC-Class",
+      "korean": "GLC-클래스"
+    },
+    {
+      "code": "ats_v",
+      "manufacturer_code": "cadillac",
+      "english": "ATS-V",
+      "korean": "ATS-V"
+    },
+    {
+      "code": "pick_truck",
+      "manufacturer_code": "chevrolet",
+      "english": "Pick Truck",
+      "korean": "픽업트럭"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "peugeot",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "mazda_5",
+      "manufacturer_code": "mazda",
+      "english": "MAZDA 5",
+      "korean": "마쯔다 5"
+    },
+    {
+      "code": "murano",
+      "manufacturer_code": "nissan",
+      "english": "Murano",
+      "korean": "무라노"
+    },
+    {
+      "code": "svx",
+      "manufacturer_code": "subaru",
+      "english": "SVX",
+      "korean": "SVX"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "acura",
+      "english": "Others",
+      "korean": "기타"
+    },
+    {
+      "code": "xb",
+      "manufacturer_code": "scion",
+      "english": "xB",
+      "korean": "xB"
+    },
+    {
+      "code": "cj",
+      "manufacturer_code": "jeep",
+      "english": "CJ",
+      "korean": "CJ"
+    },
+    {
+      "code": "dawn",
+      "manufacturer_code": "rolls_royce",
+      "english": "Dawn",
+      "korean": "던"
+    },
+    {
+      "code": "sky",
+      "manufacturer_code": "saturn",
+      "english": "Sky",
+      "korean": "스카이"
+    },
+    {
+      "code": "62_zeppelin",
+      "manufacturer_code": "maybach",
+      "english": "62 Zeppelin",
+      "korean": "62 제플린"
+    },
+    {
+      "code": "200",
+      "manufacturer_code": "chrysler",
+      "english": "200",
+      "korean": "200"
+    },
+    {
+      "code": "sq5",
+      "manufacturer_code": "audi",
+      "english": "SQ5",
+      "korean": "SQ5"
+    },
+    {
+      "code": "charger",
+      "manufacturer_code": "dodge",
+      "english": "Charger",
+      "korean": "차저"
+    },
+    {
+      "code": "leaf",
+      "manufacturer_code": "nissan",
+      "english": "Leaf",
+      "korean": "리프"
+    },
+    {
+      "code": "impala",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Impala",
+      "korean": "임팔라"
+    },
+    {
+      "code": "s660",
+      "manufacturer_code": "honda",
+      "english": "S660",
+      "korean": "S660"
+    },
+    {
+      "code": "noah",
+      "manufacturer_code": "toyota",
+      "english": "Noah",
+      "korean": "노아"
+    },
+    {
+      "code": "virage",
+      "manufacturer_code": "astonmartin",
+      "english": "Virage",
+      "korean": "비라지"
+    },
+    {
+      "code": "db7",
+      "manufacturer_code": "astonmartin",
+      "english": "DB7",
+      "korean": "DB7"
+    },
+    {
+      "code": "huayra",
+      "manufacturer_code": "pagani",
+      "english": "Huayra",
+      "korean": "후에이라"
+    },
+    {
+      "code": "juke",
+      "manufacturer_code": "nissan",
+      "english": "Juke",
+      "korean": "쥬크"
+    },
+    {
+      "code": "bravada",
+      "manufacturer_code": "oldsmoblie",
+      "english": "Bravada",
+      "korean": "브라바다"
+    },
+    {
+      "code": "aventador",
+      "manufacturer_code": "lamborghini",
+      "english": "Aventador",
+      "korean": "아벤타도르"
+    },
+    {
+      "code": "ff",
+      "manufacturer_code": "ferrari",
+      "english": "FF",
+      "korean": "FF"
+    },
+    {
+      "code": "sprinter",
+      "manufacturer_code": "mercedes_benz",
+      "english": "Sprinter",
+      "korean": "스프린트"
+    },
+    {
+      "code": "ats",
+      "manufacturer_code": "cadillac",
+      "english": "ATS",
+      "korean": "ATS"
+    },
+    {
+      "code": "feelmont",
+      "manufacturer_code": "fiat",
+      "english": "Feelmont",
+      "korean": "프리몬트"
+    },
+    {
+      "code": "s_10",
+      "manufacturer_code": "chevrolet",
+      "english": "S-10",
+      "korean": "S-10"
+    },
+    {
+      "code": "qm3",
+      "manufacturer_code": "renault_samsung",
+      "english": "QM3",
+      "korean": "QM3"
+    },
+    {
+      "code": "others",
+      "manufacturer_code": "others",
+      "english": "Others",
+      "korean": "기타 승용차"
+    },
+    {
+      "code": "hustler",
+      "manufacturer_code": "suzuki",
+      "english": "HUSTLER",
+      "korean": "허슬러"
+    },
+    {
+      "code": "wish",
+      "manufacturer_code": "toyota",
+      "english": "Wish",
+      "korean": "위시"
+    },
+    {
+      "code": "kuga",
+      "manufacturer_code": "ford",
+      "english": "Kuga",
+      "korean": "쿠가"
+    },
+    {
+      "code": "ck_mini_truck",
+      "manufacturer_code": "mini",
+      "english": "CK MINI Truck",
+      "korean": "CK 미니트럭"
+    },
+    {
+      "code": "500x",
+      "manufacturer_code": "fiat",
+      "english": "500X",
+      "korean": "500X"
+    },
+    {
+      "code": "crosstour",
+      "manufacturer_code": "honda",
+      "english": "Crosstour",
+      "korean": "크로스투어"
+    },
+    {
+      "code": "mkc",
+      "manufacturer_code": "lincoln",
+      "english": "MKC",
+      "korean": "MKC"
+    },
+    {
+      "code": "ghibli",
+      "manufacturer_code": "maserati",
+      "english": "Ghibli",
+      "korean": "기블리"
+    },
+    {
+      "code": "versa",
+      "manufacturer_code": "nissan",
+      "english": "Versa",
+      "korean": "베르사"
+    },
+    {
+      "code": "sorento",
+      "manufacturer_code": "kia",
+      "english": "Sorento",
+      "korean": "쏘렌토"
+    },
+    {
+      "code": "amg_gt",
+      "manufacturer_code": "mercedes_benz",
+      "english": "AMG GT",
+      "korean": "AMG GT"
+    },
+    {
+      "code": "gle_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "GLE-Class",
+      "korean": "GLE-클래스"
+    },
+    {
+      "code": "xt5",
+      "manufacturer_code": "cadillac",
+      "english": "XT5",
+      "korean": "XT5"
+    },
+    {
+      "code": "kona",
+      "manufacturer_code": "hyundai",
+      "english": "Kona",
+      "korean": "코나"
+    },
+    {
+      "code": "stinger",
+      "manufacturer_code": "kia",
+      "english": "Stinger",
+      "korean": "스팅어"
+    },
+    {
+      "code": "stonic",
+      "manufacturer_code": "kia",
+      "english": "Stonic",
+      "korean": "스토닉"
+    },
+    {
+      "code": "qm6",
+      "manufacturer_code": "renault_samsung",
+      "english": "QM6",
+      "korean": "QM6"
+    },
+    {
+      "code": "range_rover_velar",
+      "manufacturer_code": "land_rover",
+      "english": "Range Rover Velar",
+      "korean": "레인지로버 벨라"
+    },
+    {
+      "code": "lc",
+      "manufacturer_code": "lexus",
+      "english": "LC",
+      "korean": "LC"
+    },
+    {
+      "code": "c4_cactus",
+      "manufacturer_code": "citroen",
+      "english": "C4 CACTUS",
+      "korean": "C4 칵투스"
+    },
+    {
+      "code": "volt",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "VOLT",
+      "korean": "볼트(Volt)"
+    },
+    {
+      "code": "bolt_ev",
+      "manufacturer_code": "chevrolet_gmdeawoo",
+      "english": "Bolt EV",
+      "korean": "볼트 EV"
+    },
+    {
+      "code": "g80",
+      "manufacturer_code": "genesis",
+      "english": "G80",
+      "korean": "G80"
+    },
+    {
+      "code": "1m",
+      "manufacturer_code": "bmw",
+      "english": "1M",
+      "korean": "1M"
+    },
+    {
+      "code": "m2",
+      "manufacturer_code": "bmw",
+      "english": "M2",
+      "korean": "M2"
+    },
+    {
+      "code": "m3",
+      "manufacturer_code": "bmw",
+      "english": "M3",
+      "korean": "M3"
+    },
+    {
+      "code": "m4",
+      "manufacturer_code": "bmw",
+      "english": "M4",
+      "korean": "M4"
+    },
+    {
+      "code": "m5",
+      "manufacturer_code": "bmw",
+      "english": "M5",
+      "korean": "M5"
+    },
+    {
+      "code": "m6",
+      "manufacturer_code": "bmw",
+      "english": "M6",
+      "korean": "M6"
+    },
+    {
+      "code": "m_coupe_roadster",
+      "manufacturer_code": "bmw",
+      "english": "M Coupe-Roadster",
+      "korean": "M 쿠페/로드스터"
+    },
+    {
+      "code": "x5m",
+      "manufacturer_code": "bmw",
+      "english": "X5M",
+      "korean": "X5M"
+    },
+    {
+      "code": "x6m",
+      "manufacturer_code": "bmw",
+      "english": "X6M",
+      "korean": "X6M"
+    },
+    {
+      "code": "slc_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "SLC-Class",
+      "korean": "SLC-클래스"
+    },
+    {
+      "code": "gls_class",
+      "manufacturer_code": "mercedes_benz",
+      "english": "GLS-Class",
+      "korean": "GLS-클래스"
+    },
+    {
+      "code": "718",
+      "manufacturer_code": "porsche",
+      "english": "718",
+      "korean": "718"
+    },
+    {
+      "code": "v90",
+      "manufacturer_code": "volvo",
+      "english": "V90",
+      "korean": "V90"
+    },
+    {
+      "code": "f_pace",
+      "manufacturer_code": "jaguar",
+      "english": "F-PACE",
+      "korean": "F-PACE"
+    },
+    {
+      "code": "transit",
+      "manufacturer_code": "ford",
+      "english": "Transit",
+      "korean": "트랜짓"
+    },
+    {
+      "code": "hr_v",
+      "manufacturer_code": "honda",
+      "english": "HR-V",
+      "korean": "HR-V"
+    },
+    {
+      "code": "cx_5",
+      "manufacturer_code": "mazda",
+      "english": "CX-5",
+      "korean": "CX-5"
+    },
+    {
+      "code": "sienta",
+      "manufacturer_code": "toyota",
+      "english": "Sienta",
+      "korean": "시엔타"
+    },
+    {
+      "code": "aygo",
+      "manufacturer_code": "toyota",
+      "english": "AYGO",
+      "korean": "아이고"
+    },
+    {
+      "code": "159",
+      "manufacturer_code": "alfa_romeo",
+      "english": "159",
+      "korean": "159"
+    },
+    {
+      "code": "giulietta",
+      "manufacturer_code": "alfa_romeo",
+      "english": "Giulietta",
+      "korean": "줄리에타"
+    },
+    {
+      "code": "gtc4_lusso",
+      "manufacturer_code": "ferrari",
+      "english": "GTC4 Lusso",
+      "korean": "GTC4 루쏘"
+    },
+    {
+      "code": "ct6",
+      "manufacturer_code": "cadillac",
+      "english": "CT6",
+      "korean": "CT6"
+    },
+    {
+      "code": "cast",
+      "manufacturer_code": "daihatsu",
+      "english": "CAST",
+      "korean": "캐스트"
+    },
+    {
+      "code": "levante",
+      "manufacturer_code": "maserati",
+      "english": "Levante",
+      "korean": "르반떼"
+    },
+    {
+      "code": "ilx",
+      "manufacturer_code": "acura",
+      "english": "ILX",
+      "korean": "ILX"
+    },
+    {
+      "code": "q30",
+      "manufacturer_code": "infinity",
+      "english": "Q30",
+      "korean": "Q30"
+    },
+    {
+      "code": "570s",
+      "manufacturer_code": "mclaren",
+      "english": "570S",
+      "korean": "570S"
+    },
+    {
+      "code": "kenbo_600",
+      "manufacturer_code": "baic_yinxiang",
+      "english": "Kenbo 600",
+      "korean": "켄보 600"
+    },
+    {
+      "code": "model_s",
+      "manufacturer_code": "tesla",
+      "english": "Model S",
+      "korean": "모델 S"
+    },
+    {
+      "code": "flair_crossover",
+      "manufacturer_code": "mazda",
+      "english": "Flair Crossover",
+      "korean": "플레어 크로스오버"
+    },
+    {
+      "code": "bentayga",
+      "manufacturer_code": "bentley",
+      "english": "Bentayga",
+      "korean": "벤테이가"
+    },
+    {
+      "code": "812_superfast",
+      "manufacturer_code": "ferrari",
+      "english": "812 Superfast",
+      "korean": "812 슈퍼패스트"
+    },
+    {
+      "code": "4c",
+      "manufacturer_code": "alfa_romeo",
+      "english": "4C",
+      "korean": "4C"
+    },
+    {
+      "code": "db11",
+      "manufacturer_code": "astonmartin",
+      "english": "DB11",
+      "korean": "DB11"
+    },
+    {
+      "code": "twizy",
+      "manufacturer_code": "renault_samsung",
+      "english": "Twizy",
+      "korean": "트위지"
+    },
+    {
+      "code": "vellfire",
+      "manufacturer_code": "toyota",
+      "english": "Vellfire",
+      "korean": "벨파이어"
+    },
+    {
+      "code": "124",
+      "manufacturer_code": "fiat",
+      "english": "124",
+      "korean": "124"
+    },
+    {
+      "code": "premio",
+      "manufacturer_code": "toyota",
+      "english": "Premio",
+      "korean": "프레미오"
+    },
+    {
+      "code": "720s",
+      "manufacturer_code": "mclaren",
+      "english": "720S",
+      "korean": "720S"
+    },
+    {
+      "code": "675lt",
+      "manufacturer_code": "mclaren",
+      "english": "675LT",
+      "korean": "675LT"
+    },
+    {
+      "code": "570gt",
+      "manufacturer_code": "mclaren",
+      "english": "570GT",
+      "korean": "570GT"
+    },
+    {
+      "code": "5008",
+      "manufacturer_code": "peugeot",
+      "english": "5008",
+      "korean": "5008"
+    },
+    {
+      "code": "stepwgn",
+      "manufacturer_code": "honda",
+      "english": "Stepwgn",
+      "korean": "스텝웨건"
+    },
+    {
+      "code": "jimny",
+      "manufacturer_code": "suzuki",
+      "english": "Jimny",
+      "korean": "짐니"
+    },
+    {
+      "code": "panda",
+      "manufacturer_code": "fiat",
+      "english": "Panda",
+      "korean": "판다"
+    },
+    {
+      "code": "mp4_12c",
+      "manufacturer_code": "mclaren",
+      "english": "MP4-12C",
+      "korean": "MP4-12C"
+    },
+    {
+      "code": "corado",
+      "manufacturer_code": "volkswagen",
+      "english": "Corado",
+      "korean": "코라도"
+    },
+    {
+      "code": "portofino",
+      "manufacturer_code": "ferrari",
+      "english": "Portofino",
+      "korean": "포르토피노"
+    },
+    {
+      "code": "nexo",
+      "manufacturer_code": "hyundai",
+      "english": "Nexo",
+      "korean": "넥쏘"
+    }
+  ],
+  "manufacturers": {
+    "domestic": [
+      {
+        "code": "hyundai",
+        "english": "Hyundai",
+        "korean": "현대"
+      },
+      {
+        "code": "kia",
+        "english": "Kia",
+        "korean": "기아"
+      },
+      {
+        "code": "chevrolet_gmdeawoo",
+        "english": "Chevrolet(GMDeawoo)",
+        "korean": "쉐보레(GM대우)"
+      },
+      {
+        "code": "ssangyong",
+        "english": "Ssangyong",
+        "korean": "쌍용"
+      },
+      {
+        "code": "renault_samsung",
+        "english": "Renault-Samsung",
+        "korean": "르노삼성"
+      },
+      {
+        "code": "genesis",
+        "english": "Genesis",
+        "korean": "제네시스"
+      }
+    ],
+    "imported": [
+      {
+        "code": "mantruck",
+        "english": "Mantruck",
+        "korean": "만트럭"
+      },
+      {
+        "code": "iveco",
+        "english": "Iveco",
+        "korean": "이베코"
+      },
+      {
+        "code": "lotus",
+        "english": "Lotus",
+        "korean": "로터스"
+      },
+      {
+        "code": "etc",
+        "english": "etc",
+        "korean": "기타 수입차"
+      },
+      {
+        "code": "others",
+        "english": "Others",
+        "korean": "기타 제조사"
+      },
+      {
+        "code": "audi",
+        "english": "Audi",
+        "korean": "아우디"
+      },
+      {
+        "code": "bmw",
+        "english": "BMW",
+        "korean": "BMW"
+      },
+      {
+        "code": "mercedes_benz",
+        "english": "Mercedes-Benz",
+        "korean": "벤츠"
+      },
+      {
+        "code": "volkswagen",
+        "english": "Volkswagen",
+        "korean": "폭스바겐"
+      },
+      {
+        "code": "porsche",
+        "english": "Porsche",
+        "korean": "포르쉐"
+      },
+      {
+        "code": "saab",
+        "english": "Saab",
+        "korean": "사브"
+      },
+      {
+        "code": "volvo",
+        "english": "Volvo",
+        "korean": "볼보"
+      },
+      {
+        "code": "fiat",
+        "english": "Fiat",
+        "korean": "피아트"
+      },
+      {
+        "code": "jaguar",
+        "english": "Jaguar",
+        "korean": "재규어"
+      },
+      {
+        "code": "land_rover",
+        "english": "Land Rover",
+        "korean": "랜드로버"
+      },
+      {
+        "code": "peugeot",
+        "english": "Peugeot",
+        "korean": "푸조"
+      },
+      {
+        "code": "citroen",
+        "english": "Citroen",
+        "korean": "시트로엥"
+      },
+      {
+        "code": "chrysler",
+        "english": "Chrysler",
+        "korean": "크라이슬러"
+      },
+      {
+        "code": "ford",
+        "english": "Ford",
+        "korean": "포드"
+      },
+      {
+        "code": "gm",
+        "english": "GM",
+        "korean": "GM"
+      },
+      {
+        "code": "starcraft_van",
+        "english": "Starcraft Van",
+        "korean": "스타크래프트 밴"
+      },
+      {
+        "code": "honda",
+        "english": "Honda",
+        "korean": "혼다"
+      },
+      {
+        "code": "isuzu",
+        "english": "Isuzu",
+        "korean": "이스즈"
+      },
+      {
+        "code": "mazda",
+        "english": "Mazda",
+        "korean": "마쯔다"
+      },
+      {
+        "code": "mitsubishi",
+        "english": "Mitsubishi",
+        "korean": "미쯔비시"
+      },
+      {
+        "code": "toyota",
+        "english": "Toyota",
+        "korean": "도요타"
+      },
+      {
+        "code": "nissan",
+        "english": "Nissan",
+        "korean": "닛산"
+      },
+      {
+        "code": "dodge",
+        "english": "Dodge",
+        "korean": "닷지"
+      },
+      {
+        "code": "lexus",
+        "english": "Lexus",
+        "korean": "렉서스"
+      },
+      {
+        "code": "mercury",
+        "english": "Mercury",
+        "korean": "머큐리"
+      },
+      {
+        "code": "suzuki",
+        "english": "Suzuki",
+        "korean": "스즈키"
+      },
+      {
+        "code": "chevrolet",
+        "english": "Chevrolet",
+        "korean": "쉐보레"
+      },
+      {
+        "code": "opel",
+        "english": "Opel",
+        "korean": "오펠"
+      },
+      {
+        "code": "alfa_romeo",
+        "english": "Alfa Romeo",
+        "korean": "알파 로메오"
+      },
+      {
+        "code": "ferrari",
+        "english": "Ferrari",
+        "korean": "페라리"
+      },
+      {
+        "code": "pontiac",
+        "english": "Pontiac",
+        "korean": "폰티악"
+      },
+      {
+        "code": "cadillac",
+        "english": "Cadillac",
+        "korean": "캐딜락"
+      },
+      {
+        "code": "lincoln",
+        "english": "Lincoln",
+        "korean": "링컨"
+      },
+      {
+        "code": "buick",
+        "english": "Buick",
+        "korean": "뷰익"
+      },
+      {
+        "code": "oldsmoblie",
+        "english": "Oldsmoblie",
+        "korean": "올즈모빌"
+      },
+      {
+        "code": "rolls_royce",
+        "english": "Rolls-Royce",
+        "korean": "롤스로이스"
+      },
+      {
+        "code": "hummer",
+        "english": "Hummer",
+        "korean": "험머"
+      },
+      {
+        "code": "lamborghini",
+        "english": "Lamborghini",
+        "korean": "람보르기니"
+      },
+      {
+        "code": "bentley",
+        "english": "Bentley",
+        "korean": "벤틀리"
+      },
+      {
+        "code": "daihatsu",
+        "english": "Daihatsu",
+        "korean": "다이하쯔"
+      },
+      {
+        "code": "subaru",
+        "english": "Subaru",
+        "korean": "스바루"
+      },
+      {
+        "code": "maserati",
+        "english": "Maserati",
+        "korean": "마세라티"
+      },
+      {
+        "code": "mini",
+        "english": "Mini",
+        "korean": "미니"
+      },
+      {
+        "code": "rover",
+        "english": "Rover",
+        "korean": "로버"
+      },
+      {
+        "code": "acura",
+        "english": "Acura",
+        "korean": "어큐라"
+      },
+      {
+        "code": "gmc",
+        "english": "GMC",
+        "korean": "GMC"
+      },
+      {
+        "code": "infinity",
+        "english": "Infinity",
+        "korean": "인피니티"
+      },
+      {
+        "code": "mitsuoka",
+        "english": "Mitsuoka",
+        "korean": "미쯔오까"
+      },
+      {
+        "code": "astonmartin",
+        "english": "Astonmartin",
+        "korean": "애스턴마틴"
+      },
+      {
+        "code": "scania",
+        "english": "Scania",
+        "korean": "스카니아"
+      },
+      {
+        "code": "hino",
+        "english": "Hino",
+        "korean": "히노"
+      },
+      {
+        "code": "jeep",
+        "english": "Jeep",
+        "korean": "지프"
+      },
+      {
+        "code": "pagani",
+        "english": "Pagani",
+        "korean": "파가니"
+      },
+      {
+        "code": "bugatti",
+        "english": "Bugatti",
+        "korean": "부가티"
+      },
+      {
+        "code": "renault",
+        "english": "Renault",
+        "korean": "르노"
+      },
+      {
+        "code": "foton",
+        "english": "FOTON",
+        "korean": "포톤"
+      },
+      {
+        "code": "baic_yinxiang",
+        "english": "Baic Yinxiang",
+        "korean": "북기은상"
+      },
+      {
+        "code": "maybach",
+        "english": "Maybach",
+        "korean": "마이바흐"
+      },
+      {
+        "code": "koenigsegg",
+        "english": "Koenigsegg",
+        "korean": "코닉세그"
+      },
+      {
+        "code": "scion",
+        "english": "Scion",
+        "korean": "사이언"
+      },
+      {
+        "code": "mclaren",
+        "english": "Mclaren",
+        "korean": "맥라렌"
+      },
+      {
+        "code": "smart",
+        "english": "Smart",
+        "korean": "스마트"
+      },
+      {
+        "code": "saturn",
+        "english": "Saturn",
+        "korean": "새턴"
+      },
+      {
+        "code": "tesla",
+        "english": "Tesla",
+        "korean": "테슬라"
+      }
+    ]
+  }
+}
