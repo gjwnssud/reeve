@@ -1,0 +1,396 @@
+# =============================================================================
+# Vehicle Dataset Generator
+# Specific .gitignore for Python/Flask/tkinter project
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (if using Django in future)
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff
+instance/
+.webassets-cache
+
+# Scrapy stuff (if web scraping added)
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# celery beat schedule file
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# -----------------------------------------------------------------------------
+# IDEs and Editors
+# -----------------------------------------------------------------------------
+# PyCharm
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# IntelliJ IDEA
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries/
+.idea/vcs.xml
+.idea/jsLibraryMappings.xml
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Atom
+.ftpconfig
+.sftpconfig
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# -----------------------------------------------------------------------------
+# Operating Systems
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Icon?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# -----------------------------------------------------------------------------
+# Project Specific Files
+# -----------------------------------------------------------------------------
+# Configuration files with sensitive data
+config.local.py
+settings.local.py
+local_config.py
+
+# API Keys and secrets (additional protection)
+api_keys.txt
+secrets.json
+*.key
+*.pem
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+log.txt
+debug.log
+error.log
+
+# Cache directories
+cache/
+.cache/
+tmp/
+temp/
+
+# -----------------------------------------------------------------------------
+# Data and Model Files
+# -----------------------------------------------------------------------------
+# Large model files
+models/
+checkpoints/
+weights/
+*.pth
+*.pt
+*.onnx
+*.h5
+*.pkl
+*.joblib
+
+# YOLO models (except the base one we include)
+yolo*.pt
+!yolov8n.pt
+
+# Data directories
+data/
+dataset_local/
+raw_data/
+processed_data/
+
+# Generated datasets (if not sharing)
+output/
+results/
+exports/
+
+# Image directories (usually too large for git)
+images/
+photos/
+pictures/
+
+# -----------------------------------------------------------------------------
+# Web Assets
+# -----------------------------------------------------------------------------
+# Node modules (if using any frontend build tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Compiled CSS/JS (if using build tools)
+web/static/dist/
+web/static/build/
+
+# -----------------------------------------------------------------------------
+# Testing and Documentation
+# -----------------------------------------------------------------------------
+# Test outputs
+test_results/
+test_outputs/
+coverage_html_report/
+
+# Documentation builds
+docs/_build/
+docs/build/
+site/
+
+# -----------------------------------------------------------------------------
+# Development and Experimental
+# -----------------------------------------------------------------------------
+# Experimental code
+experiments/
+sandbox/
+playground/
+drafts/
+
+# Research and notes
+research/
+notes/
+todo.txt
+TODO.md
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Archive files
+*.zip
+*.tar.gz
+*.tar
+*.rar
+*.7z
+
+# -----------------------------------------------------------------------------
+# Deployment and Packaging
+# -----------------------------------------------------------------------------
+# Docker
+.dockerignore
+
+# Kubernetes
+*.yaml.local
+*.yml.local
+
+# Heroku
+Procfile.local
+
+# Build artifacts
+build_info.txt
+version_info.txt
+
+# -----------------------------------------------------------------------------
+# Flask Specific
+# -----------------------------------------------------------------------------
+# Instance folder
+instance/
+
+# Flask session files
+flask_session/
+
+# Uploaded files
+uploads/
+user_uploads/
+
+# -----------------------------------------------------------------------------
+# GUI/tkinter Specific
+# -----------------------------------------------------------------------------
+# GUI cache or temporary files
+gui_cache/
+.tkinter_cache
+
+# User preferences
+user_prefs.json
+settings.json.local
+
+# Screenshot or demo files generated by GUI
+screenshots/
+demos/
+
+# -----------------------------------------------------------------------------
+# Machine Learning / AI Specific
+# -----------------------------------------------------------------------------
+# Weights & Biases
+wandb/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# TensorBoard
+tensorboard_logs/
+
+# Model artifacts
+artifacts/
+
+# Training outputs
+training_outputs/

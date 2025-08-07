@@ -1,0 +1,199 @@
+# =============================================================================
+# Reeve - Vehicle Recognition System
+# Root Level .gitignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# IDE Files (IntelliJ IDEA, PyCharm, VS Code)
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+
+# PyCharm specific
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries/
+.idea/vcs.xml
+.idea/jsLibraryMappings.xml
+
+# IntelliJ IDEA specific
+*.iws
+out/
+.idea_modules/
+
+# -----------------------------------------------------------------------------
+# Operating System Files
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Icon?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# -----------------------------------------------------------------------------
+# Python Environment (하위 프로젝트에서 사용)
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.local
+.env.production
+
+# -----------------------------------------------------------------------------
+# Project Specific - Large Data Directories
+# -----------------------------------------------------------------------------
+# 실제 차량 이미지들 (용량이 큰 데이터)
+images_daytime/
+raw_images/
+vehicle_images/
+test_images/
+
+# 생성된 데이터셋 파일들 (JSON 포함, 선택적)
+dataset/
+output/
+results/
+
+# 임시 파일들
+temp/
+tmp/
+cache/
+
+# 모델 파일들 (향후 LLM 파인튜닝 시)
+models/
+checkpoints/
+weights/
+*.pth
+*.pt
+*.onnx
+*.h5
+
+# -----------------------------------------------------------------------------
+# Logs and Documentation
+# -----------------------------------------------------------------------------
+logs/
+*.log
+log.txt
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# -----------------------------------------------------------------------------
+# Security and Sensitive Data
+# -----------------------------------------------------------------------------
+# API Keys and secrets
+secrets/
+*.key
+*.pem
+api_keys.txt
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files with sensitive data
+config.local.*
+settings.local.*
+
+# -----------------------------------------------------------------------------
+# Development and Testing
+# -----------------------------------------------------------------------------
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Research and experiments
+experiments/
+research/
+notebooks/drafts/
+
+# -----------------------------------------------------------------------------
+# Documentation and Deployment
+# -----------------------------------------------------------------------------
+# Generated documentation
+docs/_build/
+site/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.yaml.local
+*.yml.local
+
+# -----------------------------------------------------------------------------
+# Backup and Archive Files
+# -----------------------------------------------------------------------------
+*.bak
+*.backup
+*.old
+*.orig
+*.zip
+*.tar.gz
+*.tar
+*.rar
+
+# -----------------------------------------------------------------------------
+# IDE and Editor Specific
+# -----------------------------------------------------------------------------
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Atom
+.ftpconfig
+.sftpconfig
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
