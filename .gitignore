@@ -80,7 +80,6 @@ vehicle_images/
 test_images/
 
 # 생성된 데이터셋 파일들 (JSON 포함, 선택적)
-dataset/
 output/
 results/
 
@@ -90,7 +89,6 @@ tmp/
 cache/
 
 # 모델 파일들 (향후 LLM 파인튜닝 시)
-models/
 checkpoints/
 weights/
 *.pth

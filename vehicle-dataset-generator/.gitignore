@@ -194,7 +194,6 @@ Icon?
 
 # Windows
 Thumbs.db
-ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *.cab
@@ -205,7 +204,6 @@ $RECYCLE.BIN/
 *.lnk
 
 # Linux
-*~
 .fuse_hidden*
 .directory
 .Trash-*
@@ -247,7 +245,6 @@ temp/
 # Data and Model Files
 # -----------------------------------------------------------------------------
 # Large model files
-models/
 checkpoints/
 weights/
 *.pth
@@ -273,7 +270,6 @@ results/
 exports/
 
 # Image directories (usually too large for git)
-images/
 photos/
 pictures/
 
@@ -299,7 +295,6 @@ test_outputs/
 coverage_html_report/
 
 # Documentation builds
-docs/_build/
 docs/build/
 site/
 
@@ -351,9 +346,6 @@ version_info.txt
 # -----------------------------------------------------------------------------
 # Flask Specific
 # -----------------------------------------------------------------------------
-# Instance folder
-instance/
-
 # Flask session files
 flask_session/
 

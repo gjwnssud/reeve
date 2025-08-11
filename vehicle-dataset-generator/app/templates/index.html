@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/image-analysis.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- 이미지 분석 탭 -->
+<div id="image-tab" class="tab-content active">
+    <!-- 파일 업로드 영역 -->
+    <div class="form-group">
+        <label>차량 이미지를 선택하세요</label>
+        <div class="file-upload" onclick="document.getElementById('image-input').click()">
+            <input type="file" id="image-input" accept="image/*" multiple onchange="handleImageSelect(event)">
+            <div class="file-upload-text">
+                📁 클릭하여 이미지 선택 (단일/다중 선택 가능) 또는 드래그 앤 드롭
+                <br><small>JPG, PNG, BMP, GIF 지원 (최대 200MB)</small>
+            </div>
+        </div>
+        
+        <!-- 단일 이미지: 바운딩 박스 조절 영역 -->
+        {% include 'components/single-image-analysis.html' %}
+        
+        <!-- 다중 이미지: 페이징된 바운딩 박스 조절 영역 -->
+        {% include 'components/multi-image-analysis.html' %}
+        
+        <!-- 선택된 파일 목록 -->
+        <div id="selected-files-list"></div>
+    </div>
+
+    <!-- 로딩 및 결과 영역 -->
+    <div id="image-loading" class="loading">
+        <div class="spinner"></div>
+        <p>이미지를 분석하고 있습니다...</p>
+    </div>
+
+    <div id="image-result" class="result"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/image-analysis.js') }}"></script>
+<script src="{{ url_for('static', filename='js/bounding-box.js') }}"></script>
+<script src="{{ url_for('static', filename='js/multi-image.js') }}"></script>
+{% endblock %}
