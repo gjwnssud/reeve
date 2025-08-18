@@ -1,0 +1,373 @@
+/* Vehicle Dataset Generator Custom Styles */
+
+/* 이미지 미리보기 */
+.image-preview {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease;
+}
+
+.image-preview:hover {
+    transform: scale(1.05);
+}
+
+/* 바운딩 박스 관련 */
+.image-container {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    overflow: visible;
+    line-height: 0;
+}
+
+.image-with-bbox {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    position: relative;
+    z-index: 1;
+}
+
+.bbox-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: auto;
+    z-index: 10;
+    user-select: none;
+}
+
+/* 분석 결과 카드 */
+.analysis-result {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-left: 4px solid #007bff;
+}
+
+.analysis-result.success {
+    border-left-color: #28a745;
+}
+
+.analysis-result.warning {
+    border-left-color: #ffc107;
+}
+
+.analysis-result.error {
+    border-left-color: #dc3545;
+}
+
+/* 신뢰도 배지 */
+.confidence-badge {
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+/* 진행 상황 표시 */
+.progress-container {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.progress-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.progress-item:last-child {
+    border-bottom: none;
+}
+
+.progress-item img {
+    border-radius: 4px;
+    margin-right: 10px;
+}
+
+/* 애니메이션 */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.analyzing {
+    animation: pulse 2s infinite;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.5s ease-out;
+}
+
+/* 드래그 앤 드롭 */
+.drag-drop-zone {
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.drag-drop-zone:hover,
+.drag-drop-zone.dragover {
+    border-color: #007bff;
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.drag-drop-zone.dragover {
+    border-style: solid;
+}
+
+/* 반응형 조정 */
+@media (max-width: 768px) {
+    .image-preview {
+        max-width: 150px;
+        max-height: 150px;
+    }
+    
+    .image-with-bbox {
+        max-width: 100%;
+    }
+    
+    .bbox-controls {
+        font-size: 10px;
+        padding: 1px 4px;
+    }
+    
+    .bbox-reset-btn {
+        font-size: 9px;
+        padding: 1px 4px;
+    }
+    
+    .btn-group .btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.5rem;
+    }
+    
+    .analysis-result {
+        font-size: 0.875rem;
+    }
+    
+    .confidence-badge {
+        font-size: 0.7em;
+    }
+}
+
+@media (max-width: 576px) {
+    .btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .btn-group .btn {
+        margin-bottom: 2px;
+        border-radius: 0.375rem !important;
+    }
+    
+    .modal-dialog {
+        margin: 10px;
+        max-width: calc(100% - 20px);
+    }
+}
+
+/* 로딩 스피너 */
+.spinner-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* 테이블 개선 */
+.table img {
+    border-radius: 4px;
+}
+
+.table .btn-group {
+    white-space: nowrap;
+}
+
+/* 카드 호버 효과 */
+.card {
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* 알림 스타일 */
+.alert {
+    border: none;
+    border-radius: 8px;
+}
+
+.alert-dismissible .btn-close {
+    padding: 1rem 1rem;
+}
+
+/* 통계 카드 */
+.stats-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+}
+
+.stats-card h4 {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.stats-card small {
+    opacity: 0.8;
+}
+
+/* 파일 업로드 개선 */
+.file-input-wrapper {
+    position: relative;
+    overflow: hidden;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.file-input-wrapper input[type=file] {
+    position: absolute;
+    left: -9999px;
+}
+
+.file-input-label {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: #007bff;
+    color: white;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.file-input-label:hover {
+    background: #0056b3;
+}
+
+/* 프로그레스 바 */
+.custom-progress {
+    height: 4px;
+    background: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.custom-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff, #0056b3);
+    transition: width 0.3s ease;
+}
+
+/* 버튼 상태 */
+.btn.processing {
+    position: relative;
+    color: transparent;
+}
+
+.btn.processing::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 다크 모드 지원 */
+@media (prefers-color-scheme: dark) {
+    .analysis-result {
+        background: linear-gradient(135deg, #343a40 0%, #495057 100%);
+        color: #f8f9fa;
+    }
+    
+    .progress-container {
+        background: #343a40;
+        color: #f8f9fa;
+    }
+    
+    .drag-drop-zone {
+        background: #343a40;
+        color: #f8f9fa;
+    }
+    
+    .drag-drop-zone:hover,
+    .drag-drop-zone.dragover {
+        background: rgba(0, 123, 255, 0.2);
+    }
+}
+
+/* 접근성 개선 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* 포커스 표시 개선 */
+.btn:focus,
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* 스크롤바 스타일링 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}

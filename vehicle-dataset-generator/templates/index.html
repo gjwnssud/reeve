@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Vehicle Dataset Generator - Home{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-car-front"></i> Vehicle Dataset Generator
+        </h1>
+        <p class="lead">차량 이미지를 이용한 로컬 LLM 데이터셋 구축 도구</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- 파일 업로드 섹션 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cloud-upload"></i> 이미지 업로드</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="fileInput" class="form-label">차량 이미지를 선택하세요 (다중 선택 가능)</label>
+                    <input type="file" class="form-control" id="fileInput" multiple accept="image/*">
+                    <div class="form-text">지원 형식: PNG, JPG, JPEG, GIF, BMP, WEBP</div>
+                </div>
+                <button type="button" class="btn btn-primary" id="uploadBtn">
+                    <i class="bi bi-upload"></i> 업로드
+                </button>
+            </div>
+        </div>
+
+        <!-- 업로드된 이미지 및 분석 결과 -->
+        <div id="imageContainer" class="row"></div>
+        
+        <!-- 배치 분석 버튼 -->
+        <div class="text-center mb-4" id="batchAnalysisSection" style="display: none;">
+            <button type="button" class="btn btn-success btn-lg" id="batchAnalysisBtn">
+                <i class="bi bi-gear"></i> 전체 이미지 분석 시작
+            </button>
+            <p class="text-muted mt-2">분석은 1분에 2장씩 순차적으로 진행됩니다.</p>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- 데이터셋 통계 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> 데이터셋 통계</h5>
+            </div>
+            <div class="card-body" id="datasetStats">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 기능 안내 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> 사용 방법</h5>
+            </div>
+            <div class="card-body">
+                <ol class="mb-0">
+                    <li>차량 이미지를 업로드합니다</li>
+                    <li>{{ yolo_model }}이 자동으로 차량을 탐지합니다</li>
+                    <li>바운딩 박스를 드래그로 조정할 수 있습니다</li>
+                    <li>ChatGPT API로 제조사와 모델을 분석합니다</li>
+                    <li>결과를 확인하고 데이터셋에 저장합니다</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 모달: 수동 입력 -->
+<div class="modal fade" id="manualInputModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">수동 입력</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="manualInputForm">
+                    <input type="hidden" id="modalImagePath">
+                    <div class="mb-3">
+                        <label for="manufacturerSelect" class="form-label">제조사</label>
+                        <select class="form-select" id="manufacturerSelect" required>
+                            <option value="">제조사를 선택하세요</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modelSelect" class="form-label">모델</label>
+                        <select class="form-select" id="modelSelect" required>
+                            <option value="">먼저 제조사를 선택하세요</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary" id="saveManualInput">저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 모달: 새 카테고리 추가 -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">새 차량 카테고리 추가</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" id="categoryTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="manufacturer-tab" data-bs-toggle="tab" data-bs-target="#manufacturer-pane" type="button">제조사 추가</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="model-tab" data-bs-toggle="tab" data-bs-target="#model-pane" type="button">모델 추가</button>
+                    </li>
+                </ul>
+                <div class="tab-content mt-3" id="categoryTabContent">
+                    <div class="tab-pane fade show active" id="manufacturer-pane">
+                        <form id="addManufacturerForm">
+                            <div class="mb-3">
+                                <label for="mfgCode" class="form-label">제조사 코드</label>
+                                <input type="text" class="form-control" id="mfgCode" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mfgEnglishName" class="form-label">영문명</label>
+                                <input type="text" class="form-control" id="mfgEnglishName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mfgKoreanName" class="form-label">한글명</label>
+                                <input type="text" class="form-control" id="mfgKoreanName" required>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="isDomestic">
+                                <label class="form-check-label" for="isDomestic">국산 제조사</label>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="tab-pane fade" id="model-pane">
+                        <form id="addModelForm">
+                            <div class="mb-3">
+                                <label for="modelMfgSelect" class="form-label">제조사</label>
+                                <select class="form-select" id="modelMfgSelect" required>
+                                    <option value="">제조사를 선택하세요</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="modelCode" class="form-label">모델 코드</label>
+                                <input type="text" class="form-control" id="modelCode" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="modelEnglishName" class="form-label">영문명</label>
+                                <input type="text" class="form-control" id="modelEnglishName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="modelKoreanName" class="form-label">한글명</label>
+                                <input type="text" class="form-control" id="modelKoreanName" required>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary" id="saveCategoryBtn">저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}

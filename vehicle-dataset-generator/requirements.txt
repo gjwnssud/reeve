@@ -1,23 +1,14 @@
-# Core packages
-openai>=1.97.0
-python-dotenv>=1.0.0
-requests>=2.32.0
+werkzeug
+Flask==3.1.1
+Flask-CORS==6.0.1
+PyMySQL==1.1.1
+python-dotenv==1.1.1
+opencv-python-headless==4.12.0.88
 Pillow>=10.0.0
-
-# Web interface (alternative to tkinter)
-Flask>=3.0.0
-
-# Object detection for vehicle bounding boxes
+openai>=1.0.0
+requests>=2.31.0
+numpy>=2.3.2
+gunicorn==23.0.0
 ultralytics>=8.0.0
-opencv-python>=4.8.0
-
-# Database
-mysql-connector-python>=8.0.0
-PyMySQL>=1.0.0
-SQLAlchemy>=2.0.0
-
-# GUI packages (tkinter는 Python 기본 포함, macOS에서는 별도 설치 필요)
-# brew install python-tk
-
-# Optional for advanced features
-# bitsandbytes>=0.41.0  # Uncomment if using quantization
+torch>=2.0.0
+torchvision>=0.15.0
