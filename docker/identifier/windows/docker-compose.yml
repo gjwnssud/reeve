@@ -1,0 +1,140 @@
+name: reeve-identifier
+
+# ──────────────────────────────────────────
+# Identifier 납품 패키지 — Windows (NVIDIA GPU)
+# Docker Desktop + WSL2 + NVIDIA Container Toolkit 필요
+# 포함 서비스: qdrant + redis + identifier + celery-worker + ollama
+# ──────────────────────────────────────────
+
+services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: reeve-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__ON_DISK_PAYLOAD=true
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # Redis (Celery broker/backend)
+  redis:
+    image: redis:7.4-alpine
+    container_name: reeve-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # Identifier Vehicle Identification Service
+  identifier:
+    image: reeve-identifier:latest
+    container_name: reeve-identifier
+    env_file:
+      - .env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./logs:/app/logs
+      - ./data/shared:/app/shared
+    environment:
+      - QDRANT_HOST=qdrant
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDING_DEVICE=cuda
+    depends_on:
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Celery Worker (배치 처리)
+  celery-worker:
+    image: reeve-identifier:latest
+    container_name: reeve-celery-worker
+    env_file:
+      - .env
+    command: /app/identifier/start_worker.sh
+    volumes:
+      - ./logs:/app/logs
+      - ./data/shared:/app/shared
+    environment:
+      - QDRANT_HOST=qdrant
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDING_DEVICE=cuda
+    depends_on:
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+
+  # Ollama — 파인튜닝된 VLM 모델 서빙 (NVIDIA GPU)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: reeve-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 16G
+
+networks:
+  reeve-network:
+    driver: bridge

@@ -1,0 +1,32 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# 시스템 의존성 (OpenCV + ultralytics 필요)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 의존성
+COPY requirements-identifier.txt .
+RUN pip install --no-cache-dir -r requirements-identifier.txt
+
+# CLIP 모델 사전 다운로드 (빌드 시 캐싱)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('clip-ViT-B-32')"
+
+# YOLO26n 모델 사전 다운로드 (빌드 시 캐싱)
+RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
+
+# 애플리케이션 코드
+COPY identifier/ ./identifier/
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+EXPOSE 8001
+
+# 시작 스크립트 사용 (workers 자동 계산)
+CMD ["/app/identifier/start.sh"]

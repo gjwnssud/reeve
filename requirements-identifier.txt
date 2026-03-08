@@ -1,0 +1,29 @@
+# FastAPI
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# Qdrant
+qdrant-client==1.13.3
+
+# Embeddings (CLIP)
+sentence-transformers==3.4.0
+torch==2.6.0
+transformers==4.48.3
+pillow==12.1.0
+
+# Vehicle Detection (YOLO26)
+ultralytics>=8.4.0
+opencv-python-headless==4.11.0.86
+
+# Utilities
+python-dotenv==1.0.1
+
+# Async Task Queue
+celery==5.4.0
+redis==5.2.1
+
+# VLM (Ollama HTTP client)
+httpx==0.28.1

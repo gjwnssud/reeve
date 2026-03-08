@@ -1,0 +1,163 @@
+name: reeve
+
+services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: reeve-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ../data/qdrant:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__ON_DISK_PAYLOAD=true
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # Redis (Celery broker/backend)
+  redis:
+    image: redis:7.4-alpine
+    container_name: reeve-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ../data/redis:/data
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # Identifier Vehicle Identification Service (FastAPI)
+  identifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.identifier
+    container_name: reeve-identifier
+    env_file:
+      - ../.env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../logs:/app/logs
+      - ../data/shared:/app/shared  # 비동기 작업용 공유 스토리지
+    environment:
+      - QDRANT_HOST=qdrant
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Ollama (로컬 VLM - Qwen3-VL, NVIDIA GPU)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: reeve-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ../data/ollama:/root/.ollama
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 16G
+
+  # LLaMA-Factory (VLM 파인튜닝 WebUI)
+  llamafactory:
+    image: hiyouga/llamafactory:latest
+    container_name: reeve-llamafactory
+    ports:
+      - "7860:7860"
+    volumes:
+      - ../data/finetune:/app/data        # Studio에서 export한 학습 데이터
+      - ../output:/app/output             # 체크포인트 저장
+      - ../data/hf-cache:/root/.cache/huggingface # HuggingFace 모델 캐시
+    environment:
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+    command: llamafactory-cli webui
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 32G
+
+  # Celery Worker (배치 처리)
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.identifier
+    container_name: reeve-celery-worker
+    env_file:
+      - ../.env
+    command: /app/identifier/start_worker.sh
+    volumes:
+      - ../logs:/app/logs
+      - ../data/shared:/app/shared
+    environment:
+      - QDRANT_HOST=qdrant
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    networks:
+      - reeve-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+
+networks:
+  reeve-network:
+    driver: bridge

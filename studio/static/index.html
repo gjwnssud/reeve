@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reeve - 관리자</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        .page-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid #e1e8ed;
+        }
+        .page-tab-btn {
+            padding: 13px 28px;
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 1rem;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .page-tab-btn:hover { color: #667eea; }
+        .page-tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 700;
+        }
+        .page-section { display: none; padding-top: 24px; }
+        .page-section.active { display: block; }
+
+        /* 학습데이터추출 탭 스타일 */
+        .export-layout { max-width: 860px; }
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg,#667eea10,#764ba210);
+            border: 1px solid #667eea30;
+            border-radius: 10px;
+            padding: 18px;
+            text-align: center;
+        }
+        .stat-val { font-size: 1.8rem; font-weight: 700; color: #667eea; }
+        .stat-lbl { font-size: 0.82rem; color: #666; margin-top: 3px; }
+        .export-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 24px;
+            margin-bottom: 18px;
+        }
+        .export-card h3 {
+            font-size: 1.05rem;
+            color: #333;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .form-row-export {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        .fg { display: flex; flex-direction: column; gap: 5px; }
+        .fg label { font-size: 0.83rem; font-weight: 600; color: #555; }
+        .fg input, .fg select {
+            padding: 8px 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 7px;
+            font-size: 0.88rem;
+        }
+        .fg input:focus, .fg select:focus {
+            outline: none; border-color: #667eea;
+            box-shadow: 0 0 0 3px #667eea20;
+        }
+        .slider-wrap { display: flex; align-items: center; gap: 10px; }
+        .slider-wrap input[type=range] { flex:1; accent-color:#667eea; }
+        .slider-lbl { font-weight:700; color:#667eea; min-width:120px; font-size:0.88rem; }
+        .page-nav-wrap { display:flex; align-items:center; gap:10px; margin-top:14px; }
+        .page-info { font-size:0.88rem; color:#555; flex:1; }
+        .page-info strong { color:#667eea; }
+        .btn-icon { padding:5px 10px; }
+        .export-alert {
+            padding: 11px 14px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            font-size: 0.88rem;
+            display: none;
+        }
+        .alert-info  { background:#cff4fc; color:#055160; border-left:4px solid #0dcaf0; }
+        .alert-success { background:#d1e7dd; color:#0a3622; border-left:4px solid #198754; }
+        .alert-error { background:#f8d7da; color:#842029; border-left:4px solid #dc3545; }
+
+        /* LLaMA-Factory 링크 카드 */
+        .llama-card {
+            background: linear-gradient(135deg, #667eea08, #764ba215);
+            border: 1px solid #667eea40;
+            border-radius: 12px;
+            padding: 22px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .llama-card-info h3 { font-size: 1rem; color: #333; margin-bottom: 4px; }
+        .llama-card-info p { font-size: 0.85rem; color: #666; }
+        .btn-llama {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+        .btn-llama:hover { opacity: 0.88; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Reeve - 관리자</h1>
+            <p class="subtitle">기초 데이터 관리 및 학습 데이터 추출</p>
+            <div style="margin-top:12px;">
+                <a href="/" style="display:inline-block;padding:6px 14px;background:rgba(255,255,255,0.15);color:white;border-radius:16px;text-decoration:none;font-size:0.83rem;">이미지 분석</a>
+            </div>
+        </header>
+
+        <!-- 상단 페이지 탭 -->
+        <nav class="page-tabs" id="pageTabs">
+            <button class="page-tab-btn active" data-page="db">기초DB관리</button>
+            <button class="page-tab-btn" data-page="export">학습데이터추출</button>
+        </nav>
+
+        <!-- ═══════════════════════════════════════
+             섹션 ① 기초DB관리
+        ═══════════════════════════════════════ -->
+        <div id="section-db" class="page-section active">
+            <nav class="tabs">
+                <button class="tab-button active" data-tab="manufacturers">제조사 관리</button>
+                <button class="tab-button" data-tab="models">차량 모델 관리</button>
+            </nav>
+
+            <!-- 제조사 관리 탭 -->
+            <div id="manufacturers" class="tab-content active">
+                <div class="section">
+                    <h2>제조사 목록</h2>
+                    <div class="controls">
+                        <button id="addManufacturerBtn" class="btn btn-primary">+ 제조사 추가</button>
+                        <div class="filter-group">
+                            <label><input type="radio" name="domesticFilter" value="all" checked> 전체</label>
+                            <label><input type="radio" name="domesticFilter" value="domestic"> 국내</label>
+                            <label><input type="radio" name="domesticFilter" value="foreign"> 해외</label>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table id="manufacturersTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th><th>코드</th><th>영문명</th>
+                                    <th>한글명</th><th>구분</th><th>등록일</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manufacturersTableBody">
+                                <tr><td colspan="6" class="loading">데이터를 불러오는 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 차량 모델 관리 탭 -->
+            <div id="models" class="tab-content">
+                <div class="section">
+                    <h2>차량 모델 목록</h2>
+                    <div class="controls">
+                        <button id="addModelBtn" class="btn btn-primary">+ 모델 추가</button>
+                        <select id="manufacturerFilter" class="filter-select">
+                            <option value="">전체 제조사</option>
+                        </select>
+                    </div>
+                    <div class="table-container">
+                        <table id="modelsTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th><th>코드</th><th>제조사</th>
+                                    <th>영문명</th><th>한글명</th><th>등록일</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modelsTableBody">
+                                <tr><td colspan="6" class="loading">데이터를 불러오는 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════
+             섹션 ② 학습데이터추출
+        ═══════════════════════════════════════ -->
+        <div id="section-export" class="page-section">
+            <div class="export-layout">
+
+                <!-- 통계 -->
+                <div class="stat-row">
+                    <div class="stat-card">
+                        <div class="stat-val" id="exp-total">-</div>
+                        <div class="stat-lbl">총 학습 이미지</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="exp-mfr">-</div>
+                        <div class="stat-lbl">제조사 수</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="exp-pages">-</div>
+                        <div class="stat-lbl">현재 필터 페이지 수</div>
+                    </div>
+                </div>
+
+                <!-- Export 설정 -->
+                <div class="export-card">
+                    <h3>Export 설정</h3>
+
+                    <div class="form-row-export">
+                        <div class="fg">
+                            <label>제조사 필터</label>
+                            <select id="exp-filter-mfr"><option value="">전체 제조사</option></select>
+                        </div>
+                        <div class="fg">
+                            <label>검증일 시작</label>
+                            <input type="date" id="exp-date-from">
+                        </div>
+                        <div class="fg">
+                            <label>검증일 종료</label>
+                            <input type="date" id="exp-date-to">
+                        </div>
+                        <div class="fg">
+                            <label>페이지당 건수</label>
+                            <select id="exp-page-size">
+                                <option value="200">200건</option>
+                                <option value="500" selected>500건</option>
+                                <option value="1000">1000건</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="fg" style="margin-bottom:16px;">
+                        <label>Train / Val 분리 비율</label>
+                        <div class="slider-wrap">
+                            <input type="range" id="exp-split" min="70" max="95" value="90" step="5">
+                            <span class="slider-lbl">Train <span id="exp-split-train">90</span>% / Val <span id="exp-split-val">10</span>%</span>
+                        </div>
+                    </div>
+
+                    <div id="exp-alert" class="export-alert"></div>
+
+                    <div class="page-nav-wrap">
+                        <button class="btn btn-outline btn-icon" id="exp-prev" disabled>◀</button>
+                        <div class="page-info">페이지 <strong id="exp-cur-page">1</strong> / <strong id="exp-total-pages">-</strong></div>
+                        <button class="btn btn-outline btn-icon" id="exp-next" disabled>▶</button>
+                    </div>
+
+                    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+                        <button class="btn btn-outline" id="exp-btn-preview">미리보기</button>
+                        <button class="btn btn-primary" id="exp-btn-export">Export 다운로드</button>
+                    </div>
+                </div>
+
+                <!-- LLaMA-Factory 링크 -->
+                <div class="llama-card">
+                    <div class="llama-card-info">
+                        <h3>LLaMA-Factory WebUI</h3>
+                        <p>Export한 데이터로 VLM 파인튜닝을 진행하세요. (port 7860)</p>
+                    </div>
+                    <a href="http://localhost:7860" target="_blank" class="btn-llama">
+                        LLaMA-Factory 열기 →
+                    </a>
+                </div>
+
+            </div>
+        </div>
+
+    </div><!-- /.container -->
+
+    <!-- ──────────────────────────────────────
+         모달 (기존 유지)
+    ────────────────────────────────────── -->
+
+    <!-- 이미지 확대 + 분류 수정 모달 -->
+    <div id="imageDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h3 id="imageDetailTitle">차량 이미지 상세</h3>
+                <button class="close-btn btn-close">&times;</button>
+            </div>
+            <div style="padding: 20px;">
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px;">
+                        <img id="detailImage" src="" alt="차량 이미지" style="width: 100%; border-radius: 8px; border: 1px solid #dee2e6;">
+                    </div>
+                    <div style="flex: 1; min-width: 280px;">
+                        <h4 style="margin-bottom: 15px;">분류 정보 수정</h4>
+                        <input type="hidden" id="editAnalyzedId">
+                        <div class="form-group">
+                            <label>현재 분석 결과</label>
+                            <p id="currentAnalysis" style="padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem; color: #666;"></p>
+                        </div>
+                        <div class="form-group">
+                            <label for="editManufacturer">제조사 *</label>
+                            <select id="editManufacturer" required style="width:100%; padding:10px; border:1px solid #ced4da; border-radius:5px; font-size:1rem;">
+                                <option value="">제조사 선택</option>
+                            </select>
+                            <div style="margin-top: 6px;">
+                                <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" onclick="openInlineAddManufacturer()">+ 새 제조사</button>
+                            </div>
+                            <div id="inlineAddManufacturer" style="display:none; margin-top:8px; padding:10px; background:#f0f9ff; border-radius:6px; border:1px solid #0ea5e9;">
+                                <input type="text" id="inlineMfCode" placeholder="코드 (예: hyundai)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ced4da; border-radius:4px;">
+                                <input type="text" id="inlineMfKorean" placeholder="한글명 (예: 현대자동차)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ced4da; border-radius:4px;">
+                                <input type="text" id="inlineMfEnglish" placeholder="영문명 (예: Hyundai)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ced4da; border-radius:4px;">
+                                <label style="font-size:0.85rem;"><input type="checkbox" id="inlineMfDomestic"> 국내</label>
+                                <div style="margin-top:6px; display:flex; gap:6px;">
+                                    <button type="button" class="btn btn-primary" style="padding:4px 12px; font-size:0.8rem;" onclick="saveInlineManufacturer()">추가</button>
+                                    <button type="button" class="btn btn-secondary" style="padding:4px 12px; font-size:0.8rem;" onclick="closeInlineAddManufacturer()">취소</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="editModel">모델 *</label>
+                            <select id="editModel" required style="width:100%; padding:10px; border:1px solid #ced4da; border-radius:5px; font-size:1rem;">
+                                <option value="">제조사를 먼저 선택하세요</option>
+                            </select>
+                            <div style="margin-top: 6px;">
+                                <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;" onclick="openInlineAddModel()">+ 새 모델</button>
+                            </div>
+                            <div id="inlineAddModel" style="display:none; margin-top:8px; padding:10px; background:#f0fdf4; border-radius:6px; border:1px solid #22c55e;">
+                                <input type="text" id="inlineModelCode" placeholder="코드 (예: sonata)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ced4da; border-radius:4px;">
+                                <input type="text" id="inlineModelKorean" placeholder="한글명 (예: 소나타)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ced4da; border-radius:4px;">
+                                <input type="text" id="inlineModelEnglish" placeholder="영문명 (예: Sonata)" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ced4da; border-radius:4px;">
+                                <div style="margin-top:6px; display:flex; gap:6px;">
+                                    <button type="button" class="btn btn-primary" style="padding:4px 12px; font-size:0.8rem;" onclick="saveInlineModel()">추가</button>
+                                    <button type="button" class="btn btn-secondary" style="padding:4px 12px; font-size:0.8rem;" onclick="closeInlineAddModel()">취소</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-actions" style="margin-top: 20px;">
+                            <button type="button" class="btn btn-secondary btn-close">취소</button>
+                            <button type="button" class="btn btn-primary" onclick="saveEditedAnalysis()">수정 저장</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 제조사 추가/수정 모달 -->
+    <div id="manufacturerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>제조사 추가</h3>
+                <button class="close-btn btn-close">&times;</button>
+            </div>
+            <form id="manufacturerForm">
+                <div class="form-group">
+                    <label for="mfCode">코드 *</label>
+                    <input type="text" id="mfCode" required placeholder="예: HYUNDAI">
+                </div>
+                <div class="form-group">
+                    <label for="mfEnglishName">영문명 *</label>
+                    <input type="text" id="mfEnglishName" required placeholder="예: Hyundai Motor Company">
+                </div>
+                <div class="form-group">
+                    <label for="mfKoreanName">한글명 *</label>
+                    <input type="text" id="mfKoreanName" required placeholder="예: 현대자동차">
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="mfIsDomestic"> 국내 제조사</label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary btn-close">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 차량 모델 추가/수정 모달 -->
+    <div id="modelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>차량 모델 추가</h3>
+                <button class="close-btn btn-close">&times;</button>
+            </div>
+            <form id="modelForm">
+                <div class="form-group">
+                    <label for="modelManufacturer">제조사 *</label>
+                    <select id="modelManufacturer" required>
+                        <option value="">제조사 선택</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modelCode">모델 코드 *</label>
+                    <input type="text" id="modelCode" required placeholder="예: SONATA">
+                </div>
+                <div class="form-group">
+                    <label for="modelEnglishName">영문명 *</label>
+                    <input type="text" id="modelEnglishName" required placeholder="예: Sonata">
+                </div>
+                <div class="form-group">
+                    <label for="modelKoreanName">한글명 *</label>
+                    <input type="text" id="modelKoreanName" required placeholder="예: 소나타">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary btn-close">취소</button>
+                    <button type="submit" class="btn btn-primary">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+    // ── 페이지 탭 전환 ──────────────────────────────────
+    document.querySelectorAll('#pageTabs .page-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#pageTabs .page-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('section-' + btn.dataset.page).classList.add('active');
+            if (btn.dataset.page === 'export') initExport();
+        });
+    });
+
+    // ── 학습데이터추출 ──────────────────────────────────
+    let expPage = 1, expTotalPages = 1, expStatsLoaded = false;
+
+    async function initExport() {
+        if (expStatsLoaded) return;
+        try {
+            const res = await fetch('/finetune/stats');
+            const data = await res.json();
+            document.getElementById('exp-total').textContent = data.total.toLocaleString();
+            document.getElementById('exp-mfr').textContent = data.manufacturers_count;
+
+            const sel = document.getElementById('exp-filter-mfr');
+            sel.innerHTML = '<option value="">전체 제조사</option>';
+            data.by_manufacturer.forEach(m => {
+                const o = document.createElement('option');
+                o.value = m.manufacturer_id;
+                o.textContent = `${m.korean_name} (${m.count.toLocaleString()}건)`;
+                sel.appendChild(o);
+            });
+            expStatsLoaded = true;
+        } catch (e) { console.error('통계 로드 실패', e); }
+    }
+
+    document.getElementById('exp-split').addEventListener('input', function () {
+        document.getElementById('exp-split-train').textContent = this.value;
+        document.getElementById('exp-split-val').textContent = 100 - this.value;
+    });
+
+    document.getElementById('exp-btn-preview').addEventListener('click', async () => {
+        const p = getExpParams();
+        const qs = new URLSearchParams({ page_size: p.page_size,
+            ...(p.manufacturer_id ? { manufacturer_id: p.manufacturer_id } : {}),
+            ...(p.date_from ? { date_from: p.date_from } : {}),
+            ...(p.date_to   ? { date_to:   p.date_to   } : {}),
+        });
+        try {
+            const res = await fetch('/finetune/export/preview?' + qs);
+            const d = await res.json();
+            expTotalPages = d.total_pages || 1;
+            document.getElementById('exp-total-pages').textContent = expTotalPages;
+            document.getElementById('exp-pages').textContent = expTotalPages;
+            updateExpNav();
+            showExpAlert('info', `총 <strong>${d.total.toLocaleString()}건</strong> → <strong>${d.total_pages}페이지</strong> (페이지당 ${d.page_size}건)`);
+        } catch (e) { showExpAlert('error', '미리보기 실패: ' + e.message); }
+    });
+
+    document.getElementById('exp-btn-export').addEventListener('click', async () => {
+        const p = getExpParams();
+        try {
+            const res = await fetch('/finetune/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(p),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || res.statusText);
+            showExpAlert('success',
+                `✓ Export 완료 — train: <strong>${data.counts.train_count}건</strong>, ` +
+                `val: <strong>${data.counts.val_count}건</strong><br>` +
+                `<small>저장 위치: ${data.export_dir} (LLaMA-Factory에서 바로 사용 가능)</small>`
+            );
+        } catch (e) { showExpAlert('error', 'Export 실패: ' + e.message); }
+    });
+
+    document.getElementById('exp-prev').addEventListener('click', () => { if (expPage > 1) { expPage--; updateExpNav(); } });
+    document.getElementById('exp-next').addEventListener('click', () => { if (expPage < expTotalPages) { expPage++; updateExpNav(); } });
+
+    function updateExpNav() {
+        document.getElementById('exp-cur-page').textContent = expPage;
+        document.getElementById('exp-prev').disabled = expPage <= 1;
+        document.getElementById('exp-next').disabled = expPage >= expTotalPages;
+    }
+
+    function getExpParams() {
+        return {
+            manufacturer_id: document.getElementById('exp-filter-mfr').value
+                ? parseInt(document.getElementById('exp-filter-mfr').value) : null,
+            date_from: document.getElementById('exp-date-from').value || null,
+            date_to:   document.getElementById('exp-date-to').value   || null,
+            page:      expPage,
+            page_size: parseInt(document.getElementById('exp-page-size').value),
+            split:     parseInt(document.getElementById('exp-split').value) / 100,
+        };
+    }
+
+    function showExpAlert(type, msg) {
+        const el = document.getElementById('exp-alert');
+        el.className = 'export-alert alert-' + type;
+        el.style.display = '';
+        el.innerHTML = msg;
+    }
+    </script>
+</body>
+</html>

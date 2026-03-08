@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reeve - 파인튜닝 관리</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        .finetune-layout {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        /* 사이드바 */
+        .step-sidebar {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+            position: sticky;
+            top: 20px;
+        }
+
+        .step-sidebar-title {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .step-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+            color: #555;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .step-nav-item:hover {
+            background: #f8f9ff;
+            color: #667eea;
+        }
+
+        .step-nav-item.active {
+            background: #f0f3ff;
+            border-left-color: #667eea;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #e1e8ed;
+            color: #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step-nav-item.active .step-num {
+            background: #667eea;
+            color: white;
+        }
+
+        .step-nav-item.done .step-num {
+            background: #28a745;
+            color: white;
+        }
+
+        /* 메인 패널 */
+        .step-panel {
+            display: none;
+        }
+
+        .step-panel.active {
+            display: block;
+        }
+
+        .panel-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 28px;
+            margin-bottom: 20px;
+        }
+
+        .panel-card h2 {
+            font-size: 1.3rem;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        /* 통계 카드 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea10, #764ba210);
+            border: 1px solid #667eea30;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        /* 폼 컨트롤 */
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 9px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px #667eea20;
+        }
+
+        /* 슬라이더 */
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-group input[type="range"] {
+            flex: 1;
+            height: 6px;
+            accent-color: #667eea;
+        }
+
+        .slider-value {
+            font-weight: 700;
+            color: #667eea;
+            min-width: 48px;
+            text-align: right;
+        }
+
+        /* 페이지 네비게이션 */
+        .page-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .page-info {
+            font-size: 0.9rem;
+            color: #555;
+            flex: 1;
+        }
+
+        .page-info strong {
+            color: #667eea;
+        }
+
+        /* 버튼 */
+        .btn {
+            padding: 9px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: white;
+            border: 1px solid #667eea;
+            color: #667eea;
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background: #f0f3ff;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #c82333;
+        }
+
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 0.8rem;
+        }
+
+        .btn-icon {
+            padding: 6px 10px;
+            font-size: 1rem;
+        }
+
+        /* 코드 블록 */
+        .deploy-step {
+            margin-bottom: 20px;
+        }
+
+        .deploy-step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .deploy-step-title {
+            font-weight: 600;
+            color: #444;
+            font-size: 0.95rem;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.85rem;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-all;
+            position: relative;
+        }
+
+        /* 알림 */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+
+        .alert-info { background: #cff4fc; color: #055160; border-left: 4px solid #0dcaf0; }
+        .alert-warning { background: #fff3cd; color: #664d03; border-left: 4px solid #ffc107; }
+        .alert-success { background: #d1e7dd; color: #0a3622; border-left: 4px solid #198754; }
+        .alert-error { background: #f8d7da; color: #842029; border-left: 4px solid #dc3545; }
+
+        /* 제조사 분포 테이블 */
+        .dist-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+            margin-top: 16px;
+        }
+
+        .dist-table th {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 2px solid #e1e8ed;
+            color: #555;
+            font-weight: 600;
+        }
+
+        .dist-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .dist-bar {
+            height: 6px;
+            background: #667eea;
+            border-radius: 3px;
+            min-width: 4px;
+        }
+
+        /* 버튼 그룹 */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* 반응형 */
+        @media (max-width: 768px) {
+            .finetune-layout {
+                grid-template-columns: 1fr;
+            }
+            .step-sidebar {
+                position: static;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* nav 링크 */
+        .nav-link {
+            display: inline-block;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border-radius: 20px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-top: 12px;
+            margin-right: 8px;
+            transition: background 0.2s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255,255,255,0.25);
+        }
+
+        .nav-link.active {
+            background: rgba(255,255,255,0.3);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>Reeve - 파인튜닝 관리</h1>
+        <p class="subtitle">학습 데이터 Export → LLaMA-Factory 학습 → Ollama 배포 준비</p>
+        <div>
+            <a href="/admin-ui" class="nav-link">기초 DB 관리</a>
+            <a href="/analyze-ui" class="nav-link">이미지 분석</a>
+            <a href="/finetune-ui" class="nav-link active">파인튜닝</a>
+        </div>
+    </header>
+
+    <div class="finetune-layout">
+        <!-- 사이드바 -->
+        <aside class="step-sidebar">
+            <div class="step-sidebar-title">파인튜닝 단계</div>
+            <div class="step-nav-item active" data-step="export">
+                <div class="step-num">1</div>
+                <div>
+                    <div>데이터 Export</div>
+                    <div style="font-size:0.78rem;color:#888;font-weight:400;">학습 데이터 추출</div>
+                </div>
+            </div>
+            <div class="step-nav-item" data-step="train">
+                <div class="step-num">2</div>
+                <div>
+                    <div>모델 학습</div>
+                    <div style="font-size:0.78rem;color:#888;font-weight:400;">LLaMA-Factory WebUI</div>
+                </div>
+            </div>
+            <div class="step-nav-item" data-step="deploy">
+                <div class="step-num">3</div>
+                <div>
+                    <div>배포 준비</div>
+                    <div style="font-size:0.78rem;color:#888;font-weight:400;">Ollama 커맨드 생성</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 메인 패널 -->
+        <main>
+            <!-- ① 데이터 Export -->
+            <div id="panel-export" class="step-panel active">
+                <!-- 통계 카드 -->
+                <div class="panel-card">
+                    <h2>① 학습 데이터 현황</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-total">-</div>
+                            <div class="stat-label">총 학습 이미지</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-mfr-count">-</div>
+                            <div class="stat-label">제조사 수</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="stat-page-count">-</div>
+                            <div class="stat-label">현재 필터 페이지 수</div>
+                        </div>
+                    </div>
+
+                    <!-- 제조사 분포 -->
+                    <div id="dist-section" style="display:none;">
+                        <strong style="font-size:0.9rem;color:#555;">제조사별 분포</strong>
+                        <table class="dist-table">
+                            <thead>
+                                <tr>
+                                    <th>제조사</th>
+                                    <th>이미지 수</th>
+                                    <th style="width:140px;">비율</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dist-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Export 설정 -->
+                <div class="panel-card">
+                    <h2>Export 설정</h2>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>제조사 필터</label>
+                            <select id="filter-mfr">
+                                <option value="">전체 제조사</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>검증일 시작</label>
+                            <input type="date" id="filter-date-from">
+                        </div>
+                        <div class="form-group">
+                            <label>검증일 종료</label>
+                            <input type="date" id="filter-date-to">
+                        </div>
+                        <div class="form-group">
+                            <label>페이지당 건수</label>
+                            <select id="filter-page-size">
+                                <option value="200">200건</option>
+                                <option value="500" selected>500건</option>
+                                <option value="1000">1000건</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:16px;">
+                        <label>Train/Val 분리 비율</label>
+                        <div class="slider-group">
+                            <input type="range" id="split-slider" min="70" max="95" value="90" step="5">
+                            <span class="slider-value">Train <span id="split-train">90</span>% / Val <span id="split-val">10</span>%</span>
+                        </div>
+                    </div>
+
+                    <!-- 미리보기 결과 -->
+                    <div id="preview-result" class="alert alert-info" style="display:none;"></div>
+
+                    <!-- 페이지 네비게이션 -->
+                    <div class="page-nav">
+                        <button class="btn btn-icon btn-outline" id="btn-prev-page" disabled>◀</button>
+                        <div class="page-info">
+                            페이지 <strong id="current-page">1</strong> / <strong id="total-pages">-</strong>
+                        </div>
+                        <button class="btn btn-icon btn-outline" id="btn-next-page" disabled>▶</button>
+                    </div>
+
+                    <div class="btn-group" style="margin-top:16px;">
+                        <button class="btn btn-outline" id="btn-preview">미리보기</button>
+                        <button class="btn btn-primary" id="btn-export">Export 다운로드</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ② 모델 학습 (LLaMA-Factory WebUI) -->
+            <div id="panel-train" class="step-panel">
+                <div class="panel-card">
+                    <h2>② 모델 학습</h2>
+
+                    <div class="alert alert-info">
+                        Export 완료 후 LLaMA-Factory WebUI에서 파인튜닝을 진행하세요.<br>
+                        Export된 데이터는 <code>data/finetune/</code> 디렉토리에 자동 저장됩니다.
+                    </div>
+
+                    <div style="background:linear-gradient(135deg,#667eea08,#764ba215);border:1px solid #667eea40;border-radius:12px;padding:24px;margin-bottom:20px;">
+                        <h3 style="font-size:1.05rem;color:#333;margin-bottom:12px;">LLaMA-Factory WebUI</h3>
+                        <p style="font-size:0.88rem;color:#666;margin-bottom:16px;">
+                            QLoRA 4bit 학습, 학습 모니터링, 체크포인트 관리를 WebUI에서 처리할 수 있습니다.
+                        </p>
+                        <a href="http://localhost:7860" target="_blank"
+                           style="display:inline-flex;align-items:center;gap:8px;padding:10px 22px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:8px;font-size:0.9rem;font-weight:600;text-decoration:none;transition:opacity 0.2s;">
+                            LLaMA-Factory 열기 &rarr;
+                        </a>
+                    </div>
+
+                    <div style="background:#f8f9fa;border-radius:10px;padding:20px;">
+                        <strong style="font-size:0.92rem;color:#555;">WebUI 학습 설정 가이드</strong>
+                        <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:0.85rem;">
+                            <tr style="border-bottom:1px solid #e9ecef;">
+                                <td style="padding:8px 12px;color:#555;font-weight:600;width:160px;">Model name</td>
+                                <td style="padding:8px 12px;"><code>Qwen/Qwen3-VL-8B-Instruct</code></td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #e9ecef;">
+                                <td style="padding:8px 12px;color:#555;font-weight:600;">Finetuning method</td>
+                                <td style="padding:8px 12px;"><code>lora</code></td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #e9ecef;">
+                                <td style="padding:8px 12px;color:#555;font-weight:600;">Quantization bit</td>
+                                <td style="padding:8px 12px;"><code>4</code> (QLoRA &mdash; VRAM 절약)</td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #e9ecef;">
+                                <td style="padding:8px 12px;color:#555;font-weight:600;">Dataset</td>
+                                <td style="padding:8px 12px;"><code>vehicle_train</code> (Export 시 자동 등록)</td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #e9ecef;">
+                                <td style="padding:8px 12px;color:#555;font-weight:600;">Val dataset</td>
+                                <td style="padding:8px 12px;"><code>vehicle_val</code></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:8px 12px;color:#555;font-weight:600;">Output dir</td>
+                                <td style="padding:8px 12px;"><code>/app/output/vehicle-vlm</code></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ③ 배포 준비 -->
+            <div id="panel-deploy" class="step-panel">
+                <div class="panel-card">
+                    <h2>③ Ollama 배포 준비</h2>
+
+                    <div class="alert alert-warning">
+                        GGUF 변환은 환경마다 다르므로 커맨드만 생성합니다.
+                        아래 단계를 순서대로 실행하세요.
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label>체크포인트 경로</label>
+                            <input type="text" id="deploy-checkpoint"
+                                placeholder="예: ./output/vehicle-vlm/checkpoint-500">
+                        </div>
+                        <div class="form-group">
+                            <label>Ollama 등록 모델명</label>
+                            <input type="text" id="deploy-model-name" value="vehicle-vlm-v1">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" id="btn-deploy-cmd">커맨드 생성</button>
+                </div>
+
+                <div id="deploy-steps" style="display:none;">
+                    <div class="panel-card">
+                        <h2>배포 커맨드</h2>
+                        <div id="deploy-steps-content"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+// ─── 상태 ───────────────────────────────────────────────────────────────────
+let currentPage = 1;
+let totalPages = 1;
+let statsData = null;
+
+// ─── 탭 네비게이션 ──────────────────────────────────────────────────────────
+document.querySelectorAll('.step-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+        document.querySelectorAll('.step-nav-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+        item.classList.add('active');
+        document.getElementById(`panel-${item.dataset.step}`).classList.add('active');
+
+        // Step 2 (학습)는 LLaMA-Factory WebUI 링크만 표시
+    });
+});
+
+// ─── 슬라이더 ───────────────────────────────────────────────────────────────
+document.getElementById('split-slider').addEventListener('input', function () {
+    document.getElementById('split-train').textContent = this.value;
+    document.getElementById('split-val').textContent = 100 - this.value;
+});
+
+// ─── 통계 로드 ──────────────────────────────────────────────────────────────
+async function loadStats() {
+    try {
+        const res = await fetch('/finetune/stats');
+        if (!res.ok) throw new Error(await res.text());
+        statsData = await res.json();
+
+        document.getElementById('stat-total').textContent = statsData.total.toLocaleString();
+        document.getElementById('stat-mfr-count').textContent = statsData.manufacturers_count;
+
+        // 제조사 필터 옵션
+        const mfrSel = document.getElementById('filter-mfr');
+        mfrSel.innerHTML = '<option value="">전체 제조사</option>';
+        statsData.by_manufacturer.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.manufacturer_id;
+            opt.textContent = `${m.korean_name} (${m.count.toLocaleString()}건)`;
+            mfrSel.appendChild(opt);
+        });
+
+        // 제조사 분포 테이블
+        const tbody = document.getElementById('dist-tbody');
+        tbody.innerHTML = '';
+        const maxCount = statsData.by_manufacturer[0]?.count || 1;
+        statsData.by_manufacturer.forEach(m => {
+            const pct = ((m.count / statsData.total) * 100).toFixed(1);
+            const barW = Math.max(4, Math.round((m.count / maxCount) * 120));
+            tbody.innerHTML += `
+                <tr>
+                    <td>${m.korean_name}<br><small style="color:#888">${m.english_name}</small></td>
+                    <td>${m.count.toLocaleString()}</td>
+                    <td><div style="display:flex;align-items:center;gap:8px;">
+                        <div class="dist-bar" style="width:${barW}px;"></div>
+                        <span style="font-size:0.8rem;color:#888;">${pct}%</span>
+                    </div></td>
+                </tr>`;
+        });
+        document.getElementById('dist-section').style.display = '';
+    } catch (e) {
+        console.error('통계 로드 실패:', e);
+    }
+}
+
+// ─── 미리보기 ────────────────────────────────────────────────────────────────
+document.getElementById('btn-preview').addEventListener('click', async () => {
+    const params = getExportParams();
+    try {
+        const qs = new URLSearchParams({
+            page_size: params.page_size,
+            ...(params.manufacturer_id ? { manufacturer_id: params.manufacturer_id } : {}),
+            ...(params.date_from ? { date_from: params.date_from } : {}),
+            ...(params.date_to ? { date_to: params.date_to } : {}),
+        });
+        const res = await fetch(`/finetune/export/preview?${qs}`);
+        const data = await res.json();
+        totalPages = data.total_pages || 1;
+        document.getElementById('total-pages').textContent = totalPages;
+        document.getElementById('stat-page-count').textContent = totalPages;
+        updatePageNav();
+
+        const el = document.getElementById('preview-result');
+        el.style.display = '';
+        el.className = 'alert alert-info';
+        el.innerHTML = `총 <strong>${data.total.toLocaleString()}건</strong>의 데이터, 페이지당 <strong>${data.page_size}건</strong> → 총 <strong>${data.total_pages}페이지</strong>`;
+    } catch (e) {
+        showAlert('preview-result', 'error', `미리보기 실패: ${e.message}`);
+    }
+});
+
+// ─── Export (서버에 저장 → LLaMA-Factory에서 바로 사용) ─────────────────────
+document.getElementById('btn-export').addEventListener('click', async () => {
+    const params = getExportParams();
+    try {
+        const res = await fetch('/finetune/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+
+        showAlert('preview-result', 'success',
+            `✓ Export 완료 — train: <strong>${data.counts.train_count}건</strong>, ` +
+            `val: <strong>${data.counts.val_count}건</strong><br>` +
+            `<small style="color:#555;">저장 위치: ${data.export_dir} (LLaMA-Factory에서 바로 사용 가능)</small>`
+        );
+    } catch (e) {
+        showAlert('preview-result', 'error', `Export 실패: ${e.message}`);
+    }
+});
+
+// ─── 페이지 네비게이션 ───────────────────────────────────────────────────────
+document.getElementById('btn-prev-page').addEventListener('click', () => {
+    if (currentPage > 1) { currentPage--; updatePageNav(); }
+});
+document.getElementById('btn-next-page').addEventListener('click', () => {
+    if (currentPage < totalPages) { currentPage++; updatePageNav(); }
+});
+
+function updatePageNav() {
+    document.getElementById('current-page').textContent = currentPage;
+    document.getElementById('btn-prev-page').disabled = currentPage <= 1;
+    document.getElementById('btn-next-page').disabled = currentPage >= totalPages;
+}
+
+function getExportParams() {
+    return {
+        manufacturer_id: document.getElementById('filter-mfr').value
+            ? parseInt(document.getElementById('filter-mfr').value) : null,
+        date_from: document.getElementById('filter-date-from').value || null,
+        date_to: document.getElementById('filter-date-to').value || null,
+        page: currentPage,
+        page_size: parseInt(document.getElementById('filter-page-size').value),
+        split: parseInt(document.getElementById('split-slider').value) / 100,
+    };
+}
+
+// ─── 배포 커맨드 ─────────────────────────────────────────────────────────────
+document.getElementById('btn-deploy-cmd').addEventListener('click', async () => {
+    const checkpoint = document.getElementById('deploy-checkpoint').value.trim();
+    const modelName = document.getElementById('deploy-model-name').value.trim();
+
+    if (!checkpoint) {
+        alert('체크포인트 경로를 입력하세요.');
+        return;
+    }
+
+    try {
+        const qs = new URLSearchParams({ checkpoint_path: checkpoint, model_name: modelName });
+        const res = await fetch(`/finetune/deploy/cmd?${qs}`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        const container = document.getElementById('deploy-steps-content');
+        container.innerHTML = '';
+
+        data.steps.forEach((step, idx) => {
+            const content = step.cmd || step.content || '';
+            const div = document.createElement('div');
+            div.className = 'deploy-step';
+            div.innerHTML = `
+                <div class="deploy-step-header">
+                    <div class="deploy-step-title">${step.title}</div>
+                    <button class="btn btn-sm btn-outline" onclick="copyText(this, \`${escapeBacktick(content)}\`)">복사</button>
+                </div>
+                <div class="code-block">${escapeHtml(content)}</div>
+            `;
+            container.appendChild(div);
+        });
+
+        document.getElementById('deploy-steps').style.display = '';
+    } catch (e) {
+        alert(`커맨드 생성 실패: ${e.message}`);
+    }
+});
+
+function copyText(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ 복사됨';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeBacktick(str) {
+    return str.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+}
+
+function showAlert(id, type, msg) {
+    const el = document.getElementById(id);
+    el.style.display = '';
+    el.className = `alert alert-${type}`;
+    el.innerHTML = msg;
+}
+
+// ─── 초기화 ──────────────────────────────────────────────────────────────────
+(async () => {
+    await loadStats();
+    updatePageNav();
+})();
+</script>
+</body>
+</html>

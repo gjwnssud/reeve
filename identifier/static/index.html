@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>차량 판별 서비스</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* 헤더 */
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        header p {
+            font-size: 0.95rem;
+            opacity: 0.85;
+        }
+
+        /* 컨테이너 */
+        .container {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        /* 섹션 */
+        .section {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            color: #333;
+        }
+
+        /* 업로드 영역 */
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px 30px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            background: #eef0fd;
+            border-color: #5568d3;
+        }
+
+        .upload-area.dragging {
+            background: #e7eafd;
+            border-color: #4a5bc8;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .upload-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #444;
+        }
+
+        .upload-desc {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        /* 이미지 카드 */
+        .image-card {
+            display: none;
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .image-card.show {
+            display: block;
+        }
+
+        .image-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            min-height: 250px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            max-height: 450px;
+            display: block;
+        }
+
+        /* 드래그 가능한 바운딩 박스 오버레이 */
+        .bbox-overlay {
+            position: absolute;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 0 2000px rgba(0,0,0,0.3);
+            cursor: move;
+        }
+
+        .bbox-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background: #00ff00;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .bbox-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #00ff00;
+            border: 2px solid #fff;
+            border-radius: 50%;
+        }
+
+        .bbox-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
+        .bbox-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
+        .bbox-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+        .bbox-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+
+        /* 이미지 정보 영역 */
+        .image-info {
+            padding: 15px;
+        }
+
+        .image-info-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .image-info-header h4 {
+            margin: 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-ready {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .status-detecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-detected {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-identifying {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* 감지 목록 */
+        .detection-list {
+            margin: 10px 0;
+        }
+
+        .detection-item {
+            padding: 8px 12px;
+            margin: 6px 0;
+            background: #f8f9fa;
+            border-left: 3px solid #667eea;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .detection-item:hover {
+            background: #e9ecef;
+            transform: translateX(4px);
+        }
+
+        .detection-item.selected {
+            background: #e7eafd;
+            border-color: #4a5bc8;
+        }
+
+        .detection-item strong {
+            font-size: 14px;
+        }
+
+        .detection-item small {
+            color: #666;
+            font-size: 12px;
+        }
+
+        /* 결과 영역 */
+        .result-section {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .result-section.show {
+            display: block;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 14px;
+        }
+
+        .result-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .result-value {
+            color: #333;
+            font-weight: 500;
+        }
+
+        /* 버튼 */
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .btn {
+            padding: 8px 18px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #dc2626;
+        }
+
+        /* 로딩 */
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading-spinner.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid #e1e8ed;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 토스트 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+            max-width: 320px;
+            font-size: 0.9rem;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 푸터 */
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #aaa;
+            font-size: 0.8rem;
+        }
+
+        /* 반응형 */
+        @media (max-width: 640px) {
+            .container {
+                padding: 0 12px;
+                margin: 16px auto;
+            }
+
+            header h1 {
+                font-size: 1.4rem;
+            }
+
+            .upload-area {
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>차량 판별 서비스</h1>
+    <p>차량 이미지를 업로드하면 제조사와 모델을 판별합니다</p>
+</header>
+
+<div class="container">
+
+    <!-- 업로드 섹션 -->
+    <div class="section">
+        <h2>📤 이미지 업로드</h2>
+        <div id="uploadArea" class="upload-area">
+            <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;">
+            <div class="upload-icon">📷</div>
+            <div class="upload-title">이미지를 드래그하거나 클릭하여 선택</div>
+            <div class="upload-desc">JPG, PNG, WebP 지원 · 최대 10MB</div>
+        </div>
+    </div>
+
+    <!-- 이미지 카드 -->
+    <div class="section">
+        <h2>🖼️ 업로드된 이미지</h2>
+
+        <div id="imageCard" class="image-card">
+            <!-- 이미지 컨테이너 -->
+            <div id="imageContainer" class="image-container">
+                <img id="previewImage" alt="업로드 이미지">
+                <div id="bboxOverlayContainer"></div>
+            </div>
+
+            <!-- 이미지 정보 -->
+            <div class="image-info">
+                <div class="image-info-header">
+                    <h4 id="fileName">파일명</h4>
+                    <span id="statusBadge" class="status-badge status-ready">준비</span>
+                </div>
+
+                <!-- 감지 목록 -->
+                <div id="detectionList" class="detection-list"></div>
+
+                <!-- 결과 영역 -->
+                <div id="resultSection" class="result-section">
+                    <div class="result-row">
+                        <span class="result-label">제조사:</span>
+                        <span id="resultManufacturer" class="result-value">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">모델:</span>
+                        <span id="resultModel" class="result-value">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">식별 신뢰도:</span>
+                        <span id="resultConfidence" class="result-value">-</span>
+                    </div>
+                </div>
+
+                <!-- 버튼 -->
+                <div class="action-buttons">
+                    <button id="identifyBtn" class="btn btn-primary" disabled>판별하기</button>
+                    <button id="deleteBtn" class="btn btn-danger">삭제</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로딩 -->
+        <div id="loadingSpinner" class="loading-spinner">
+            <div class="spinner"></div>
+            <div id="loadingText">처리 중...</div>
+        </div>
+
+        <!-- 빈 상태 -->
+        <div id="emptyState" style="text-align: center; padding: 40px; color: #999;">
+            이미지를 업로드하세요
+        </div>
+    </div>
+
+</div>
+
+<footer>
+    Reeve Vehicle Identification Service
+</footer>
+
+<script>
+    // ──────────────────────────────────────
+    // State
+    // ──────────────────────────────────────
+    let selectedFile = null;
+    let detections = [];
+    let selectedIndex = null;
+    let imageWidth = 0;
+    let imageHeight = 0;
+    let currentBbox = null;
+
+    // ──────────────────────────────────────
+    // DOM
+    // ──────────────────────────────────────
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const imageCard = document.getElementById('imageCard');
+    const imageContainer = document.getElementById('imageContainer');
+    const previewImage = document.getElementById('previewImage');
+    const bboxOverlayContainer = document.getElementById('bboxOverlayContainer');
+    const fileName = document.getElementById('fileName');
+    const statusBadge = document.getElementById('statusBadge');
+    const detectionList = document.getElementById('detectionList');
+    const resultSection = document.getElementById('resultSection');
+    const resultManufacturer = document.getElementById('resultManufacturer');
+    const resultModel = document.getElementById('resultModel');
+    const resultConfidence = document.getElementById('resultConfidence');
+    const identifyBtn = document.getElementById('identifyBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const loadingText = document.getElementById('loadingText');
+    const emptyState = document.getElementById('emptyState');
+
+    // ──────────────────────────────────────
+    // 화면 크기 변경 시 바운딩 박스 재조정
+    // ──────────────────────────────────────
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (currentBbox && selectedIndex !== null && selectedIndex >= 0) {
+                createBboxOverlay(currentBbox);
+            }
+        }, 250);
+    });
+
+    // ──────────────────────────────────────
+    // 업로드 핸들러
+    // ──────────────────────────────────────
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragging');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragging');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragging');
+        if (e.dataTransfer.files.length > 0) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            showToast('이미지 파일만 업로드 가능합니다', 'error');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            showToast('파일 크기가 10MB를 초과합니다', 'error');
+            return;
+        }
+
+        selectedFile = file;
+        resetState();
+
+        // 미리보기
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            previewImage.src = e.target.result;
+            previewImage.onload = () => {
+                // 차량 감지 시작
+                detectVehicles();
+            };
+        };
+        reader.readAsDataURL(file);
+
+        fileName.textContent = file.name;
+        emptyState.style.display = 'none';
+        imageCard.classList.add('show');
+        updateStatus('detecting', '감지 중');
+    }
+
+    function resetState() {
+        detections = [];
+        selectedIndex = null;
+        currentBbox = null;
+        detectionList.innerHTML = '';
+        bboxOverlayContainer.innerHTML = '';
+        resultSection.classList.remove('show');
+        identifyBtn.disabled = true;
+    }
+
+    // ──────────────────────────────────────
+    // 차량 감지
+    // ──────────────────────────────────────
+    async function detectVehicles() {
+        loadingSpinner.classList.add('show');
+        loadingText.textContent = '차량을 감지하고 있습니다...';
+
+        try {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const response = await fetch('/detect', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            handleDetectionResult(result);
+
+        } catch (e) {
+            showToast(`감지 실패: ${e.message}`, 'error');
+            updateStatus('error', '감지 실패');
+        } finally {
+            loadingSpinner.classList.remove('show');
+        }
+    }
+
+    function handleDetectionResult(result) {
+        detections = result.detections || [];
+        imageWidth = result.image_width;
+        imageHeight = result.image_height;
+
+        if (detections.length === 0) {
+            detectionList.innerHTML = '<p style="color: #999; font-size: 13px;">차량이 감지되지 않았습니다. 이미지 전체로 판별합니다.</p>';
+            updateStatus('detected', '감지 완료');
+            selectedIndex = -1;
+            currentBbox = null;
+            identifyBtn.disabled = false;
+        } else {
+            // 감지 목록 표시
+            displayDetectionList();
+            updateStatus('detected', `${detections.length}대 감지`);
+
+            // 첫 번째 자동 선택
+            selectDetection(0);
+        }
+    }
+
+    function displayDetectionList() {
+        detectionList.innerHTML = detections.map((det, idx) => `
+            <div class="detection-item" id="det-item-${idx}" onclick="selectDetection(${idx})">
+                <strong>${det.class_name}</strong> (신뢰도: ${(det.confidence * 100).toFixed(1)}%)
+                <br>
+                <small>면적: ${det.area.toLocaleString()} px²</small>
+            </div>
+        `).join('');
+    }
+
+    function selectDetection(index) {
+        selectedIndex = index;
+        const detection = detections[index];
+        currentBbox = [...detection.bbox];
+
+        // 목록 하이라이트 업데이트
+        document.querySelectorAll('.detection-item').forEach((item, idx) => {
+            item.classList.toggle('selected', idx === index);
+        });
+
+        // 바운딩 박스 오버레이 생성
+        createBboxOverlay(currentBbox);
+
+        identifyBtn.disabled = false;
+    }
+
+    function createBboxOverlay(bbox) {
+        bboxOverlayContainer.innerHTML = '';
+
+        const displayedW = previewImage.clientWidth;
+        const displayedH = previewImage.clientHeight;
+
+        // 이미지의 실제 표시 위치 계산 (센터링 고려)
+        const containerRect = imageContainer.getBoundingClientRect();
+        const imgRect = previewImage.getBoundingClientRect();
+        const offsetX = imgRect.left - containerRect.left;
+        const offsetY = imgRect.top - containerRect.top;
+
+        const scaleX = displayedW / imageWidth;
+        const scaleY = displayedH / imageHeight;
+
+        const [x1, y1, x2, y2] = bbox;
+        const left = x1 * scaleX + offsetX;
+        const top = y1 * scaleY + offsetY;
+        const width = (x2 - x1) * scaleX;
+        const height = (y2 - y1) * scaleY;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'bbox-overlay';
+        overlay.id = 'activeBbox';
+        overlay.style.left = `${left}px`;
+        overlay.style.top = `${top}px`;
+        overlay.style.width = `${width}px`;
+        overlay.style.height = `${height}px`;
+
+        overlay.innerHTML = `
+            <div class="bbox-label">드래그하여 조정 가능</div>
+            <div class="bbox-handle nw"></div>
+            <div class="bbox-handle ne"></div>
+            <div class="bbox-handle sw"></div>
+            <div class="bbox-handle se"></div>
+        `;
+
+        bboxOverlayContainer.appendChild(overlay);
+        makeBboxDraggable();
+    }
+
+    function makeBboxDraggable() {
+        const bboxElement = document.getElementById('activeBbox');
+        if (!bboxElement) return;
+
+        const imgRect = previewImage.getBoundingClientRect();
+        const containerRect = imageContainer.getBoundingClientRect();
+        const offsetX = imgRect.left - containerRect.left;
+        const offsetY = imgRect.top - containerRect.top;
+
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+
+        // 박스 이동
+        bboxElement.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('bbox-handle')) return;
+
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = bboxElement.offsetLeft;
+            startTop = bboxElement.offsetTop;
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            let newLeft = startLeft + dx;
+            let newTop = startTop + dy;
+
+            // 이미지 영역 내로 제한
+            const minLeft = offsetX;
+            const minTop = offsetY;
+            const maxLeft = offsetX + previewImage.clientWidth - bboxElement.offsetWidth;
+            const maxTop = offsetY + previewImage.clientHeight - bboxElement.offsetHeight;
+
+            newLeft = Math.max(minLeft, Math.min(maxLeft, newLeft));
+            newTop = Math.max(minTop, Math.min(maxTop, newTop));
+
+            bboxElement.style.left = `${newLeft}px`;
+            bboxElement.style.top = `${newTop}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                updateBboxFromOverlay();
+            }
+        });
+
+        // 리사이즈 핸들
+        const handles = bboxElement.querySelectorAll('.bbox-handle');
+        handles.forEach(handle => {
+            handle.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                const handleType = handle.classList[1];
+                handleResize(handleType, e);
+            });
+        });
+    }
+
+    function handleResize(handleType, startEvent) {
+        const bboxElement = document.getElementById('activeBbox');
+        if (!bboxElement) return;
+
+        const imgRect = previewImage.getBoundingClientRect();
+        const containerRect = imageContainer.getBoundingClientRect();
+        const offsetX = imgRect.left - containerRect.left;
+        const offsetY = imgRect.top - containerRect.top;
+        const imgMaxX = offsetX + previewImage.clientWidth;
+        const imgMaxY = offsetY + previewImage.clientHeight;
+
+        const startX = startEvent.clientX;
+        const startY = startEvent.clientY;
+        const startLeft = bboxElement.offsetLeft;
+        const startTop = bboxElement.offsetTop;
+        const startWidth = bboxElement.offsetWidth;
+        const startHeight = bboxElement.offsetHeight;
+
+        const minSize = 50;
+
+        const onMouseMove = (e) => {
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            if (handleType === 'se') {
+                const newWidth = Math.max(minSize, Math.min(imgMaxX - startLeft, startWidth + dx));
+                const newHeight = Math.max(minSize, Math.min(imgMaxY - startTop, startHeight + dy));
+                bboxElement.style.width = `${newWidth}px`;
+                bboxElement.style.height = `${newHeight}px`;
+            } else if (handleType === 'nw') {
+                const newWidth = startWidth - dx;
+                const newHeight = startHeight - dy;
+                const newLeft = startLeft + dx;
+                const newTop = startTop + dy;
+
+                if (newWidth >= minSize && newHeight >= minSize && newLeft >= offsetX && newTop >= offsetY) {
+                    bboxElement.style.left = `${newLeft}px`;
+                    bboxElement.style.top = `${newTop}px`;
+                    bboxElement.style.width = `${newWidth}px`;
+                    bboxElement.style.height = `${newHeight}px`;
+                }
+            } else if (handleType === 'ne') {
+                const newHeight = startHeight - dy;
+                const newTop = startTop + dy;
+                const newWidth = Math.max(minSize, Math.min(imgMaxX - startLeft, startWidth + dx));
+
+                if (newHeight >= minSize && newTop >= offsetY) {
+                    bboxElement.style.top = `${newTop}px`;
+                    bboxElement.style.width = `${newWidth}px`;
+                    bboxElement.style.height = `${newHeight}px`;
+                }
+            } else if (handleType === 'sw') {
+                const newWidth = startWidth - dx;
+                const newLeft = startLeft + dx;
+                const newHeight = Math.max(minSize, Math.min(imgMaxY - startTop, startHeight + dy));
+
+                if (newWidth >= minSize && newLeft >= offsetX) {
+                    bboxElement.style.left = `${newLeft}px`;
+                    bboxElement.style.width = `${newWidth}px`;
+                    bboxElement.style.height = `${newHeight}px`;
+                }
+            }
+        };
+
+        const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            updateBboxFromOverlay();
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        startEvent.preventDefault();
+    }
+
+    function updateBboxFromOverlay() {
+        const bboxElement = document.getElementById('activeBbox');
+        if (!bboxElement) return;
+
+        const imgRect = previewImage.getBoundingClientRect();
+        const containerRect = imageContainer.getBoundingClientRect();
+        const offsetX = imgRect.left - containerRect.left;
+        const offsetY = imgRect.top - containerRect.top;
+
+        const scaleX = imageWidth / previewImage.clientWidth;
+        const scaleY = imageHeight / previewImage.clientHeight;
+
+        const x1 = Math.round((bboxElement.offsetLeft - offsetX) * scaleX);
+        const y1 = Math.round((bboxElement.offsetTop - offsetY) * scaleY);
+        const x2 = Math.round((bboxElement.offsetLeft + bboxElement.offsetWidth - offsetX) * scaleX);
+        const y2 = Math.round((bboxElement.offsetTop + bboxElement.offsetHeight - offsetY) * scaleY);
+
+        currentBbox = [x1, y1, x2, y2];
+    }
+
+    // ──────────────────────────────────────
+    // 판별
+    // ──────────────────────────────────────
+    identifyBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
+
+        identifyBtn.disabled = true;
+        loadingSpinner.classList.add('show');
+        loadingText.textContent = '차량을 판별하고 있습니다...';
+        updateStatus('identifying', '판별 중');
+        resultSection.classList.remove('show');
+
+        try {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            if (currentBbox) {
+                formData.append('bbox', currentBbox.join(','));
+            }
+
+            const response = await fetch('/identify', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            displayResult(result);
+
+        } catch (e) {
+            showToast(`판별 실패: ${e.message}`, 'error');
+            updateStatus('error', '판별 실패');
+            identifyBtn.disabled = false;
+        } finally {
+            loadingSpinner.classList.remove('show');
+        }
+    });
+
+    function displayResult(result) {
+        updateStatus('completed', '분석 완료');
+
+        resultManufacturer.textContent = result.manufacturer_korean || '-';
+        resultModel.textContent = result.model_korean || '-';
+        resultConfidence.textContent = result.confidence ? `${(result.confidence * 100).toFixed(1)}%` : '-';
+
+        resultSection.classList.add('show');
+        identifyBtn.textContent = '재분석';
+        identifyBtn.disabled = false;
+    }
+
+    // ──────────────────────────────────────
+    // 삭제
+    // ──────────────────────────────────────
+    deleteBtn.addEventListener('click', () => {
+        selectedFile = null;
+        fileInput.value = '';
+        previewImage.src = '';
+        imageCard.classList.remove('show');
+        emptyState.style.display = 'block';
+        resetState();
+    });
+
+    // ──────────────────────────────────────
+    // 유틸리티
+    // ──────────────────────────────────────
+    function updateStatus(type, text) {
+        statusBadge.className = `status-badge status-${type}`;
+        statusBadge.textContent = text;
+    }
+
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+
+        if (type === 'error') toast.style.background = '#ef4444';
+        else if (type === 'success') toast.style.background = '#10b981';
+
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+</script>
+
+</body>
+</html>

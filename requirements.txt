@@ -1,0 +1,50 @@
+# FastAPI and Web Framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# Database
+pymysql==1.1.1
+sqlalchemy==2.0.36
+aiomysql==0.2.0
+
+# Qdrant (Vector Database)
+qdrant-client==1.13.3
+
+# OpenAI API (Phase 1 - Development)
+openai==1.59.7
+
+# Local LLM (Phase 2 - Production)
+llama-cpp-python==0.3.4
+
+# Embeddings and NLP
+sentence-transformers==3.4.0
+torch==2.6.0
+transformers==4.48.3
+
+# Image Processing
+pillow==12.1.0
+opencv-python-headless==4.11.0.86
+ultralytics>=8.4.0  # YOLO26 for vehicle detection
+
+# Fuzzy Matching
+rapidfuzz==3.14.3
+
+# Utilities
+python-dotenv==1.0.1
+httpx==0.28.1
+aiofiles==24.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Logging and Monitoring
+loguru==0.7.3
+
+# Task Scheduling
+apscheduler==3.10.4
+
+# Testing (optional)
+pytest==8.3.4
+pytest-asyncio==0.25.2
