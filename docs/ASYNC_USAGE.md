@@ -178,11 +178,14 @@ while True:
 ### Docker Compose (권장)
 
 ```bash
-cd docker
-docker compose up -d
+# Mac Studio 환경
+cd docker && ./studio/mac/start.sh
+
+# Linux Studio 환경
+cd docker && ./studio/linux/start.sh
 
 # 로그 확인
-docker compose logs -f celery-worker
+cd docker && docker compose -f docker-compose.yml logs -f celery-worker
 ```
 
 ### 로컬 개발
@@ -192,7 +195,7 @@ docker compose logs -f celery-worker
 redis-server
 
 # 2. FastAPI 실행
-python identifier/main.py
+uvicorn identifier.main:app --reload --port 8001
 
 # 3. Celery Worker 실행 (별도 터미널)
 celery -A identifier.celery_app worker --loglevel=info
@@ -247,11 +250,13 @@ celery -A identifier.celery_app flower
 ### Worker 재시작
 
 ```bash
-docker compose restart celery-worker
+cd docker
+docker compose -f docker-compose.yml restart celery-worker
 ```
 
 ### Redis 데이터 삭제
 
 ```bash
-docker compose exec redis redis-cli FLUSHDB
+cd docker
+docker compose -f docker-compose.yml exec redis redis-cli FLUSHDB
 ```

@@ -2,7 +2,7 @@
 
 차량 이미지에서 제조사와 모델을 자동 식별하는 시스템.
 
-OpenAI Vision API(gpt-4o)로 차량을 1차 판별하고, 검수된 데이터를 벡터DB(Qdrant)에 축적하여 CLIP 이미지 유사도 기반으로 차량을 판별하는 구조.
+OpenAI Vision API로 차량을 1차 분석하고, 검수된 데이터를 벡터DB(Qdrant)에 CLIP 임베딩으로 축적하여 이미지 유사도 기반으로 판별하는 구조. 파인튜닝된 VLM(Ollama)을 활용한 재랭킹 모드도 지원.
 
 ---
 
@@ -12,19 +12,21 @@ OpenAI Vision API(gpt-4o)로 차량을 1차 판별하고, 검수된 데이터를
 ┌──────────────┐     ┌──────────────────────────────────────────────┐
 │   Frontend   │     │       Studio Service (개발/관리용 :8000)       │
 │              │     │                                              │
-│  analyze_v2  │────▶│  /api/*    차량 분석 API                     │
-│  admin UI    │────▶│  /admin/*  기준데이터 관리 / 검수 API         │
+│  analyze_v2  │────▶│  /api/*       차량 분석 API (DB-First)        │
+│  admin UI    │────▶│  /admin/*     기준데이터 관리 / 검수 API       │
+│  finetune UI │────▶│  /finetune/*  학습데이터 Export / 배포커맨드   │
 │              │     │                                              │
 └──────────────┘     │  Services:                                   │
-                     │  ├─ openai_vision  gpt-4o 이미지 분석        │
-                     │  ├─ matcher        코드매칭 + Fuzzy매칭       │
-                     │  ├─ embedding      CLIP 이미지 임베딩         │
-                     │  ├─ vectordb       Qdrant 벡터 검색          │
-                     │  └─ vehicle_detector  YOLO26 차량 감지       │
+                     │  ├─ openai_vision  Vision API 이미지 분석     │
+                     │  ├─ matcher        코드매칭 + Fuzzy매칭        │
+                     │  ├─ embedding      CLIP 이미지 임베딩          │
+                     │  ├─ vectordb       Qdrant 벡터 검색           │
+                     │  ├─ vehicle_detector  YOLO26 차량 감지        │
+                     │  └─ llm_local      로컬 VLM (폐쇄망 옵션)     │
                      │                                              │
                      │  Tasks:                                      │
-                     │  └─ cleanup        데이터 라이프사이클 관리   │
-                     │     (APScheduler, 매일 자동 정리)            │
+                     │  └─ cleanup  데이터 라이프사이클 관리          │
+                     │     (APScheduler, 매일 자동 정리)             │
                      │                                              │
                      └──────────┬─────────────────┬────────────────┘
                                 │                 │
@@ -42,11 +44,12 @@ OpenAI Vision API(gpt-4o)로 차량을 1차 판별하고, 검수된 데이터를
                                           │                                │
                                           │  CLIP 임베딩 + 투표 알고리즘    │
                                           │  배치/비동기 처리               │
+                                          │  VLM 재랭킹 (visual_rag 모드)  │
                                           │                                │
-                                          │  ┌──────────┐  ┌───────────┐  │
-                                          │  │  Redis   │  │  Celery   │  │
-                                          │  │  (큐/결과)│  │  Worker   │  │
-                                          │  └──────────┘  └───────────┘  │
+                                          │  ┌──────┐ ┌───────┐ ┌───────┐ │
+                                          │  │Redis │ │Celery │ │Ollama │ │
+                                          │  │(큐)  │ │Worker │ │(VLM)  │ │
+                                          │  └──────┘ └───────┘ └───────┘ │
                                           └────────────────────────────────┘
 ```
 
@@ -74,19 +77,25 @@ OpenAI Vision API(gpt-4o)로 차량을 1차 판별하고, 검수된 데이터를
 ### 1. 차량 이미지 분석 (Studio)
 
 ```
-이미지 업로드
+POST /api/upload — 파일 업로드 (DB-First)
   ↓
-파일 검증 (확장자, 용량)
+파일 검증 + data/uploads/YYYY-MM-DD/ 저장
   ↓
-[선택] YOLO26 차량 감지 → 바운딩 박스 반환 → 프론트에서 영역 선택
+analyzed_vehicles 레코드 생성 (processing_stage='uploaded')
   ↓
-선택 영역 크롭 → OpenAI Vision API (gpt-4o)
+POST /api/detect-vehicle — YOLO26 차량 감지 → 바운딩 박스 반환
   ↓
-JSON 응답 파싱 (manufacturer_code, model_code, confidence)
+프론트에서 bbox 선택/편집
+  ↓
+POST /api/analyze-vehicle-stream — SSE 스트리밍 분석
+  ↓
+선택 bbox 크롭 → data/crops/YYYY-MM-DD/ 저장
+  ↓
+OpenAI Vision API (gpt-4o) → JSON 파싱 (manufacturer_code, model_code, confidence)
   ↓
 기준 DB 매칭 (코드 정확매칭 → Fuzzy매칭 → 자동등록)
   ↓
-analyzed_vehicles 테이블 저장 (is_verified = false)
+analyzed_vehicles 업데이트 (is_verified=false, processing_stage='analysis_complete')
 ```
 
 ### 2. 관리자 검수 및 벡터DB 축적 (Studio)
@@ -390,14 +399,26 @@ docker/identifier/linux/
 
 ## API 엔드포인트
 
+### Studio 시스템 (`/`)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/` | 분석 UI (analyze_v2.html) |
+| GET | `/admin-ui` | 관리자 UI (index.html) |
+| GET | `/analyze-ui` | 분석 UI (analyze_v2.html, 동일) |
+| GET | `/health` | 헬스체크 (DB, Qdrant 연결 상태) |
+
 ### 분석 API — Studio (`/api`)
 
 | Method | Path | 설명 |
 |--------|------|------|
-| POST | `/api/analyze/vehicle` | 이미지 업로드 → gpt-4o 분석 → DB 매칭 |
-| POST | `/api/analyze-vehicle-stream` | SSE 스트리밍 분석 (크롭 영역 지정) |
+| POST | `/api/upload` | 파일 업로드 → DB 레코드 생성 (DB-First, processing_stage='uploaded') |
 | POST | `/api/detect-vehicle` | YOLO26 차량 감지 (바운딩 박스 반환) |
+| POST | `/api/analyze-vehicle-stream` | SSE 스트리밍 분석 (bbox 크롭 → gpt-4o → DB 저장) |
+| POST | `/api/analyze/vehicle` | 단순 분석 (업로드+분석 통합, 레거시 호환) |
 | GET | `/api/vehicle/{id}` | 분석 결과 조회 |
+| GET | `/api/pending-records` | 미검수 레코드 페이지네이션 조회 |
+| GET | `/api/analyze-feed` | 실시간 분석 피드 SSE (3초 간격 업데이트) |
 
 ### 관리자 API — Studio (`/admin`)
 
@@ -405,38 +426,50 @@ docker/identifier/linux/
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/admin/manufacturers` | 제조사 목록 (is_domestic 필터) |
-| POST | `/admin/manufacturers` | 제조사 등록 |
+| GET | `/admin/manufacturers` | 제조사 목록 (is_domestic 필터, 페이지네이션) |
+| GET | `/admin/manufacturers/{id}` | 제조사 상세 |
+| POST | `/admin/manufacturers` | 제조사 등록 (code 중복 체크) |
 | GET | `/admin/vehicle-models` | 차량 모델 목록 (manufacturer_id 필터) |
+| GET | `/admin/vehicle-models/{id}` | 차량 모델 상세 |
 | POST | `/admin/vehicle-models` | 차량 모델 등록 |
 
 **검수**
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/admin/review-queue` | 미검수 목록 (페이징, 커서 기반) |
+| GET | `/admin/review-queue` | 미검수 목록 (커서 기반 페이지네이션) |
+| GET | `/admin/analyzed-vehicles-pending` | 미검수 레코드 전체 목록 |
 | PATCH | `/admin/review/{id}` | 제조사/모델 수정 |
-| PUT | `/admin/review/{id}` | 승인/거부 (승인 시 벡터DB 자동 저장) |
-| POST | `/admin/review/{id}` | 벡터DB 저장 (간소화 버전) |
-| POST | `/admin/review/batch-save-all` | 미검수 전체 일괄 저장 (SSE, 커서 페이지네이션) |
-| DELETE | `/admin/review/{id}` | 분석 결과 삭제 (크롭 + 원본 업로드 파일 + MySQL) |
-| DELETE | `/admin/review-delete-all` | 미검수 전체 일괄 삭제 (단일 SQL 쿼리, 파일 포함) |
+| PUT | `/admin/review/{id}` | 승인/거부 (승인 시 CLIP 임베딩 + Qdrant 저장) |
+| POST | `/admin/review/{id}` | 벡터DB 직접 저장 (training_dataset + Qdrant) |
+| POST | `/admin/review/batch-save-all` | 미검수 전체 일괄 저장 (SSE 스트리밍, 커서 페이지네이션) |
+| DELETE | `/admin/review/{id}` | 분석 결과 삭제 (크롭 + 원본 이미지 파일 + DB 레코드) |
+| DELETE | `/admin/review-delete-all` | 미검수 전체 일괄 삭제 (단일 SQL, 이미지 파일 포함) |
 
 **분석/동기화**
 
 | Method | Path | 설명 |
 |--------|------|------|
-| POST | `/admin/analyze/{id}` | 단일 이미지 재분석 |
-| POST | `/admin/analyze-batch` | 디렉토리 일괄 분석 |
-| POST | `/admin/sync-vectordb` | 벡터DB Incremental 동기화 (qdrant_id=NULL만) |
-| GET | `/admin/vectordb-stats` | 벡터DB 통계 |
-| GET | `/admin/db-stats` | 데이터베이스 통계 |
+| POST | `/admin/analyze/{id}` | 단일 이미지 재분석 (Vision API 재호출) |
+| POST | `/admin/analyze-batch` | 디렉토리 이미지 일괄 분석 |
+| POST | `/admin/sync-vectordb` | 벡터DB Incremental 동기화 (qdrant_id IS NULL 레코드만) |
+| GET | `/admin/vectordb-stats` | 벡터DB 통계 (총 벡터 수, 컬렉션 상태) |
+| GET | `/admin/db-stats` | DB 통계 및 자동 정리 대상 미리보기 |
 
 **데이터 관리**
 
 | Method | Path | 설명 |
 |--------|------|------|
-| POST | `/admin/cleanup-now` | 오래된 미검수 데이터 수동 정리 (테스트/긴급용) |
+| POST | `/admin/cleanup-now` | 오래된 미검수 데이터 수동 정리 (즉시 실행) |
+
+### 파인튜닝 API — Studio (`/finetune`)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/finetune/stats` | 학습 데이터 통계 (총 레코드 수, 제조사별 분포) |
+| GET | `/finetune/export/preview` | Export 미리보기 (필터 기준 총 건수 + 페이지 수) |
+| POST | `/finetune/export` | Export 실행 → `data/finetune/` 에 저장 (sharegpt 형식, 페이징 지원) |
+| GET | `/finetune/deploy/cmd` | 체크포인트 → Ollama 배포 커맨드 목록 생성 |
 
 ### 판별 API — Identifier (`:8001`)
 
@@ -604,16 +637,21 @@ batch = db.query(TrainingDataset).filter(
 - `ANALYZED_VEHICLES_RETENTION_DAYS`, `CLEANUP_ENABLED`, `CLEANUP_HOUR`
 
 **Identifier:**
-- `IDENTIFIER_PORT`
-- `IDENTIFIER_TOP_K`, `IDENTIFIER_CONFIDENCE_THRESHOLD`
-- `IDENTIFIER_MIN_SIMILARITY`, `IDENTIFIER_VOTE_THRESHOLD`
+- `IDENTIFIER_PORT` — 기본 8001
+- `IDENTIFIER_TOP_K` — Qdrant 검색 결과 수 (기본 10)
+- `IDENTIFIER_CONFIDENCE_THRESHOLD` — 최소 신뢰도 (기본 0.80)
+- `IDENTIFIER_MIN_SIMILARITY` — 최소 코사인 유사도 (기본 0.3)
+- `IDENTIFIER_VOTE_THRESHOLD` — 신뢰 판별을 위한 최소 투표 수 (기본 3)
 - `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD` — Top-K 중 winner 득표 비율 임계값 (기본 0.3 = 30%)
+- `IDENTIFIER_VEHICLE_DETECTION` — YOLO 차량 감지 활성화 (기본 true)
+- `IDENTIFIER_REQUIRE_VEHICLE_DETECTION` — YOLO 미감지 시 identified 반환 차단 (기본 false, YOLO 패널티와 별개)
 - `IDENTIFIER_YOLO_CONFIDENCE` — YOLO 탐지 신뢰도 임계값 (기본 0.25)
+- `IDENTIFIER_CROP_PADDING` — bbox 주변 여백 픽셀 (기본 10)
 - `IDENTIFIER_TORCH_THREADS` — PyTorch 스레드 수 (workers 자동 계산에 사용)
 - `IDENTIFIER_BATCH_SIZE` — 내부 배치 처리 크기 (기본 32)
 - `IDENTIFIER_MAX_BATCH_FILES` — 배치 API 최대 파일 수 (기본 100)
 - `IDENTIFIER_MAX_BATCH_UPLOAD_SIZE` — 배치 API 최대 전체 크기 (기본 100MB)
-- `IDENTIFIER_ENABLE_TORCH_COMPILE` — torch.compile 활성화 (기본 true)
+- `IDENTIFIER_ENABLE_TORCH_COMPILE` — torch.compile JIT 활성화 (기본 true)
 
 **Identifier VLM:**
 - `IDENTIFIER_MODE` — `clip_only` / `visual_rag` / `vlm_only` (기본: clip_only)
