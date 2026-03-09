@@ -77,3 +77,6 @@ temp/
 deploy/*
 !deploy/package.sh
 !deploy/package.bat
+
+# claude
+!CLAUDE.md
