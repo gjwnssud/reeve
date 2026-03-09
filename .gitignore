@@ -80,3 +80,4 @@ deploy/*
 
 # claude
 !CLAUDE.md
+!.claude/mcp.json
