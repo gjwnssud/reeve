@@ -70,9 +70,12 @@ copy "%DOCKER_DIR%\Dockerfile.identifier"   "%DEST%\docker\" > nul
 xcopy /e /i /q "%DOCKER_DIR%\dev\%OS%\*" "%DEST%\docker\dev\%OS%\" > nul
 
 :: Copy source (robocopy exit code 0=ok, 1=files copied, both are success)
-call :ROBOCOPY_SOURCE "%ROOT%\studio"     "%DEST%\studio"
-call :ROBOCOPY_SOURCE "%ROOT%\identifier" "%DEST%\identifier"
-call :ROBOCOPY_SOURCE "%ROOT%\sql"        "%DEST%\sql"
+robocopy "%ROOT%\studio"     "%DEST%\studio"     /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
+if errorlevel 2 echo [WARN] robocopy error: %ROOT%\studio
+robocopy "%ROOT%\identifier" "%DEST%\identifier" /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
+if errorlevel 2 echo [WARN] robocopy error: %ROOT%\identifier
+robocopy "%ROOT%\sql"        "%DEST%\sql"        /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
+if errorlevel 2 echo [WARN] robocopy error: %ROOT%\sql
 
 copy "%ROOT%\requirements.txt"             "%DEST%\" > nul
 copy "%ROOT%\requirements-identifier.txt"  "%DEST%\" > nul
@@ -186,9 +189,3 @@ echo [INFO] Identifier %OS% package done: %DEST%
 exit /b 0
 
 
-:: --------------------------------------------
-:ROBOCOPY_SOURCE
-:: robocopy exit code 0=ok, 1=files copied, both are success
-robocopy "%~1" "%~2" /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
-if errorlevel 2 echo [WARN] robocopy error: %~1
-exit /b 0
