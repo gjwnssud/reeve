@@ -1,10 +1,11 @@
 # ──────────────────────────────────────────
-# Studio 개발 환경 — Windows (NVIDIA GPU)
-# ollama + llamafactory: 컨테이너에서 GPU 사용
-# 실행: docker\studio\windows\start.bat
+# Studio 개발 환경 — Mac (GPU 없음)
+# ollama: Docker CPU 모드 (NVIDIA 제외)
+# llamafactory: Docker CPU 모드 (NVIDIA 제외, 8G RAM)
+# 실행: docker/dev/mac/start.sh
 # ──────────────────────────────────────────
 #
-# 경로 기준: 이 파일 위치(docker/studio/windows/)에서 상대경로
+# 경로 기준: 이 파일 위치(docker/dev/mac/)에서 상대경로
 #   ../../..  → 프로젝트 루트
 
 services:
@@ -13,7 +14,7 @@ services:
     image: mysql:8.0
     container_name: reeve-mysql
     env_file:
-      - ../../../.env
+      - ../../.env
     ports:
       - "3306:3306"
     volumes:
@@ -45,7 +46,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: reeve-studio
     env_file:
-      - ../../../.env
+      - ../../.env
     ports:
       - "8000:8000"
     volumes:
@@ -72,7 +73,7 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  # Windows: 소스 바인드 마운트 + ollama 컨테이너 사용 (GPU)
+  # Mac: 소스 바인드 마운트 + ollama 컨테이너 사용
   identifier:
     volumes:
       - ../../../identifier:/app/identifier
@@ -86,5 +87,18 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
     restart: no
 
-  # ollama, llamafactory: base docker-compose.yml NVIDIA GPU 설정 그대로 사용
+  # Mac: Docker가 Apple GPU 접근 불가 → CPU 모드 (NVIDIA 제거)
+  ollama:
+    deploy:
+      resources:
+        reservations: {}
+        limits:
+          memory: 8G
 
+  # Mac: Docker가 Apple GPU 접근 불가 → CPU 모드
+  llamafactory:
+    deploy:
+      resources:
+        reservations: {}
+        limits:
+          memory: 8G

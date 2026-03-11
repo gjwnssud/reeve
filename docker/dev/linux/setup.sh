@@ -29,8 +29,8 @@ fi
 
 # ── 3. .env 파일 생성 ────────────────────────
 echo "[3/4] 환경변수 파일 확인 중..."
-if [ ! -f "../.env" ]; then
-    cp "../.env.example" "../.env"
+if [ ! -f ".env" ]; then
+    cp ".env.example" ".env"
     echo "      .env 파일이 생성되었습니다."
     echo ""
     echo " ★ 필수 수정 항목:"
@@ -38,7 +38,7 @@ if [ ! -f "../.env" ]; then
     echo "   - MYSQL_ROOT_PASSWORD"
     echo "   - MYSQL_PASSWORD"
     echo ""
-    echo "   ../.env 파일을 편집한 후 start.sh를 실행하세요."
+    echo "   docker/.env 파일을 편집한 후 start.sh를 실행하세요."
     exit 0
 else
     echo "      .env 파일 존재 확인"
@@ -46,10 +46,10 @@ fi
 
 # ── 4. 이미지 빌드 / Pull ───────────────────
 echo "[4/4] Docker 이미지 준비 중..."
-docker compose -f docker-compose.yml -f studio/linux/docker-compose.linux.yml pull --ignore-buildable
-docker compose -f docker-compose.yml -f studio/linux/docker-compose.linux.yml build
+docker compose -f docker-compose.yml -f dev/linux/docker-compose.yml pull --ignore-buildable
+docker compose -f docker-compose.yml -f dev/linux/docker-compose.yml build
 
 echo ""
 echo "======================================"
-echo "초기 설정 완료. ./studio/linux/start.sh 로 서비스를 시작하세요."
+echo "초기 설정 완료. ./dev/linux/start.sh 로 서비스를 시작하세요."
 echo "======================================"

@@ -15,10 +15,10 @@ Reeve is an AI-powered vehicle manufacturer/model identification system. It has 
 
 ```bash
 # Start Studio (Mac)
-cd docker && ./studio/mac/start.sh
+cd docker && ./dev/mac/start.sh
 
 # Start Studio (Linux)
-cd docker && ./studio/linux/start.sh
+cd docker && ./dev/linux/start.sh
 
 # Start production only (qdrant + identifier + redis + celery-worker + ollama)
 cd docker && docker compose -f docker-compose.yml up -d
@@ -77,7 +77,7 @@ studio/                              identifier/
 - **Batch processing**: YOLO/CLIP/Qdrant all run in batch mode. `/identify/batch` accepts up to 100 files / 100MB.
 - **Async queue pattern**: FastAPI (identifier) pushes to Redis queue → Celery Worker pulls and processes → result stored in Redis 24h. API and Worker share the same Docker image (`Dockerfile.identifier`) but run as separate containers.
 - **Finetune pipeline** (`studio/api/finetune.py`): Export training data → saves `vehicle_train.json`, `vehicle_val.json`, `dataset_info.json` directly to `data/finetune/` (LLaMA-Factory sharegpt format, auto-registered) → LLaMA-Factory WebUI (port 7860) → QLoRA 4bit training → LoRA merge → GGUF convert → Ollama deploy. Train/stop/status/logs endpoints removed — LLaMA-Factory WebUI handles training.
-- **Docker Compose env-specific files**: `docker-compose.yml` is the production base (qdrant + identifier + redis + celery-worker + ollama + llamafactory with NVIDIA GPU). OS별 override는 `docker/studio/` 하위에 분리: `studio/mac/docker-compose.mac.yml` (ollama+llamafactory CPU 모드, mysql+studio 추가), `studio/linux/docker-compose.linux.yml` (NVIDIA GPU 유지, mysql+studio 추가), `studio/windows/docker-compose.windows.yml` (GPU 유지, mysql+studio 추가). `docker-compose.override.yml` 삭제됨. Identifier standalone은 `docker/identifier/{linux,windows}/docker-compose.yml` (별도 compose, pre-built image 사용).
+- **Docker Compose env-specific files**: `docker-compose.yml` is the production base (qdrant + identifier + redis + celery-worker + ollama + llamafactory with NVIDIA GPU). `.env`는 `docker/.env`에 위치. OS별 override는 `docker/dev/` 하위에 분리: `dev/mac/docker-compose.yml` (ollama+llamafactory CPU 모드, mysql+studio 추가), `dev/linux/docker-compose.yml` (NVIDIA GPU 유지, mysql+studio 추가), `dev/windows/docker-compose.yml` (GPU 유지, mysql+studio 추가). `docker-compose.override.yml` 삭제됨. Identifier standalone은 `docker/prod/{linux,windows}/docker-compose.yml` (별도 compose, pre-built image 사용).
 - **DB-First upload architecture** (`analyze.py`): `POST /api/upload` first saves file to `data/uploads/YYYY-MM-DD/` and creates `analyzed_vehicles` record (processing_stage='uploaded'). Frontend then calls `POST /api/detect-vehicle` (YOLO), user selects bbox, then `POST /api/analyze-vehicle-stream` triggers SSE: crop → Vision API → DB update. This separates file ingestion from analysis.
 - **Studio UI routing**: `GET /` and `GET /analyze-ui` → analyze_v2.html (main). `GET /admin-ui` → index.html with two tabs: "기초DB관리" (CRUD) and "학습데이터추출" (export + LLaMA-Factory link).
 - **Workers auto-calculation**: `workers = cpu_count // IDENTIFIER_TORCH_THREADS`. Set only `IDENTIFIER_TORCH_THREADS` in `.env`; `start.sh` calculates the rest.

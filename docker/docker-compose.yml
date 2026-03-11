@@ -50,7 +50,7 @@ services:
       dockerfile: docker/Dockerfile.identifier
     container_name: reeve-identifier
     env_file:
-      - ../.env
+      - .env
     ports:
       - "8001:8001"
     volumes:
@@ -132,7 +132,7 @@ services:
       dockerfile: docker/Dockerfile.identifier
     container_name: reeve-celery-worker
     env_file:
-      - ../.env
+      - .env
     command: /app/identifier/start_worker.sh
     volumes:
       - ../logs:/app/logs

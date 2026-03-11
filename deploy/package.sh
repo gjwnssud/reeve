@@ -44,7 +44,7 @@ copy_source() {
     rsync -a "$ROOT/sql/"                               "$dest/sql/"
     cp "$ROOT/requirements.txt"            "$dest/"
     cp "$ROOT/requirements-identifier.txt" "$dest/"
-    cp "$ROOT/.env.example"                "$dest/"
+    cp "$DOCKER_DIR/.env.example"          "$dest/docker/"
 }
 
 # ── Studio 패키지 생성 ───────────────────────
@@ -55,7 +55,7 @@ package_studio() {
     info "===== Studio $os 패키지 생성 시작 ====="
 
     rm -rf "$dest"
-    mkdir -p "$dest/docker/studio/$os"
+    mkdir -p "$dest/docker/dev/$os"
 
     # docker 파일 복사
     cp "$DOCKER_DIR/docker-compose.yml"           "$dest/docker/"
@@ -63,7 +63,7 @@ package_studio() {
     cp "$DOCKER_DIR/Dockerfile.identifier"        "$dest/docker/"
 
     # OS별 override + 스크립트 복사
-    cp "$DOCKER_DIR/studio/$os/"* "$dest/docker/studio/$os/"
+    cp "$DOCKER_DIR/dev/$os/"* "$dest/docker/dev/$os/"
 
     # 소스 복사
     copy_source "$dest"
@@ -73,6 +73,10 @@ package_studio() {
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
              "$dest/data/finetune" "$dest/logs/studio" "$dest/logs/identifier" \
              "$dest/output"
+
+    if [ "$os" = "linux" ] || [ "$os" = "mac" ]; then
+        chmod +x "$dest/docker/dev/$os/"*.sh 2>/dev/null || true
+    fi
 
     info "Studio $os 패키지 완료: $dest"
     echo ""
@@ -92,18 +96,18 @@ package_identifier() {
              "$dest/logs"
 
     # docker 파일 + 스크립트 복사
-    cp "$DOCKER_DIR/identifier/$os/docker-compose.yml" "$dest/"
-    cp "$DOCKER_DIR/identifier/$os/.env.example"       "$dest/"
+    cp "$DOCKER_DIR/prod/$os/docker-compose.yml" "$dest/"
+    cp "$DOCKER_DIR/prod/$os/.env.example"       "$dest/"
     if [ "$os" = "linux" ]; then
-        cp "$DOCKER_DIR/identifier/$os/setup.sh"  "$dest/"
-        cp "$DOCKER_DIR/identifier/$os/start.sh"  "$dest/"
-        cp "$DOCKER_DIR/identifier/$os/stop.sh"   "$dest/"
+        cp "$DOCKER_DIR/prod/$os/setup.sh"  "$dest/"
+        cp "$DOCKER_DIR/prod/$os/start.sh"  "$dest/"
+        cp "$DOCKER_DIR/prod/$os/stop.sh"   "$dest/"
         chmod +x "$dest/"*.sh
     else
         # windows: .bat 파일
-        cp "$DOCKER_DIR/identifier/$os/setup.bat" "$dest/"
-        cp "$DOCKER_DIR/identifier/$os/start.bat" "$dest/"
-        cp "$DOCKER_DIR/identifier/$os/stop.bat"  "$dest/"
+        cp "$DOCKER_DIR/prod/$os/setup.bat" "$dest/"
+        cp "$DOCKER_DIR/prod/$os/start.bat" "$dest/"
+        cp "$DOCKER_DIR/prod/$os/stop.bat"  "$dest/"
     fi
 
     # ── Identifier Docker 이미지 빌드 + 저장 ──
@@ -119,26 +123,39 @@ package_identifier() {
     info "이미지 저장 완료: reeve-identifier-latest.tar.gz ($img_size)"
 
     # ── Qdrant 스냅샷 내보내기 ────────────────
-    if curl -sf http://localhost:6333/healthz > /dev/null 2>&1; then
+    # set -e 환경에서 curl/python3 실패로 스크립트가 종료되지 않도록 보호
+    set +e
+    if curl -s http://localhost:6333/healthz > /dev/null 2>&1; then
         info "Qdrant 스냅샷 생성 중..."
         local snapshot_resp
-        snapshot_resp=$(curl -sf -X POST \
+        # -f 제거: HTTP 에러 응답도 받아서 직접 판단
+        snapshot_resp=$(curl -s -X POST \
             "http://localhost:6333/collections/training_images/snapshots" 2>/dev/null)
         local snapshot_name
         snapshot_name=$(echo "$snapshot_resp" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin)['result']['name'])" 2>/dev/null)
+            "import sys,json; d=json.load(sys.stdin); print(d['result']['name'])" 2>/dev/null)
         if [ -n "$snapshot_name" ]; then
-            curl -sf -o "$dest/snapshots/training_images.snapshot" \
+            curl -s -o "$dest/snapshots/training_images.snapshot" \
                 "http://localhost:6333/collections/training_images/snapshots/$snapshot_name"
-            info "스냅샷 저장 완료: snapshots/training_images.snapshot"
+            if [ $? -eq 0 ] && [ -s "$dest/snapshots/training_images.snapshot" ]; then
+                info "스냅샷 저장 완료: snapshots/training_images.snapshot"
+            else
+                rm -f "$dest/snapshots/training_images.snapshot"
+                warn "스냅샷 다운로드 실패. snapshots/ 폴더에 직접 넣으세요."
+            fi
         else
-            warn "Qdrant 스냅샷 생성 실패 (training_images 컬렉션이 없을 수 있습니다)"
-            warn "나중에 snapshots/ 폴더에 직접 넣으세요."
+            warn "Qdrant 스냅샷 생성 실패"
+            warn "  원인: training_images 컬렉션이 없거나 학습 데이터가 없을 수 있습니다."
+            warn "  Studio에서 데이터 검수/동기화 후 다시 packaging하거나 snapshots/ 에 직접 넣으세요."
+            if [ -n "$snapshot_resp" ]; then
+                warn "  Qdrant 응답: $snapshot_resp"
+            fi
         fi
     else
         warn "Qdrant가 실행되지 않아 스냅샷을 건너뜁니다."
         warn "서비스 실행 후 다시 packaging하거나 snapshots/ 에 직접 넣으세요."
     fi
+    set -e
 
     # ── Ollama 모델 복사 ──────────────────────
     local ollama_src="$ROOT/data/ollama"

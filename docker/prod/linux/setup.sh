@@ -69,16 +69,22 @@ for i in $(seq 1 30); do
 done
 
 # ── Qdrant 스냅샷 복원 ───────────────────────
+# set -e 환경에서 curl 실패로 스크립트가 종료되지 않도록 보호
+set +e
 SNAPSHOT_FILE=$(ls snapshots/training_images*.snapshot 2>/dev/null | head -1)
 if [ -n "$SNAPSHOT_FILE" ]; then
     echo ""
     echo "Qdrant 스냅샷 복원 중: $SNAPSHOT_FILE"
     # 기존 컬렉션이 없을 경우에만 복원
     if ! curl -sf http://localhost:6333/collections/training_images > /dev/null 2>&1; then
-        curl -sf -X POST "http://localhost:6333/collections/training_images/snapshots/upload?priority=snapshot" \
+        curl -s -X POST "http://localhost:6333/collections/training_images/snapshots/upload?priority=snapshot" \
             -H "Content-Type:multipart/form-data" \
             -F "snapshot=@$SNAPSHOT_FILE"
-        echo "스냅샷 복원 완료"
+        if [ $? -eq 0 ]; then
+            echo "스냅샷 복원 완료"
+        else
+            echo "[경고] 스냅샷 복원 실패. setup.sh를 다시 실행하거나 수동으로 복원하세요."
+        fi
     else
         echo "training_images 컬렉션이 이미 존재합니다. 복원을 건너뜁니다."
     fi
@@ -87,6 +93,7 @@ else
     echo "[정보] snapshots/ 폴더에 스냅샷 파일이 없습니다."
     echo "       Studio에서 스냅샷을 내보낸 후 이 폴더에 넣고 setup.sh를 다시 실행하세요."
 fi
+set -e
 
 # ── Ollama 모델 로드 ─────────────────────────
 echo ""
