@@ -8,12 +8,11 @@ setlocal EnableDelayedExpansion
 ::   package.bat [target]
 ::
 :: Targets:
-::   studio-mac          Studio package for Mac dev environment
-::   studio-linux        Studio package for Linux dev environment
-::   studio-windows      Studio package for Windows dev environment
-::   identifier-linux    Identifier package for Linux production
-::   identifier-windows  Identifier package for Windows production
-::   all                 Build all packages
+::   dev-linux     개발사 납품 - Linux dev environment (GPU)
+::   dev-windows   개발사 납품 - Windows dev environment (GPU)
+::   prod-linux    고객사 납품 - Linux production environment
+::   prod-windows  고객사 납품 - Windows production environment
+::   all           Build all packages
 :: ============================================================
 
 set SCRIPT_DIR=%~dp0
@@ -24,26 +23,23 @@ set TARGET=%~1
 if "%TARGET%"=="" (
     echo Usage: package.bat [target]
     echo.
-    echo   studio-mac          Studio package for Mac dev environment
-    echo   studio-linux        Studio package for Linux dev environment
-    echo   studio-windows      Studio package for Windows dev environment
-    echo   identifier-linux    Identifier package for Linux production
-    echo   identifier-windows  Identifier package for Windows production
-    echo   all                 Build all packages
+    echo   dev-linux     Dev package for Linux environment (GPU)
+    echo   dev-windows   Dev package for Windows environment (GPU)
+    echo   prod-linux    Prod package for Linux environment
+    echo   prod-windows  Prod package for Windows environment
+    echo   all           Build all packages
     exit /b 0
 )
 
-if "%TARGET%"=="studio-mac"          call :PACKAGE_STUDIO mac
-if "%TARGET%"=="studio-linux"        call :PACKAGE_STUDIO linux
-if "%TARGET%"=="studio-windows"      call :PACKAGE_STUDIO windows
-if "%TARGET%"=="identifier-linux"    call :PACKAGE_IDENTIFIER linux
-if "%TARGET%"=="identifier-windows"  call :PACKAGE_IDENTIFIER windows
+if "%TARGET%"=="dev-linux"    call :PACKAGE_DEV linux
+if "%TARGET%"=="dev-windows"  call :PACKAGE_DEV windows
+if "%TARGET%"=="prod-linux"   call :PACKAGE_PROD linux
+if "%TARGET%"=="prod-windows" call :PACKAGE_PROD windows
 if "%TARGET%"=="all" (
-    call :PACKAGE_STUDIO mac
-    call :PACKAGE_STUDIO linux
-    call :PACKAGE_STUDIO windows
-    call :PACKAGE_IDENTIFIER linux
-    call :PACKAGE_IDENTIFIER windows
+    call :PACKAGE_DEV linux
+    call :PACKAGE_DEV windows
+    call :PACKAGE_PROD linux
+    call :PACKAGE_PROD windows
 )
 
 echo.
@@ -51,46 +47,45 @@ echo [DONE] Check each package under deploy\
 exit /b 0
 
 
-:: --------------------------------------------
-:PACKAGE_STUDIO
+:: ============================================================
+:PACKAGE_DEV
 set OS=%~1
-set DEST=%SCRIPT_DIR%studio-%OS%
+set DEST=%SCRIPT_DIR%dev\%OS%
 echo.
-echo ===== Building Studio %OS% package =====
+echo ===== Building Dev %OS% package =====
 
 if exist "%DEST%" rd /s /q "%DEST%"
-mkdir "%DEST%\docker\dev\%OS%"
+mkdir "%DEST%"
 
-:: Copy docker files
-copy "%DOCKER_DIR%\docker-compose.yml"      "%DEST%\docker\" > nul
-copy "%DOCKER_DIR%\Dockerfile"              "%DEST%\docker\" > nul
-copy "%DOCKER_DIR%\Dockerfile.identifier"   "%DEST%\docker\" > nul
+:: Copy and patch docker-compose files (fix paths for package root context)
+:: context: .. -> context: .  |  dockerfile: docker/ -> dockerfile:  |  - ../ -> - ./
+powershell -NoProfile -Command ^
+  "(Get-Content '%DOCKER_DIR%\docker-compose.yml') ^
+   -replace 'context: \.\.(?!\.)','context: .' ^
+   -replace 'dockerfile: docker/','dockerfile: ' ^
+   -replace '- \.\./','- ./' ^
+   | Set-Content '%DEST%\docker-compose.yml'"
 
-:: Copy OS-specific overrides and scripts
-xcopy /e /i /q "%DOCKER_DIR%\dev\%OS%\*" "%DEST%\docker\dev\%OS%\" > nul
+powershell -NoProfile -Command ^
+  "(Get-Content '%DOCKER_DIR%\docker-compose.dev.yml') ^
+   -replace 'context: \.\.(?!\.)','context: .' ^
+   -replace 'dockerfile: docker/','dockerfile: ' ^
+   -replace '- \.\./','- ./' ^
+   | Set-Content '%DEST%\docker-compose.dev.yml'"
 
-:: Root-level scripts (setup/start/stop at package root)
-if "%OS%"=="windows" (
-    copy "%SCRIPT_DIR%templates\windows\setup.bat" "%DEST%\setup.bat" > nul
-    copy "%SCRIPT_DIR%templates\windows\start.bat" "%DEST%\start.bat" > nul
-    copy "%SCRIPT_DIR%templates\windows\stop.bat"  "%DEST%\stop.bat"  > nul
-) else (
-    copy "%SCRIPT_DIR%templates\%OS%\setup.sh" "%DEST%\setup.sh" > nul
-    copy "%SCRIPT_DIR%templates\%OS%\start.sh" "%DEST%\start.sh" > nul
-    copy "%SCRIPT_DIR%templates\%OS%\stop.sh"  "%DEST%\stop.sh"  > nul
-)
+copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
+copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
+copy "%DOCKER_DIR%\.env.example"          "%DEST%\" > nul
 
-:: Copy source (robocopy exit code 0=ok, 1=files copied, both are success)
+:: Copy source code
 robocopy "%ROOT%\studio"     "%DEST%\studio"     /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
-if errorlevel 2 echo [WARN] robocopy error: %ROOT%\studio
+if errorlevel 2 echo [WARN] robocopy error: studio
 robocopy "%ROOT%\identifier" "%DEST%\identifier" /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
-if errorlevel 2 echo [WARN] robocopy error: %ROOT%\identifier
-robocopy "%ROOT%\sql"        "%DEST%\sql"        /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
-if errorlevel 2 echo [WARN] robocopy error: %ROOT%\sql
-
-copy "%ROOT%\requirements.txt"             "%DEST%\" > nul
-copy "%ROOT%\requirements-identifier.txt"  "%DEST%\" > nul
-copy "%DOCKER_DIR%\.env.example"           "%DEST%\docker\" > nul
+if errorlevel 2 echo [WARN] robocopy error: identifier
+robocopy "%ROOT%\sql"        "%DEST%\sql"        /e > nul
+if errorlevel 2 echo [WARN] robocopy error: sql
+copy "%ROOT%\requirements.txt"            "%DEST%\" > nul
+copy "%ROOT%\requirements-identifier.txt" "%DEST%\" > nul
 
 :: Create empty dirs for Docker volume mounts
 for %%d in (
@@ -99,37 +94,44 @@ for %%d in (
     logs\studio logs\identifier output
 ) do mkdir "%DEST%\%%d" 2>nul
 
-echo [INFO] Studio %OS% package done: %DEST%
+:: Write OS-specific scripts
+if "%OS%"=="linux" (
+    call :WRITE_DEV_LINUX_SCRIPTS "%DEST%"
+) else (
+    call :WRITE_DEV_WINDOWS_SCRIPTS "%DEST%"
+)
+
+echo [INFO] Dev %OS% package done: %DEST%
 exit /b 0
 
 
-:: --------------------------------------------
-:PACKAGE_IDENTIFIER
+:: ============================================================
+:PACKAGE_PROD
 set OS=%~1
-set DEST=%SCRIPT_DIR%identifier-%OS%
+set DEST=%SCRIPT_DIR%prod\%OS%
 echo.
-echo ===== Building Identifier %OS% package =====
+echo ===== Building Prod %OS% package =====
 
 if exist "%DEST%" rd /s /q "%DEST%"
 for %%d in (snapshots models data\qdrant data\redis data\ollama data\shared logs) do (
     mkdir "%DEST%\%%d" 2>nul
 )
 
-:: Copy docker files and scripts
-copy "%DOCKER_DIR%\prod\%OS%\docker-compose.yml" "%DEST%\" > nul
-copy "%DOCKER_DIR%\prod\%OS%\.env.example"       "%DEST%\" > nul
+:: Dockerfile.identifier -> Dockerfile (standalone build)
+copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\Dockerfile" > nul
 
-if "%OS%"=="windows" (
-    copy "%DOCKER_DIR%\prod\%OS%\setup.bat" "%DEST%\" > nul
-    copy "%DOCKER_DIR%\prod\%OS%\start.bat" "%DEST%\" > nul
-    copy "%DOCKER_DIR%\prod\%OS%\stop.bat"  "%DEST%\" > nul
+:: Write prod docker-compose.yml and .env.example
+call :WRITE_PROD_COMPOSE "%DEST%"
+call :WRITE_PROD_ENV_EXAMPLE "%DEST%"
+
+:: Write OS-specific scripts
+if "%OS%"=="linux" (
+    call :WRITE_PROD_LINUX_SCRIPTS "%DEST%"
 ) else (
-    copy "%DOCKER_DIR%\prod\%OS%\setup.sh"  "%DEST%\" > nul
-    copy "%DOCKER_DIR%\prod\%OS%\start.sh"  "%DEST%\" > nul
-    copy "%DOCKER_DIR%\prod\%OS%\stop.sh"   "%DEST%\" > nul
+    call :WRITE_PROD_WINDOWS_SCRIPTS "%DEST%"
 )
 
-:: -- Build and save Identifier Docker image --
+:: Build and save Identifier Docker image
 echo [INFO] Building Identifier Docker image...
 cd /d "%ROOT%"
 docker build -t reeve-identifier:latest -f docker\Dockerfile.identifier .
@@ -138,7 +140,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Docker Desktop requires WSL2 so wsl gzip is always available
 echo [INFO] Saving image (this may take a while)...
 docker save reeve-identifier:latest | wsl gzip > "%DEST%\reeve-identifier-latest.tar.gz"
 if errorlevel 1 (
@@ -147,16 +148,13 @@ if errorlevel 1 (
 )
 echo [INFO] Image saved: reeve-identifier-latest.tar.gz
 
-:: -- Export Qdrant snapshot --
+:: Export Qdrant snapshot
 curl -s http://localhost:6333/healthz > nul 2>&1
 if not errorlevel 1 (
     echo [INFO] Creating Qdrant snapshot...
-
-    :: Save response to temp file to avoid pipe quoting issues
     set SNAP_JSON=%TEMP%\reeve_snap.json
     curl -s -X POST "http://localhost:6333/collections/training_images/snapshots" -o "!SNAP_JSON!" 2>nul
 
-    :: Write Python parser to temp file (no quoting issues with echo)
     (
         echo import json, sys
         echo with open(sys.argv[1]) as f: d = json.load(f)
@@ -174,15 +172,14 @@ if not errorlevel 1 (
         echo [INFO] Snapshot saved: snapshots\training_images.snapshot
     ) else (
         echo [WARN] Qdrant snapshot creation failed.
-        echo        The training_images collection may not exist or have no data.
-        echo        Run data sync in Studio first, or place the snapshot in snapshots\ manually.
+        echo        Run data sync in Studio first, or place snapshot in snapshots\ manually.
     )
 ) else (
     echo [WARN] Qdrant is not running - skipping snapshot.
-    echo        Start the service first, or place the snapshot in snapshots\ manually.
+    echo        Start the service first, or place snapshot in snapshots\ manually.
 )
 
-:: -- Copy Ollama models --
+:: Copy Ollama models
 set OLLAMA_HAS_FILES=0
 if exist "%ROOT%\data\ollama\" (
     for /r "%ROOT%\data\ollama" %%f in (*) do set OLLAMA_HAS_FILES=1
@@ -196,7 +193,756 @@ if "!OLLAMA_HAS_FILES!"=="1" (
     echo        Run finetuning first, or place GGUF + Modelfile in models\ manually.
 )
 
-echo [INFO] Identifier %OS% package done: %DEST%
+echo [INFO] Prod %OS% package done: %DEST%
 exit /b 0
 
 
+:: ============================================================
+:WRITE_DEV_LINUX_SCRIPTS
+set DEST=%~1
+
+:: Write setup.sh (LF line endings via PowerShell)
+powershell -NoProfile -Command ^
+  "$c = @(" ^
+  "'#!/bin/bash'," ^
+  "'set -e'," ^
+  "'cd \"\$(dirname \"\$0\")\"'," ^
+  "''," ^
+  "'echo \"[Reeve Studio] Linux 초기 설정 (GPU)\"'," ^
+  "'echo \"======================================\"'," ^
+  "''," ^
+  "'echo \"[1/4] Docker 확인 중...\"'," ^
+  "'if ! docker info > /dev/null 2>&1; then'," ^
+  "'    echo \"[오류] Docker가 실행되지 않았습니다.\"'," ^
+  "'    exit 1'," ^
+  "'fi'," ^
+  "'echo \"      OK\"'," ^
+  "''," ^
+  "'echo \"[2/4] NVIDIA GPU 확인 중...\"'," ^
+  "'if ! nvidia-smi > /dev/null 2>&1; then'," ^
+  "'    echo \"[경고] NVIDIA GPU를 감지하지 못했습니다.\"'," ^
+  "'    echo \"       nvidia-container-toolkit이 설치되어 있는지 확인하세요.\"'," ^
+  "'    read -p \"계속 진행하시겠습니까? (y/N): \" CONTINUE'," ^
+  "'    [[ \"\$CONTINUE\" =~ ^[Yy]\$ ]] ^|^| exit 1'," ^
+  "'else'," ^
+  "'    nvidia-smi --query-gpu=name --format=csv,noheader ^| while read name; do'," ^
+  "'        echo \"      GPU: \$name\"'," ^
+  "'    done'," ^
+  "'fi'," ^
+  "''," ^
+  "'echo \"[3/4] 환경변수 파일 확인 중...\"'," ^
+  "'if [ ! -f \".env\" ]; then'," ^
+  "'    cp \".env.example\" \".env\"'," ^
+  "'    echo \"      .env 파일이 생성되었습니다.\"'," ^
+  "'    echo \"\"'," ^
+  "'    echo \" ★ 필수 수정 항목:\"'," ^
+  "'    echo \"   - OPENAI_API_KEY\"'," ^
+  "'    echo \"   - MYSQL_ROOT_PASSWORD\"'," ^
+  "'    echo \"   - MYSQL_PASSWORD\"'," ^
+  "'    echo \"\"'," ^
+  "'    echo \"   .env 파일을 편집한 후 start.sh를 실행하세요.\"'," ^
+  "'    exit 0'," ^
+  "'else'," ^
+  "'    echo \"      .env 파일 존재 확인\"'," ^
+  "'fi'," ^
+  "''," ^
+  "'echo \"[4/4] Docker 이미지 준비 중...\"'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --ignore-buildable'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml build'," ^
+  "''," ^
+  "'echo \"\"'," ^
+  "'echo \"======================================\"'," ^
+  "'echo \"초기 설정 완료. ./start.sh 로 서비스를 시작하세요.\"'," ^
+  "'echo \"======================================\"'" ^
+  "); [IO.File]::WriteAllText('%DEST%\setup.sh', ($c -join [char]10) + [char]10)"
+
+:: Write start.sh
+powershell -NoProfile -Command ^
+  "$c = @(" ^
+  "'#!/bin/bash'," ^
+  "'set -e'," ^
+  "'cd \"\$(dirname \"\$0\")\"'," ^
+  "''," ^
+  "'echo \"[Reeve Studio] Linux 서비스 시작 (GPU)\"'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d'," ^
+  "''," ^
+  "'echo \"\"'," ^
+  "'echo \"서비스가 시작되었습니다:\"'," ^
+  "'echo \"  Studio        : http://localhost:8000\"'," ^
+  "'echo \"  Identifier    : http://localhost:8001\"'," ^
+  "'echo \"  LLaMA-Factory : http://localhost:7860\"'," ^
+  "'echo \"  Qdrant        : http://localhost:6333/dashboard\"'," ^
+  "'echo \"  Ollama        : http://localhost:11434  (NVIDIA GPU)\"'" ^
+  "); [IO.File]::WriteAllText('%DEST%\start.sh', ($c -join [char]10) + [char]10)"
+
+:: Write stop.sh
+powershell -NoProfile -Command ^
+  "$c = @(" ^
+  "'#!/bin/bash'," ^
+  "'cd \"\$(dirname \"\$0\")\"'," ^
+  "''," ^
+  "'echo \"[Reeve Studio] 서비스 중지 중...\"'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml down'," ^
+  "''," ^
+  "'echo \"완료.\"'" ^
+  "); [IO.File]::WriteAllText('%DEST%\stop.sh', ($c -join [char]10) + [char]10)"
+
+exit /b 0
+
+
+:: ============================================================
+:WRITE_DEV_WINDOWS_SCRIPTS
+set DEST=%~1
+
+(
+echo @echo off
+echo setlocal EnableDelayedExpansion
+echo cd /d "%%~dp0"
+echo.
+echo echo [Reeve Studio] Windows 초기 설정 ^(GPU^)
+echo echo ======================================
+echo.
+echo echo [1/4] Docker Desktop 확인 중...
+echo docker info ^> nul 2^>^&1
+echo if errorlevel 1 ^(
+echo     echo [오류] Docker Desktop이 실행되지 않았습니다.
+echo     echo        Docker Desktop을 시작한 후 다시 실행하세요.
+echo     pause
+echo     exit /b 1
+echo ^)
+echo echo       OK
+echo.
+echo echo [2/4] NVIDIA GPU 확인 중...
+echo nvidia-smi ^> nul 2^>^&1
+echo if errorlevel 1 ^(
+echo     echo [경고] NVIDIA GPU를 감지하지 못했습니다.
+echo     echo        ollama, llamafactory가 CPU로 실행됩니다.
+echo     set /p CONTINUE="계속 진행하시겠습니까? ^(y/N^): "
+echo     if /i "^^!CONTINUE^^!" neq "y" exit /b 1
+echo ^) else ^(
+echo     for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name --format=csv^,noheader 2^^>nul'^) do ^(
+echo         echo       GPU 감지: %%%%g
+echo     ^)
+echo ^)
+echo.
+echo echo [3/4] 환경변수 파일 확인 중...
+echo if not exist ".env" ^(
+echo     if exist ".env.example" ^(
+echo         copy ".env.example" ".env" ^> nul
+echo         echo       .env 파일이 생성되었습니다.
+echo         echo.
+echo         echo  * 필수 수정 항목:
+echo         echo    - OPENAI_API_KEY
+echo         echo    - MYSQL_ROOT_PASSWORD
+echo         echo    - MYSQL_PASSWORD
+echo         echo.
+echo         echo    .env 파일을 편집한 후 start.bat을 실행하세요.
+echo         start notepad ".env"
+echo         pause
+echo         exit /b 0
+echo     ^) else ^(
+echo         echo [오류] .env.example 파일을 찾을 수 없습니다.
+echo         pause
+echo         exit /b 1
+echo     ^)
+echo ^) else ^(
+echo     echo       .env 파일 존재 확인
+echo ^)
+echo.
+echo echo [4/4] Docker 이미지 준비 중...
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --ignore-buildable
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+echo.
+echo echo.
+echo echo ======================================
+echo echo 초기 설정 완료. start.bat으로 서비스를 시작하세요.
+echo echo ======================================
+echo pause
+) > "%DEST%\setup.bat"
+
+(
+echo @echo off
+echo cd /d "%%~dp0"
+echo.
+echo echo [Reeve Studio] Windows 서비스 시작 ^(GPU^)...
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+echo.
+echo if errorlevel 1 ^(
+echo     echo [오류] 서비스 시작 실패. 로그를 확인하세요:
+echo     echo        docker compose -f docker-compose.yml -f docker-compose.dev.yml logs
+echo     pause
+echo     exit /b 1
+echo ^)
+echo.
+echo echo.
+echo echo 서비스가 시작되었습니다:
+echo echo   Studio        : http://localhost:8000
+echo echo   Identifier    : http://localhost:8001
+echo echo   LLaMA-Factory : http://localhost:7860
+echo echo   Qdrant        : http://localhost:6333/dashboard
+) > "%DEST%\start.bat"
+
+(
+echo @echo off
+echo cd /d "%%~dp0"
+echo.
+echo echo [Reeve Studio] 서비스 중지 중...
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+echo.
+echo echo 완료.
+) > "%DEST%\stop.bat"
+
+exit /b 0
+
+
+:: ============================================================
+:WRITE_PROD_COMPOSE
+set DEST=%~1
+
+(
+echo name: reeve-identifier
+echo.
+echo # ──────────────────────────────────────────
+echo # Identifier 납품 패키지 ^(NVIDIA GPU^)
+echo # 포함 서비스: qdrant + redis + identifier + celery-worker + ollama
+echo # 이미지 빌드: docker build -t reeve-identifier:latest -f Dockerfile .
+echo # ──────────────────────────────────────────
+echo.
+echo services:
+echo   qdrant:
+echo     image: qdrant/qdrant:latest
+echo     container_name: reeve-qdrant
+echo     ports:
+echo       - "6333:6333"
+echo       - "6334:6334"
+echo     volumes:
+echo       - ./data/qdrant:/qdrant/storage
+echo     environment:
+echo       - QDRANT__SERVICE__GRPC_PORT=6334
+echo       - QDRANT__STORAGE__ON_DISK_PAYLOAD=true
+echo     networks:
+echo       - reeve-network
+echo     restart: unless-stopped
+echo     deploy:
+echo       resources:
+echo         limits:
+echo           cpus: '1.0'
+echo           memory: 2G
+echo         reservations:
+echo           cpus: '0.25'
+echo           memory: 256M
+echo.
+echo   redis:
+echo     image: redis:7.4-alpine
+echo     container_name: reeve-redis
+echo     ports:
+echo       - "6379:6379"
+echo     volumes:
+echo       - ./data/redis:/data
+echo     networks:
+echo       - reeve-network
+echo     restart: unless-stopped
+echo     command: redis-server --appendonly yes
+echo     deploy:
+echo       resources:
+echo         limits:
+echo           cpus: '0.5'
+echo           memory: 512M
+echo.
+echo   identifier:
+echo     image: reeve-identifier:latest
+echo     container_name: reeve-identifier
+echo     env_file:
+echo       - .env
+echo     ports:
+echo       - "8001:8001"
+echo     volumes:
+echo       - ./logs:/app/logs
+echo       - ./data/shared:/app/shared
+echo     environment:
+echo       - QDRANT_HOST=qdrant
+echo       - REDIS_HOST=redis
+echo       - OLLAMA_BASE_URL=http://ollama:11434
+echo       - EMBEDDING_DEVICE=cuda
+echo     depends_on:
+echo       qdrant:
+echo         condition: service_started
+echo       redis:
+echo         condition: service_started
+echo     networks:
+echo       - reeve-network
+echo     restart: unless-stopped
+echo     deploy:
+echo       resources:
+echo         limits:
+echo           cpus: '2.0'
+echo           memory: 2G
+echo         reservations:
+echo           cpus: '0.5'
+echo           memory: 1G
+echo.
+echo   celery-worker:
+echo     image: reeve-identifier:latest
+echo     container_name: reeve-celery-worker
+echo     env_file:
+echo       - .env
+echo     command: /app/identifier/start_worker.sh
+echo     volumes:
+echo       - ./logs:/app/logs
+echo       - ./data/shared:/app/shared
+echo     environment:
+echo       - QDRANT_HOST=qdrant
+echo       - REDIS_HOST=redis
+echo       - OLLAMA_BASE_URL=http://ollama:11434
+echo       - EMBEDDING_DEVICE=cuda
+echo     depends_on:
+echo       redis:
+echo         condition: service_started
+echo       qdrant:
+echo         condition: service_started
+echo     networks:
+echo       - reeve-network
+echo     restart: unless-stopped
+echo     deploy:
+echo       resources:
+echo         limits:
+echo           cpus: '4.0'
+echo           memory: 4G
+echo         reservations:
+echo           cpus: '2.0'
+echo           memory: 2G
+echo.
+echo   ollama:
+echo     image: ollama/ollama:latest
+echo     container_name: reeve-ollama
+echo     ports:
+echo       - "11434:11434"
+echo     volumes:
+echo       - ./data/ollama:/root/.ollama
+echo     networks:
+echo       - reeve-network
+echo     restart: unless-stopped
+echo     deploy:
+echo       resources:
+echo         reservations:
+echo           devices:
+echo             - driver: nvidia
+echo               count: 1
+echo               capabilities: [gpu]
+echo         limits:
+echo           memory: 16G
+echo.
+echo networks:
+echo   reeve-network:
+echo     driver: bridge
+) > "%DEST%\docker-compose.yml"
+
+exit /b 0
+
+
+:: ============================================================
+:WRITE_PROD_ENV_EXAMPLE
+set DEST=%~1
+
+(
+echo # ──────────────────────────────────────────
+echo # Identifier 서비스 환경변수
+echo # 이 파일을 .env로 복사 후 수정하세요
+echo # ──────────────────────────────────────────
+echo.
+echo # Qdrant
+echo QDRANT_HOST=qdrant
+echo QDRANT_PORT=6333
+echo.
+echo # Embedding
+echo EMBEDDING_DEVICE=cuda
+echo.
+echo # 판별 모드: clip_only ^| visual_rag ^| vlm_only
+echo IDENTIFIER_MODE=visual_rag
+echo.
+echo # VLM ^(Ollama^)
+echo OLLAMA_BASE_URL=http://ollama:11434
+echo VLM_MODEL_NAME=vehicle-vlm-v1
+echo VLM_TIMEOUT=30
+echo VLM_MAX_CANDIDATES=5
+echo VLM_FALLBACK_TO_CLIP=true
+echo VLM_BATCH_CONCURRENCY=2
+echo.
+echo # 판별 파라미터
+echo IDENTIFIER_PORT=8001
+echo IDENTIFIER_TOP_K=10
+echo IDENTIFIER_CONFIDENCE_THRESHOLD=0.80
+echo IDENTIFIER_MIN_SIMILARITY=0.70
+echo IDENTIFIER_VOTE_THRESHOLD=3
+echo IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD=0.3
+echo IDENTIFIER_VEHICLE_DETECTION=true
+echo IDENTIFIER_YOLO_CONFIDENCE=0.25
+echo IDENTIFIER_CROP_PADDING=10
+echo.
+echo # 성능
+echo IDENTIFIER_TORCH_THREADS=4
+echo IDENTIFIER_BATCH_SIZE=32
+echo IDENTIFIER_MAX_BATCH_FILES=100
+echo IDENTIFIER_MAX_BATCH_UPLOAD_SIZE=104857600
+echo IDENTIFIER_ENABLE_TORCH_COMPILE=true
+echo.
+echo # Redis / Celery
+echo REDIS_HOST=redis
+echo REDIS_PORT=6379
+echo REDIS_DB=0
+echo CELERY_TASK_TIME_LIMIT=600
+echo CELERY_TASK_SOFT_TIME_LIMIT=540
+echo CELERY_MAX_RETRIES=3
+echo.
+echo # 파일 업로드
+echo MAX_UPLOAD_SIZE=5242880
+echo ALLOWED_EXTENSIONS=jpg,jpeg,png,webp
+echo.
+echo # 로그
+echo LOG_LEVEL=INFO
+echo IDENTIFIER_LOG_FILE=./logs/identifier/service.log
+) > "%DEST%\.env.example"
+
+exit /b 0
+
+
+:: ============================================================
+:WRITE_PROD_LINUX_SCRIPTS
+set DEST=%~1
+
+powershell -NoProfile -Command ^
+  "$c = @(" ^
+  "'#!/bin/bash'," ^
+  "'set -e'," ^
+  "'cd \"\$(dirname \"\$0\")\"'," ^
+  "''," ^
+  "'echo \"[Reeve Identifier] Linux 초기 설정\"'," ^
+  "'echo \"======================================\"'," ^
+  "''," ^
+  "'echo \"[1/5] Docker 확인 중...\"'," ^
+  "'if ! docker info > /dev/null 2>&1; then'," ^
+  "'    echo \"[오류] Docker가 실행되지 않았습니다.\"'," ^
+  "'    exit 1'," ^
+  "'fi'," ^
+  "'echo \"      OK\"'," ^
+  "''," ^
+  "'echo \"[2/5] NVIDIA GPU 확인 중...\"'," ^
+  "'if ! nvidia-smi > /dev/null 2>&1; then'," ^
+  "'    echo \"[오류] NVIDIA GPU를 감지하지 못했습니다.\"'," ^
+  "'    echo \"       nvidia-container-toolkit이 설치되어 있는지 확인하세요.\"'," ^
+  "'    exit 1'," ^
+  "'fi'," ^
+  "'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader ^| while read line; do'," ^
+  "'    echo \"      GPU: \$line\"'," ^
+  "'done'," ^
+  "''," ^
+  "'echo \"[3/5] 환경변수 파일 확인 중...\"'," ^
+  "'if [ ! -f \".env\" ]; then'," ^
+  "'    cp \".env.example\" \".env\"'," ^
+  "'    echo \"      .env 파일이 생성되었습니다. 필요시 내용을 수정하세요.\"'," ^
+  "'else'," ^
+  "'    echo \"      .env 파일 존재 확인\"'," ^
+  "'fi'," ^
+  "''," ^
+  "'echo \"[4/5] Identifier 이미지 확인 중...\"'," ^
+  "'if ! docker image inspect reeve-identifier:latest > /dev/null 2>&1; then'," ^
+  "'    IMAGE_TAR=\$(ls reeve-identifier-*.tar.gz 2>/dev/null ^| head -1)'," ^
+  "'    if [ -n \"\$IMAGE_TAR\" ]; then'," ^
+  "'        echo \"      이미지 로드 중: \$IMAGE_TAR\"'," ^
+  "'        docker load < \"\$IMAGE_TAR\"'," ^
+  "'    else'," ^
+  "'        echo \"[오류] reeve-identifier:latest 이미지를 찾을 수 없습니다.\"'," ^
+  "'        echo \"       reeve-identifier-*.tar.gz 파일을 이 디렉토리에 넣거나\"'," ^
+  "'        echo \"       docker build -t reeve-identifier:latest -f Dockerfile . 로 빌드하세요.\"'," ^
+  "'        exit 1'," ^
+  "'    fi'," ^
+  "'else'," ^
+  "'    echo \"      reeve-identifier:latest 확인\"'," ^
+  "'fi'," ^
+  "''," ^
+  "'echo \"[5/5] 서비스 시작 중...\"'," ^
+  "'docker compose up -d'," ^
+  "''," ^
+  "'echo \"\"'," ^
+  "'echo \"Qdrant 준비 대기 중...\"'," ^
+  "'for i in \$(seq 1 30); do'," ^
+  "'    if curl -sf http://localhost:6333/healthz > /dev/null 2>&1; then'," ^
+  "'        echo \"Qdrant 준비 완료\"'," ^
+  "'        break'," ^
+  "'    fi'," ^
+  "'    sleep 2'," ^
+  "'done'," ^
+  "''," ^
+  "'set +e'," ^
+  "'SNAPSHOT_FILE=\$(ls snapshots/training_images*.snapshot 2>/dev/null ^| head -1)'," ^
+  "'if [ -n \"\$SNAPSHOT_FILE\" ]; then'," ^
+  "'    echo \"\"'," ^
+  "'    echo \"Qdrant 스냅샷 복원 중: \$SNAPSHOT_FILE\"'," ^
+  "'    if ! curl -sf http://localhost:6333/collections/training_images > /dev/null 2>&1; then'," ^
+  "'        curl -s -X POST \"http://localhost:6333/collections/training_images/snapshots/upload?priority=snapshot\" \'," ^
+  "'            -H \"Content-Type:multipart/form-data\" \'," ^
+  "'            -F \"snapshot=@\$SNAPSHOT_FILE\"'," ^
+  "'        [ \$? -eq 0 ] && echo \"스냅샷 복원 완료\" ^|^| echo \"[경고] 스냅샷 복원 실패.\"'," ^
+  "'    else'," ^
+  "'        echo \"training_images 컬렉션이 이미 존재합니다. 복원을 건너뜁니다.\"'," ^
+  "'    fi'," ^
+  "'else'," ^
+  "'    echo \"\"'," ^
+  "'    echo \"[정보] snapshots/ 폴더에 스냅샷 파일이 없습니다.\"'," ^
+  "'    echo \"       Studio에서 스냅샷을 내보낸 후 이 폴더에 넣고 setup.sh를 다시 실행하세요.\"'," ^
+  "'fi'," ^
+  "'set -e'," ^
+  "''," ^
+  "'echo \"\"'," ^
+  "'echo \"Ollama 준비 대기 중...\"'," ^
+  "'for i in \$(seq 1 30); do'," ^
+  "'    if docker exec reeve-ollama ollama list > /dev/null 2>&1; then'," ^
+  "'        break'," ^
+  "'    fi'," ^
+  "'    sleep 2'," ^
+  "'done'," ^
+  "''," ^
+  "'MODEL_NAME=\$(grep VLM_MODEL_NAME .env ^| cut -d= -f2 ^| tr -d '' '')'," ^
+  "'MODEL_NAME=\"\${MODEL_NAME:-vehicle-vlm-v1}\"'," ^
+  "''," ^
+  "'if docker exec reeve-ollama ollama list ^| grep -q \"\$MODEL_NAME\"; then'," ^
+  "'    echo \"Ollama 모델 '\''\$MODEL_NAME'\'' 이미 존재합니다.\"'," ^
+  "'else'," ^
+  "'    GGUF_FILE=\$(ls models/*.gguf 2>/dev/null ^| head -1)'," ^
+  "'    MODELFILE=\"models/Modelfile\"'," ^
+  "'    if [ -n \"\$GGUF_FILE\" ] && [ -f \"\$MODELFILE\" ]; then'," ^
+  "'        echo \"Ollama 모델 등록 중: \$MODEL_NAME\"'," ^
+  "'        docker cp \"\$GGUF_FILE\" reeve-ollama:/root/\$(basename \"\$GGUF_FILE\")'," ^
+  "'        docker cp \"\$MODELFILE\" reeve-ollama:/root/Modelfile'," ^
+  "'        docker exec reeve-ollama ollama create \"\$MODEL_NAME\" -f /root/Modelfile'," ^
+  "'        echo \"모델 등록 완료: \$MODEL_NAME\"'," ^
+  "'    else'," ^
+  "'        echo \"[정보] models/ 폴더에 .gguf 파일 또는 Modelfile이 없습니다.\"'," ^
+  "'        echo \"       (models/vehicle-vlm-v1.gguf + models/Modelfile)\"'," ^
+  "'    fi'," ^
+  "'fi'," ^
+  "''," ^
+  "'echo \"\"'," ^
+  "'echo \"======================================\"'," ^
+  "'echo \"설정 완료.\"'," ^
+  "'echo \"  Identifier API  : http://localhost:8001\"'," ^
+  "'echo \"  Identifier Docs : http://localhost:8001/docs\"'," ^
+  "'echo \"  Qdrant Dashboard: http://localhost:6333/dashboard\"'," ^
+  "'echo \"======================================\"'" ^
+  "); [IO.File]::WriteAllText('%DEST%\setup.sh', ($c -join [char]10) + [char]10)"
+
+powershell -NoProfile -Command ^
+  "$c = @(" ^
+  "'#!/bin/bash'," ^
+  "'set -e'," ^
+  "'cd \"\$(dirname \"\$0\")\"'," ^
+  "''," ^
+  "'echo \"[Reeve Identifier] 서비스 시작 (GPU)\"'," ^
+  "'docker compose up -d'," ^
+  "''," ^
+  "'echo \"\"'," ^
+  "'echo \"서비스가 시작되었습니다:\"'," ^
+  "'echo \"  Identifier API  : http://localhost:8001\"'," ^
+  "'echo \"  Identifier Docs : http://localhost:8001/docs\"'," ^
+  "'echo \"  Qdrant Dashboard: http://localhost:6333/dashboard\"'" ^
+  "); [IO.File]::WriteAllText('%DEST%\start.sh', ($c -join [char]10) + [char]10)"
+
+powershell -NoProfile -Command ^
+  "$c = @(" ^
+  "'#!/bin/bash'," ^
+  "'cd \"\$(dirname \"\$0\")\"'," ^
+  "''," ^
+  "'echo \"[Reeve Identifier] 서비스 중지 중...\"'," ^
+  "'docker compose down'," ^
+  "''," ^
+  "'echo \"완료.\"'" ^
+  "); [IO.File]::WriteAllText('%DEST%\stop.sh', ($c -join [char]10) + [char]10)"
+
+exit /b 0
+
+
+:: ============================================================
+:WRITE_PROD_WINDOWS_SCRIPTS
+set DEST=%~1
+
+(
+echo @echo off
+echo setlocal EnableDelayedExpansion
+echo cd /d "%%~dp0"
+echo.
+echo echo [Reeve Identifier] Windows 초기 설정
+echo echo ======================================
+echo.
+echo echo [1/5] Docker Desktop 확인 중...
+echo docker info ^> nul 2^>^&1
+echo if errorlevel 1 ^(
+echo     echo [오류] Docker Desktop이 실행되지 않았습니다.
+echo     echo        Docker Desktop을 시작한 후 다시 실행하세요.
+echo     pause
+echo     exit /b 1
+echo ^)
+echo echo       OK
+echo.
+echo echo [2/5] NVIDIA GPU 확인 중...
+echo nvidia-smi ^> nul 2^>^&1
+echo if errorlevel 1 ^(
+echo     echo [오류] NVIDIA GPU를 감지하지 못했습니다.
+echo     echo        Docker Desktop + WSL2 + NVIDIA Container Toolkit이 필요합니다.
+echo     pause
+echo     exit /b 1
+echo ^)
+echo for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name,memory.total --format=csv^,noheader 2^^>nul'^) do ^(
+echo     echo       GPU: %%%%g
+echo ^)
+echo.
+echo echo [3/5] 환경변수 파일 확인 중...
+echo if not exist ".env" ^(
+echo     copy ".env.example" ".env" ^> nul
+echo     echo       .env 파일이 생성되었습니다. 필요시 내용을 수정하세요.
+echo ^) else ^(
+echo     echo       .env 파일 존재 확인
+echo ^)
+echo.
+echo echo [4/5] Identifier 이미지 확인 중...
+echo docker image inspect reeve-identifier:latest ^> nul 2^>^&1
+echo if errorlevel 1 ^(
+echo     set IMAGE_TAR=
+echo     for %%%%f in ^(reeve-identifier-*.tar.gz^) do set IMAGE_TAR=%%%%f
+echo     if defined IMAGE_TAR ^(
+echo         echo       이미지 로드 중: ^^!IMAGE_TAR^^!
+echo         docker load ^< "^^!IMAGE_TAR^^!"
+echo         if errorlevel 1 ^(
+echo             echo [오류] Docker 이미지 로드 실패.
+echo             pause
+echo             exit /b 1
+echo         ^)
+echo     ^) else ^(
+echo         echo [오류] reeve-identifier:latest 이미지를 찾을 수 없습니다.
+echo         echo        reeve-identifier-*.tar.gz 를 이 폴더에 넣거나
+echo         echo        docker build -t reeve-identifier:latest -f Dockerfile . 로 빌드하세요.
+echo         pause
+echo         exit /b 1
+echo     ^)
+echo ^) else ^(
+echo     echo       reeve-identifier:latest 확인
+echo ^)
+echo.
+echo echo [5/5] 서비스 시작 중...
+echo docker compose up -d
+echo if errorlevel 1 ^(
+echo     echo [오류] 서비스 시작 실패.
+echo     pause
+echo     exit /b 1
+echo ^)
+echo.
+echo echo.
+echo echo Qdrant 준비 대기 중...
+echo :QDRANT_WAIT
+echo timeout /t 2 /nobreak ^> nul
+echo curl -s http://localhost:6333/healthz ^> nul 2^>^&1
+echo if errorlevel 1 goto QDRANT_WAIT
+echo echo Qdrant 준비 완료
+echo.
+echo set SNAPSHOT_FILE=
+echo for %%%%f in ^(snapshots\training_images*.snapshot^) do set SNAPSHOT_FILE=%%%%f
+echo.
+echo if defined SNAPSHOT_FILE ^(
+echo     echo.
+echo     echo Qdrant 스냅샷 복원 중: %%SNAPSHOT_FILE%%
+echo     curl -s http://localhost:6333/collections/training_images ^> nul 2^>^&1
+echo     if errorlevel 1 ^(
+echo         curl -s -X POST "http://localhost:6333/collections/training_images/snapshots/upload?priority=snapshot" ^^
+echo             -H "Content-Type:multipart/form-data" ^^
+echo             -F "snapshot=@%%SNAPSHOT_FILE%%"
+echo         if errorlevel 1 ^(
+echo             echo [경고] 스냅샷 복원 실패. setup.bat을 다시 실행하세요.
+echo         ^) else ^(
+echo             echo 스냅샷 복원 완료
+echo         ^)
+echo     ^) else ^(
+echo         echo training_images 컬렉션이 이미 존재합니다. 복원을 건너뜁니다.
+echo     ^)
+echo ^) else ^(
+echo     echo.
+echo     echo [정보] snapshots\ 폴더에 스냅샷 파일이 없습니다.
+echo     echo        Studio에서 스냅샷을 내보낸 후 이 폴더에 넣고 setup.bat을 다시 실행하세요.
+echo ^)
+echo.
+echo echo.
+echo echo Ollama 준비 대기 중...
+echo :OLLAMA_WAIT
+echo timeout /t 2 /nobreak ^> nul
+echo docker exec reeve-ollama ollama list ^> nul 2^>^&1
+echo if errorlevel 1 goto OLLAMA_WAIT
+echo.
+echo set MODEL_NAME=vehicle-vlm-v1
+echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^^VLM_MODEL_NAME" .env 2^^>nul'^) do set MODEL_NAME=%%%%a
+echo.
+echo docker exec reeve-ollama ollama list ^| findstr /i "%%MODEL_NAME%%" ^> nul 2^>^&1
+echo if not errorlevel 1 ^(
+echo     echo Ollama 모델 '%%MODEL_NAME%%' 이미 존재합니다.
+echo ^) else ^(
+echo     set GGUF_FILE=
+echo     for %%%%f in ^(models\*.gguf^) do set GGUF_FILE=%%%%f
+echo     if defined GGUF_FILE ^(
+echo         if exist "models\Modelfile" ^(
+echo             echo Ollama 모델 등록 중: %%MODEL_NAME%%
+echo             for %%%%f in ^(^^!GGUF_FILE^^!^) do docker cp "%%%%f" reeve-ollama:/root/%%%%~nxf
+echo             docker cp "models\Modelfile" reeve-ollama:/root/Modelfile
+echo             docker exec reeve-ollama ollama create %%MODEL_NAME%% -f /root/Modelfile
+echo             if errorlevel 1 ^(
+echo                 echo [경고] Ollama 모델 등록 실패.
+echo             ^) else ^(
+echo                 echo 모델 등록 완료: %%MODEL_NAME%%
+echo             ^)
+echo         ^) else ^(
+echo             echo [정보] models\Modelfile이 없습니다.
+echo         ^)
+echo     ^) else ^(
+echo         echo [정보] models\ 폴더에 .gguf 파일이 없습니다.
+echo         echo        ^(models\vehicle-vlm-v1.gguf + models\Modelfile^)
+echo     ^)
+echo ^)
+echo.
+echo echo.
+echo echo ======================================
+echo echo 설정 완료.
+echo echo   Identifier API  : http://localhost:8001
+echo echo   Identifier Docs : http://localhost:8001/docs
+echo echo   Qdrant Dashboard: http://localhost:6333/dashboard
+echo echo ======================================
+echo pause
+) > "%DEST%\setup.bat"
+
+(
+echo @echo off
+echo cd /d "%%~dp0"
+echo.
+echo echo [Reeve Identifier] 서비스 시작 ^(GPU^)...
+echo docker compose up -d
+echo.
+echo if errorlevel 1 ^(
+echo     echo [오류] 서비스 시작 실패. 로그를 확인하세요:
+echo     echo        docker compose logs
+echo     pause
+echo     exit /b 1
+echo ^)
+echo.
+echo echo.
+echo echo 서비스가 시작되었습니다:
+echo echo   Identifier API  : http://localhost:8001
+echo echo   Identifier Docs : http://localhost:8001/docs
+echo echo   Qdrant Dashboard: http://localhost:6333/dashboard
+) > "%DEST%\start.bat"
+
+(
+echo @echo off
+echo cd /d "%%~dp0"
+echo.
+echo echo [Reeve Identifier] 서비스 중지 중...
+echo docker compose down
+echo.
+echo echo 완료.
+) > "%DEST%\stop.bat"
+
+exit /b 0

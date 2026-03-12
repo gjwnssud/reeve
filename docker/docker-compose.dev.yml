@@ -1,11 +1,8 @@
 # ──────────────────────────────────────────
-# Studio 개발 환경 — Linux (NVIDIA GPU)
-# ollama + llamafactory: 컨테이너에서 GPU 사용
-# 실행: docker/dev/linux/start.sh
+# Studio 개발 환경 — dev override (Linux/Windows, NVIDIA GPU)
+# base: docker-compose.yml
+# 실행: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 # ──────────────────────────────────────────
-#
-# 경로 기준: 이 파일 위치(docker/dev/linux/)에서 상대경로
-#   ../../..  → 프로젝트 루트
 
 services:
   # MySQL Database (개발용)
@@ -13,13 +10,13 @@ services:
     image: mysql:8.0
     container_name: reeve-mysql
     env_file:
-      - ../../.env
+      - .env
     ports:
       - "3306:3306"
     volumes:
-      - ../../../data/mysql:/var/lib/mysql
-      - ../../../sql/user_provided_ddl.sql:/docker-entrypoint-initdb.d/001_ddl.sql
-      - ../../../sql/user_provided_dml.sql:/docker-entrypoint-initdb.d/002_dml.sql
+      - ../data/mysql:/var/lib/mysql
+      - ../sql/user_provided_ddl.sql:/docker-entrypoint-initdb.d/001_ddl.sql
+      - ../sql/user_provided_dml.sql:/docker-entrypoint-initdb.d/002_dml.sql
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -41,17 +38,17 @@ services:
   # Studio Service (개발/관리용)
   studio:
     build:
-      context: ../../..
+      context: ..
       dockerfile: docker/Dockerfile
     container_name: reeve-studio
     env_file:
-      - ../../.env
+      - .env
     ports:
       - "8000:8000"
     volumes:
-      - ../../../studio:/app/studio
-      - ../../../data:/app/data
-      - ../../../logs:/app/logs
+      - ../studio:/app/studio
+      - ../data:/app/data
+      - ../logs:/app/logs
     environment:
       - MYSQL_HOST=mysql
       - QDRANT_HOST=qdrant
@@ -72,11 +69,11 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  # Linux: 소스 바인드 마운트 + ollama 컨테이너 사용 (GPU)
+  # 개발환경: 소스 바인드 마운트 (hot reload)
   identifier:
     volumes:
-      - ../../../identifier:/app/identifier
-      - ../../../logs:/app/logs
+      - ../identifier:/app/identifier
+      - ../logs:/app/logs
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     restart: no
@@ -85,5 +82,3 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     restart: no
-
-  # ollama, llamafactory: base docker-compose.yml NVIDIA GPU 설정 그대로 사용
