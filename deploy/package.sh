@@ -65,6 +65,17 @@ package_studio() {
     # OS별 override + 스크립트 복사
     cp "$DOCKER_DIR/dev/$os/"* "$dest/docker/dev/$os/"
 
+    # 루트 레벨 스크립트 복사 (setup/start/stop을 패키지 최상위에 배치)
+    if [ "$os" = "windows" ]; then
+        cp "$SCRIPT_DIR/templates/windows/setup.bat" "$dest/"
+        cp "$SCRIPT_DIR/templates/windows/start.bat" "$dest/"
+        cp "$SCRIPT_DIR/templates/windows/stop.bat"  "$dest/"
+    else
+        cp "$SCRIPT_DIR/templates/$os/setup.sh" "$dest/"
+        cp "$SCRIPT_DIR/templates/$os/start.sh" "$dest/"
+        cp "$SCRIPT_DIR/templates/$os/stop.sh"  "$dest/"
+    fi
+
     # 소스 복사
     copy_source "$dest"
 
@@ -76,6 +87,7 @@ package_studio() {
 
     if [ "$os" = "linux" ] || [ "$os" = "mac" ]; then
         chmod +x "$dest/docker/dev/$os/"*.sh 2>/dev/null || true
+        chmod +x "$dest/"*.sh 2>/dev/null || true
     fi
 
     info "Studio $os 패키지 완료: $dest"

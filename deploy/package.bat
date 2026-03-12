@@ -69,6 +69,17 @@ copy "%DOCKER_DIR%\Dockerfile.identifier"   "%DEST%\docker\" > nul
 :: Copy OS-specific overrides and scripts
 xcopy /e /i /q "%DOCKER_DIR%\dev\%OS%\*" "%DEST%\docker\dev\%OS%\" > nul
 
+:: Root-level scripts (setup/start/stop at package root)
+if "%OS%"=="windows" (
+    copy "%SCRIPT_DIR%templates\windows\setup.bat" "%DEST%\setup.bat" > nul
+    copy "%SCRIPT_DIR%templates\windows\start.bat" "%DEST%\start.bat" > nul
+    copy "%SCRIPT_DIR%templates\windows\stop.bat"  "%DEST%\stop.bat"  > nul
+) else (
+    copy "%SCRIPT_DIR%templates\%OS%\setup.sh" "%DEST%\setup.sh" > nul
+    copy "%SCRIPT_DIR%templates\%OS%\start.sh" "%DEST%\start.sh" > nul
+    copy "%SCRIPT_DIR%templates\%OS%\stop.sh"  "%DEST%\stop.sh"  > nul
+)
+
 :: Copy source (robocopy exit code 0=ok, 1=files copied, both are success)
 robocopy "%ROOT%\studio"     "%DEST%\studio"     /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
 if errorlevel 2 echo [WARN] robocopy error: %ROOT%\studio
