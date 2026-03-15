@@ -77,19 +77,9 @@ mkdir "%DEST%"
 
 :: Copy and patch docker-compose files (fix paths for package root context)
 :: context: .. -> context: .  |  dockerfile: docker/ -> dockerfile:  |  - ../ -> - ./
-powershell -NoProfile -Command ^
-  "(Get-Content '%DOCKER_DIR%\docker-compose.yml') ^
-   -replace 'context: \.\.(?!\.)','context: .' ^
-   -replace 'dockerfile: docker/','dockerfile: ' ^
-   -replace '- \.\./','- ./' ^
-   | Set-Content '%DEST%\docker-compose.yml'"
+powershell -NoProfile -Command "(Get-Content '%DOCKER_DIR%\docker-compose.yml') -replace 'context: \.\.(?!\.)','context: .' -replace 'dockerfile: docker/','dockerfile: ' -replace '- \.\./','- ./' | Set-Content '%DEST%\docker-compose.yml'"
 
-powershell -NoProfile -Command ^
-  "(Get-Content '%DOCKER_DIR%\docker-compose.dev.yml') ^
-   -replace 'context: \.\.(?!\.)','context: .' ^
-   -replace 'dockerfile: docker/','dockerfile: ' ^
-   -replace '- \.\./','- ./' ^
-   | Set-Content '%DEST%\docker-compose.dev.yml'"
+powershell -NoProfile -Command "(Get-Content '%DOCKER_DIR%\docker-compose.dev.yml') -replace 'context: \.\.(?!\.)','context: .' -replace 'dockerfile: docker/','dockerfile: ' -replace '- \.\./','- ./' | Set-Content '%DEST%\docker-compose.dev.yml'"
 
 copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
