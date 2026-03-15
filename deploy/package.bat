@@ -101,6 +101,9 @@ if errorlevel 2 echo [WARN] robocopy error: sql
 copy "%ROOT%\requirements.txt"            "%DEST%\" > nul
 copy "%ROOT%\requirements-identifier.txt" "%DEST%\" > nul
 
+:: Convert .sh files to LF line endings (CRLF causes "no such file or directory" in Linux containers)
+powershell -NoProfile -Command "Get-ChildItem -Path '%DEST%' -Filter '*.sh' -Recurse | ForEach-Object { $p=$_.FullName; $c=[IO.File]::ReadAllText($p).Replace([char]13+[char]10,[char]10); [IO.File]::WriteAllText($p,$c,[Text.UTF8Encoding]::new($false)) }"
+
 :: Create empty dirs for Docker volume mounts
 for %%d in (
     data\mysql data\qdrant data\redis data\ollama
@@ -340,7 +343,7 @@ echo     echo        ollama, llamafactory가 CPU로 실행됩니다.
 echo     set /p CONTINUE="계속 진행하시겠습니까? ^(y/N^): "
 echo     if /i "^^!CONTINUE^^!" neq "y" exit /b 1
 echo ^) else ^(
-echo     for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name --format=csv^,noheader 2^^>nul'^) do ^(
+echo     for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name --format=csv^,noheader 2^>nul'^) do ^(
 echo         echo       GPU 감지: %%%%g
 echo     ^)
 echo ^)
@@ -820,7 +823,7 @@ echo     echo        Docker Desktop + WSL2 + NVIDIA Container Toolkit이 필요�
 echo     pause
 echo     exit /b 1
 echo ^)
-echo for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name,memory.total --format=csv^,noheader 2^^>nul'^) do ^(
+echo for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name,memory.total --format=csv^,noheader 2^>nul'^) do ^(
 echo     echo       GPU: %%%%g
 echo ^)
 echo.
@@ -915,7 +918,7 @@ echo docker exec reeve-ollama ollama list ^> nul 2^>^&1
 echo if errorlevel 1 goto OLLAMA_WAIT
 echo.
 echo set MODEL_NAME=vehicle-vlm-v1
-echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^^VLM_MODEL_NAME" .env 2^^>nul'^) do set MODEL_NAME=%%%%a
+echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^^VLM_MODEL_NAME" .env 2^>nul'^) do set MODEL_NAME=%%%%a
 echo.
 echo docker exec reeve-ollama ollama list ^| findstr /i "%%MODEL_NAME%%" ^> nul 2^>^&1
 echo if not errorlevel 1 ^(
