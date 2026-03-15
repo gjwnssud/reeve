@@ -77,9 +77,13 @@ mkdir "%DEST%"
 
 :: Copy and patch docker-compose files (fix paths for package root context)
 :: context: .. -> context: .  |  dockerfile: docker/ -> dockerfile:  |  - ../ -> - ./
-powershell -NoProfile -Command "(Get-Content '%DOCKER_DIR%\docker-compose.yml') -replace 'context: \.\.(?!\.)','context: .' -replace 'dockerfile: docker/','dockerfile: ' -replace '- \.\./','- ./' | Set-Content '%DEST%\docker-compose.yml'"
-
-powershell -NoProfile -Command "(Get-Content '%DOCKER_DIR%\docker-compose.dev.yml') -replace 'context: \.\.(?!\.)','context: .' -replace 'dockerfile: docker/','dockerfile: ' -replace '- \.\./','- ./' | Set-Content '%DEST%\docker-compose.dev.yml'"
+set "_PJS=%TEMP%\reeve_patch_%RANDOM%.js"
+echo var fso=new ActiveXObject("Scripting.FileSystemObject"); > "%_PJS%"
+echo function patch(src,dst){var f=fso.OpenTextFile(src,1),t=f.ReadAll();f.Close();t=t.replace(/context: \.\./g,"context: .");t=t.replace(/dockerfile: docker\//g,"dockerfile: ");t=t.replace(/- \.\.\//g,"- ./");var w=fso.CreateTextFile(dst,true);w.Write(t);w.Close();} >> "%_PJS%"
+echo patch(WScript.Arguments(0),WScript.Arguments(1)); >> "%_PJS%"
+cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.yml" "%DEST%\docker-compose.yml"
+cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.dev.yml" "%DEST%\docker-compose.dev.yml"
+del "%_PJS%" 2>nul
 
 copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
