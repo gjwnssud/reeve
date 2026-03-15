@@ -20,6 +20,7 @@ set ROOT=%SCRIPT_DIR%..
 set DOCKER_DIR=%ROOT%\docker
 
 set TARGET=%~1
+echo [DEBUG] ARG1=[%~1]  TARGET=[%TARGET%]
 if "%TARGET%"=="" (
     echo Usage: package.bat [target]
     echo.
