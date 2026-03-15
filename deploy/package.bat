@@ -79,9 +79,9 @@ mkdir "%DEST%"
 :: Copy and patch docker-compose files (fix paths for package root context)
 :: context: .. -> context: .  |  dockerfile: docker/ -> dockerfile:  |  - ../ -> - ./
 set "_PJS=%TEMP%\reeve_patch_%RANDOM%.js"
-echo function readUTF8(p){var s=new ActiveXObject("ADODB.Stream");s.Open();s.Type=2;s.Charset="utf-8";s.LoadFromFile(p);var t=s.ReadText();s.Close();return t;} > "%_PJS%"
-echo function writeUTF8(p,t){var b=new ActiveXObject("ADODB.Stream");b.Open();b.Type=2;b.Charset="utf-8";b.WriteText(t);b.Position=3;b.Type=1;var d=b.Read();b.Close();var w=new ActiveXObject("ADODB.Stream");w.Open();w.Type=1;w.Write(d);w.SaveToFile(p,2);w.Close();} >> "%_PJS%"
-echo function patch(s,d){var t=readUTF8(s);t=t.replace(/context: \.\./g,"context: .");t=t.replace(/dockerfile: docker\//g,"dockerfile: ");t=t.replace(/- \.\.\//g,"- ./");writeUTF8(d,t);} >> "%_PJS%"
+echo function r(p){var s=new ActiveXObject("ADODB.Stream");s.Open();s.Type=2;s.Charset="utf-8";s.LoadFromFile(p);var t=s.ReadText();s.Close();return t;} > "%_PJS%"
+echo function w(p,t){var s=new ActiveXObject("ADODB.Stream");s.Open();s.Type=2;s.Charset="utf-8";s.WriteText(t);s.SaveToFile(p,2);s.Close();} >> "%_PJS%"
+echo function patch(s,d){var t=r(s);t=t.replace(/context: \.\./g,"context: .");t=t.replace(/dockerfile: docker\//g,"dockerfile: ");t=t.replace(/- \.\.\//g,"- ./");w(d,t);} >> "%_PJS%"
 echo patch(WScript.Arguments(0),WScript.Arguments(1)); >> "%_PJS%"
 cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.yml" "%DEST%\docker-compose.yml"
 cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.dev.yml" "%DEST%\docker-compose.dev.yml"
