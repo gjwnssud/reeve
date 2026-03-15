@@ -307,17 +307,21 @@ package_prod() {
         _write_prod_windows_scripts "$dest"
     fi
 
-    # Docker 이미지 빌드 + 저장
-    info "Identifier Docker 이미지 빌드 중..."
+    # Docker 이미지 빌드 + 저장 (임시 태그 사용 → 기존 reeve-identifier:latest 보존)
+    local TMP_TAG="reeve-identifier:pkg-$(date +%s)"
+    info "Identifier Docker 이미지 빌드 중... (tag: $TMP_TAG)"
     cd "$ROOT"
-    docker build -t reeve-identifier:latest -f docker/Dockerfile.identifier . \
+    docker build -t "$TMP_TAG" -f docker/Dockerfile.identifier . \
         || error "Docker 이미지 빌드 실패"
 
     info "이미지 저장 중 (시간이 걸릴 수 있습니다)..."
-    docker save reeve-identifier:latest | gzip > "$dest/reeve-identifier-latest.tar.gz"
+    docker save "$TMP_TAG" | gzip > "$dest/reeve-identifier-latest.tar.gz"
     local img_size
     img_size=$(du -sh "$dest/reeve-identifier-latest.tar.gz" | cut -f1)
     info "이미지 저장 완료: reeve-identifier-latest.tar.gz ($img_size)"
+
+    info "임시 이미지 삭제 중: $TMP_TAG"
+    docker rmi "$TMP_TAG" > /dev/null 2>&1 || true
 
     # Qdrant 스냅샷
     set +e
@@ -608,7 +612,13 @@ if ! docker image inspect reeve-identifier:latest > /dev/null 2>&1; then
     IMAGE_TAR=$(ls reeve-identifier-*.tar.gz 2>/dev/null | head -1)
     if [ -n "$IMAGE_TAR" ]; then
         echo "      이미지 로드 중: $IMAGE_TAR"
-        docker load < "$IMAGE_TAR"
+        LOAD_OUT=$(docker load < "$IMAGE_TAR")
+        echo "$LOAD_OUT"
+        LOADED_TAG=$(echo "$LOAD_OUT" | grep "Loaded image:" | awk '{print $NF}')
+        if [ -n "$LOADED_TAG" ] && [ "$LOADED_TAG" != "reeve-identifier:latest" ]; then
+            docker tag "$LOADED_TAG" reeve-identifier:latest
+            echo "      태그 설정: $LOADED_TAG → reeve-identifier:latest"
+        fi
     else
         echo "[오류] reeve-identifier:latest 이미지를 찾을 수 없습니다."
         echo "       reeve-identifier-*.tar.gz 파일을 이 디렉토리에 넣거나"
@@ -767,11 +777,21 @@ if errorlevel 1 (
     for %%f in (reeve-identifier-*.tar.gz) do set IMAGE_TAR=%%f
     if defined IMAGE_TAR (
         echo       이미지 로드 중: !IMAGE_TAR!
-        docker load < "!IMAGE_TAR!"
+        docker load < "!IMAGE_TAR!" > "%TEMP%\reeve_load.txt"
         if errorlevel 1 (
             echo [오류] Docker 이미지 로드 실패.
+            del "%TEMP%\reeve_load.txt" 2>nul
             pause
             exit /b 1
+        )
+        set LOADED_TAG=
+        for /f "tokens=3" %%t in ('findstr /i "Loaded image:" "%TEMP%\reeve_load.txt"') do set LOADED_TAG=%%t
+        del "%TEMP%\reeve_load.txt" 2>nul
+        if defined LOADED_TAG (
+            if "!LOADED_TAG!" neq "reeve-identifier:latest" (
+                docker tag "!LOADED_TAG!" reeve-identifier:latest
+                echo       태그 설정: !LOADED_TAG! -^> reeve-identifier:latest
+            )
         )
     ) else (
         echo [오류] reeve-identifier:latest 이미지를 찾을 수 없습니다.

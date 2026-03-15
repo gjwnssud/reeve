@@ -131,22 +131,27 @@ if "%OS%"=="linux" (
     call :WRITE_PROD_WINDOWS_SCRIPTS "%DEST%"
 )
 
-:: Build and save Identifier Docker image
-echo [INFO] Building Identifier Docker image...
+:: Build and save Identifier Docker image (temp tag to preserve existing reeve-identifier:latest)
+for /f "tokens=2 delims==" %%t in ('wmic os get LocalDateTime /value 2^>nul') do set DT=%%t
+set TMP_TAG=reeve-identifier:pkg-%DT:~0,14%
+echo [INFO] Building Identifier Docker image... (tag: %TMP_TAG%)
 cd /d "%ROOT%"
-docker build -t reeve-identifier:latest -f docker\Dockerfile.identifier .
+docker build -t "%TMP_TAG%" -f docker\Dockerfile.identifier .
 if errorlevel 1 (
     echo [ERROR] Docker image build failed
     exit /b 1
 )
 
 echo [INFO] Saving image (this may take a while)...
-docker save reeve-identifier:latest | wsl gzip > "%DEST%\reeve-identifier-latest.tar.gz"
+docker save "%TMP_TAG%" | wsl gzip > "%DEST%\reeve-identifier-latest.tar.gz"
 if errorlevel 1 (
     echo [ERROR] Docker image save failed
     exit /b 1
 )
 echo [INFO] Image saved: reeve-identifier-latest.tar.gz
+
+echo [INFO] Removing temp image: %TMP_TAG%
+docker rmi "%TMP_TAG%" > nul 2>&1
 
 :: Export Qdrant snapshot
 curl -s http://localhost:6333/healthz > nul 2>&1
@@ -649,7 +654,13 @@ powershell -NoProfile -Command ^
   "'    IMAGE_TAR=\$(ls reeve-identifier-*.tar.gz 2>/dev/null ^| head -1)'," ^
   "'    if [ -n \"\$IMAGE_TAR\" ]; then'," ^
   "'        echo \"      이미지 로드 중: \$IMAGE_TAR\"'," ^
-  "'        docker load < \"\$IMAGE_TAR\"'," ^
+  "'        LOAD_OUT=\$(docker load < \"\$IMAGE_TAR\")'," ^
+  "'        echo \"\$LOAD_OUT\"'," ^
+  "'        LOADED_TAG=\$(echo \"\$LOAD_OUT\" ^| grep \"Loaded image:\" ^| awk ''{print \$NF}'')'," ^
+  "'        if [ -n \"\$LOADED_TAG\" ] && [ \"\$LOADED_TAG\" != \"reeve-identifier:latest\" ]; then'," ^
+  "'            docker tag \"\$LOADED_TAG\" reeve-identifier:latest'," ^
+  "'            echo \"      태그 설정: \$LOADED_TAG → reeve-identifier:latest\"'," ^
+  "'        fi'," ^
   "'    else'," ^
   "'        echo \"[오류] reeve-identifier:latest 이미지를 찾을 수 없습니다.\"'," ^
   "'        echo \"       reeve-identifier-*.tar.gz 파일을 이 디렉토리에 넣거나\"'," ^
@@ -810,11 +821,21 @@ echo     set IMAGE_TAR=
 echo     for %%%%f in ^(reeve-identifier-*.tar.gz^) do set IMAGE_TAR=%%%%f
 echo     if defined IMAGE_TAR ^(
 echo         echo       이미지 로드 중: ^^!IMAGE_TAR^^!
-echo         docker load ^< "^^!IMAGE_TAR^^!"
+echo         docker load ^< "^^!IMAGE_TAR^^!" ^> "%%TEMP%%\reeve_load.txt"
 echo         if errorlevel 1 ^(
 echo             echo [오류] Docker 이미지 로드 실패.
+echo             del "%%TEMP%%\reeve_load.txt" 2^>nul
 echo             pause
 echo             exit /b 1
+echo         ^)
+echo         set LOADED_TAG=
+echo         for /f "tokens=3" %%%%t in ^('findstr /i "Loaded image:" "%%TEMP%%\reeve_load.txt"'^) do set LOADED_TAG=%%%%t
+echo         del "%%TEMP%%\reeve_load.txt" 2^>nul
+echo         if defined LOADED_TAG ^(
+echo             if "^^!LOADED_TAG^^!" neq "reeve-identifier:latest" ^(
+echo                 docker tag "^^!LOADED_TAG^^!" reeve-identifier:latest
+echo                 echo       태그 설정: ^^!LOADED_TAG^^! -^> reeve-identifier:latest
+echo             ^)
 echo         ^)
 echo     ^) else ^(
 echo         echo [오류] reeve-identifier:latest 이미지를 찾을 수 없습니다.
