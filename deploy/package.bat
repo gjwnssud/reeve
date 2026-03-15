@@ -20,29 +20,46 @@ set ROOT=%SCRIPT_DIR%..
 set DOCKER_DIR=%ROOT%\docker
 
 set TARGET=%~1
-echo [DEBUG] ARG1=[%~1]  TARGET=[%TARGET%]
-if "%TARGET%"=="" (
-    echo Usage: package.bat [target]
-    echo.
-    echo   dev-linux     Dev package for Linux environment (GPU)
-    echo   dev-windows   Dev package for Windows environment (GPU)
-    echo   prod-linux    Prod package for Linux environment
-    echo   prod-windows  Prod package for Windows environment
-    echo   all           Build all packages
-    exit /b 0
-)
 
-if "%TARGET%"=="dev-linux"    call :PACKAGE_DEV linux
-if "%TARGET%"=="dev-windows"  call :PACKAGE_DEV windows
-if "%TARGET%"=="prod-linux"   call :PACKAGE_PROD linux
-if "%TARGET%"=="prod-windows" call :PACKAGE_PROD windows
-if "%TARGET%"=="all" (
-    call :PACKAGE_DEV linux
-    call :PACKAGE_DEV windows
-    call :PACKAGE_PROD linux
-    call :PACKAGE_PROD windows
-)
+if /i "%TARGET%"=="dev-linux"    goto :RUN_DEV_LINUX
+if /i "%TARGET%"=="dev-windows"  goto :RUN_DEV_WINDOWS
+if /i "%TARGET%"=="prod-linux"   goto :RUN_PROD_LINUX
+if /i "%TARGET%"=="prod-windows" goto :RUN_PROD_WINDOWS
+if /i "%TARGET%"=="all"          goto :RUN_ALL
 
+echo Usage: package.bat [target]
+echo.
+echo   dev-linux     Dev package for Linux environment (GPU)
+echo   dev-windows   Dev package for Windows environment (GPU)
+echo   prod-linux    Prod package for Linux environment
+echo   prod-windows  Prod package for Windows environment
+echo   all           Build all packages
+exit /b 0
+
+:RUN_DEV_LINUX
+call :PACKAGE_DEV linux
+goto :DONE
+
+:RUN_DEV_WINDOWS
+call :PACKAGE_DEV windows
+goto :DONE
+
+:RUN_PROD_LINUX
+call :PACKAGE_PROD linux
+goto :DONE
+
+:RUN_PROD_WINDOWS
+call :PACKAGE_PROD windows
+goto :DONE
+
+:RUN_ALL
+call :PACKAGE_DEV linux
+call :PACKAGE_DEV windows
+call :PACKAGE_PROD linux
+call :PACKAGE_PROD windows
+goto :DONE
+
+:DONE
 echo.
 echo [DONE] Check each package under deploy\
 exit /b 0
