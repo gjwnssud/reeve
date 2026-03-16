@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 660" width="940" height="660" font-family="'Segoe UI', Arial, sans-serif">
+
+  <!-- Background -->
+  <rect width="940" height="660" fill="#F8F9FA" rx="12"/>
+
+  <!-- ══════════════════════════════════════════
+       TITLE
+  ══════════════════════════════════════════ -->
+  <text x="470" y="36" text-anchor="middle" font-size="17" font-weight="bold" fill="#1A1A2E">
+    Reeve — AI 차량 식별 시스템 아키텍처
+  </text>
+
+  <!-- ══════════════════════════════════════════
+       STUDIO BOX  (left)
+  ══════════════════════════════════════════ -->
+  <rect x="28" y="58" width="380" height="305" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1.8" rx="10"/>
+  <!-- header -->
+  <rect x="28" y="58" width="380" height="32" fill="#3B82F6" rx="10"/>
+  <rect x="28" y="78" width="380" height="12" fill="#3B82F6"/>
+  <text x="218" y="79" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">Studio  |  Port 8000  (학습 데이터 관리)</text>
+
+  <!-- Upload -->
+  <rect x="58" y="104" width="120" height="36" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.2" rx="6"/>
+  <text x="118" y="119" text-anchor="middle" font-size="11" font-weight="bold" fill="#1D4ED8">이미지 업로드</text>
+  <text x="118" y="132" text-anchor="middle" font-size="10" fill="#3B82F6">POST /api/upload</text>
+
+  <line x1="118" y1="140" x2="118" y2="156" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
+
+  <!-- YOLO (studio) -->
+  <rect x="58" y="156" width="120" height="36" fill="#BFDBFE" stroke="#2563EB" stroke-width="1.2" rx="6"/>
+  <text x="118" y="171" text-anchor="middle" font-size="11" font-weight="bold" fill="#1E40AF">YOLO26</text>
+  <text x="118" y="184" text-anchor="middle" font-size="10" fill="#1E40AF">차량 탐지 · BBox 크롭</text>
+
+  <line x1="178" y1="174" x2="206" y2="174" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
+
+  <!-- OpenAI -->
+  <rect x="206" y="156" width="120" height="36" fill="#BFDBFE" stroke="#2563EB" stroke-width="1.2" rx="6"/>
+  <text x="266" y="171" text-anchor="middle" font-size="11" font-weight="bold" fill="#1E40AF">OpenAI gpt-5.2</text>
+  <text x="266" y="184" text-anchor="middle" font-size="10" fill="#1E40AF">Vision API 분석</text>
+
+  <line x1="326" y1="174" x2="350" y2="174" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
+
+  <!-- RapidFuzz -->
+  <rect x="350" y="156" width="50" height="36" fill="#BFDBFE" stroke="#2563EB" stroke-width="1.2" rx="6"/>
+  <text x="375" y="171" text-anchor="middle" font-size="10" font-weight="bold" fill="#1E40AF">Fuzzy</text>
+  <text x="375" y="184" text-anchor="middle" font-size="9" fill="#1E40AF">매칭</text>
+
+  <!-- Admin -->
+  <line x1="118" y1="192" x2="118" y2="212" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
+  <rect x="58" y="212" width="120" height="36" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.2" rx="6"/>
+  <text x="118" y="227" text-anchor="middle" font-size="11" font-weight="bold" fill="#1D4ED8">관리자 검수</text>
+  <text x="118" y="240" text-anchor="middle" font-size="10" fill="#3B82F6">Admin UI</text>
+
+  <!-- CLIP (studio) -->
+  <line x1="118" y1="248" x2="118" y2="268" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
+  <rect x="58" y="268" width="120" height="36" fill="#BFDBFE" stroke="#2563EB" stroke-width="1.2" rx="6"/>
+  <text x="118" y="283" text-anchor="middle" font-size="11" font-weight="bold" fill="#1E40AF">CLIP-ViT-B/32</text>
+  <text x="118" y="296" text-anchor="middle" font-size="10" fill="#1E40AF">임베딩 생성 (512d)</text>
+
+  <!-- Qdrant (studio) -->
+  <line x1="178" y1="286" x2="228" y2="286" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
+  <rect x="228" y="268" width="162" fill="#1D4ED8" height="36" stroke="#1E3A8A" stroke-width="1.2" rx="6"/>
+  <text x="309" y="283" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">Qdrant</text>
+  <text x="309" y="296" text-anchor="middle" font-size="10" fill="#BAE6FD">training_images (512d COSINE)</text>
+
+  <!-- Finetune bar -->
+  <rect x="58" y="325" width="332" height="28" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1" rx="4"/>
+  <text x="224" y="335" text-anchor="middle" font-size="9.5" fill="#1D4ED8">LLaMA-Factory 파인튜닝 파이프라인</text>
+  <text x="224" y="347" text-anchor="middle" font-size="9" fill="#3B82F6">검수 데이터 → QLoRA (GPU) → GGUF → Ollama 배포</text>
+
+  <!-- ══════════════════════════════════════════
+       IDENTIFIER BOX  (right)  — visual_rag
+  ══════════════════════════════════════════ -->
+  <rect x="532" y="58" width="380" height="305" fill="#F0FDF4" stroke="#22C55E" stroke-width="1.8" rx="10"/>
+  <!-- header -->
+  <rect x="532" y="58" width="380" height="32" fill="#16A34A" rx="10"/>
+  <rect x="532" y="78" width="380" height="12" fill="#16A34A"/>
+  <text x="722" y="79" text-anchor="middle" font-size="13" font-weight="bold" fill="#fff">Identifier  |  Port 8001  (프로덕션 식별,  visual_rag 모드)</text>
+
+  <!-- Input -->
+  <rect x="562" y="104" width="120" height="36" fill="#DCFCE7" stroke="#22C55E" stroke-width="1.2" rx="6"/>
+  <text x="622" y="119" text-anchor="middle" font-size="11" font-weight="bold" fill="#15803D">차량 이미지 입력</text>
+  <text x="622" y="132" text-anchor="middle" font-size="10" fill="#16A34A">POST /identify</text>
+
+  <line x1="622" y1="140" x2="622" y2="156" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
+
+  <!-- YOLO (identifier) -->
+  <rect x="562" y="156" width="120" height="36" fill="#BBF7D0" stroke="#16A34A" stroke-width="1.2" rx="6"/>
+  <text x="622" y="171" text-anchor="middle" font-size="11" font-weight="bold" fill="#14532D">YOLO26  ①</text>
+  <text x="622" y="184" text-anchor="middle" font-size="10" fill="#15803D">차량 탐지 · BBox 크롭</text>
+
+  <line x1="622" y1="192" x2="622" y2="210" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
+
+  <!-- CLIP (identifier) -->
+  <rect x="562" y="210" width="120" height="36" fill="#BBF7D0" stroke="#16A34A" stroke-width="1.2" rx="6"/>
+  <text x="622" y="225" text-anchor="middle" font-size="11" font-weight="bold" fill="#14532D">CLIP-ViT-B/32  ②</text>
+  <text x="622" y="238" text-anchor="middle" font-size="10" fill="#15803D">512d 임베딩 추출</text>
+
+  <line x1="622" y1="246" x2="622" y2="264" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
+
+  <!-- Qdrant+Voting -->
+  <rect x="550" y="264" width="145" height="50" fill="#166534" stroke="#14532D" stroke-width="1.5" rx="6"/>
+  <text x="622" y="281" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">Qdrant 검색 + 집계  ③</text>
+  <text x="622" y="295" text-anchor="middle" font-size="10" fill="#86EFAC">Top-K 유사 이미지 검색</text>
+  <text x="622" y="308" text-anchor="middle" font-size="9.5" fill="#86EFAC">→ 상위 후보 N개 추출</text>
+
+  <!-- Arrow right to Qwen3 -->
+  <line x1="695" y1="289" x2="718" y2="289" stroke="#22C55E" stroke-width="2" marker-end="url(#ag)"/>
+
+  <!-- Qwen3 VLM — FINAL DECISION BOX -->
+  <rect x="718" y="258" width="182" height="62" fill="#14532D" stroke="#052E16" stroke-width="2" rx="8"/>
+  <text x="809" y="276" text-anchor="middle" font-size="12" font-weight="bold" fill="#4ADE80">Qwen3-VL:8b  ④</text>
+  <text x="809" y="292" text-anchor="middle" font-size="10.5" fill="#BBF7D0">(파인튜닝된 VLM)</text>
+  <text x="809" y="308" text-anchor="middle" font-size="10" fill="#86EFAC">후보 비교 → 최종 판정</text>
+
+  <!-- Arrow down from Qwen3 to result -->
+  <line x1="809" y1="320" x2="809" y2="338" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
+  <line x1="809" y1="338" x2="622" y2="338" stroke="#22C55E" stroke-width="1.5"/>
+  <line x1="622" y1="338" x2="622" y2="348" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
+
+  <!-- Result -->
+  <rect x="550" y="348" width="324" height="22" fill="#DCFCE7" stroke="#4ADE80" stroke-width="1" rx="4"/>
+  <text x="712" y="363" text-anchor="middle" font-size="10.5" fill="#15803D" font-weight="bold">identified  /  uncertain  /  no_data</text>
+
+  <!-- Shared Qdrant arrow -->
+  <line x1="408" y1="286" x2="530" y2="286" stroke="#6366F1" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#ap)"/>
+  <text x="469" y="279" text-anchor="middle" font-size="9.5" fill="#6366F1" font-weight="bold">학습 벡터 공유</text>
+
+  <!-- ══════════════════════════════════════════
+       ASYNC QUEUE
+  ══════════════════════════════════════════ -->
+  <rect x="28" y="390" width="884" height="88" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1.5" rx="10"/>
+  <text x="470" y="410" text-anchor="middle" font-size="12" font-weight="bold" fill="#92400E">비동기 처리  (Celery + Redis)</text>
+
+  <rect x="48" y="420" width="118" height="30" fill="#FDE68A" stroke="#F59E0B" stroke-width="1" rx="5"/>
+  <text x="107" y="432" text-anchor="middle" font-size="10" fill="#78350F">POST /async/identify</text>
+  <text x="107" y="444" text-anchor="middle" font-size="9" fill="#92400E">즉시 task_id 반환</text>
+
+  <line x1="166" y1="435" x2="194" y2="435" stroke="#F59E0B" stroke-width="1.5" marker-end="url(#aa)"/>
+
+  <rect x="194" y="420" width="90" height="30" fill="#FDE68A" stroke="#F59E0B" stroke-width="1" rx="5"/>
+  <text x="239" y="432" text-anchor="middle" font-size="10" fill="#78350F">Redis</text>
+  <text x="239" y="444" text-anchor="middle" font-size="9" fill="#92400E">Message Broker</text>
+
+  <line x1="284" y1="435" x2="312" y2="435" stroke="#F59E0B" stroke-width="1.5" marker-end="url(#aa)"/>
+
+  <rect x="312" y="420" width="130" height="30" fill="#FDE68A" stroke="#F59E0B" stroke-width="1" rx="5"/>
+  <text x="377" y="432" text-anchor="middle" font-size="10" fill="#78350F">Celery Worker</text>
+  <text x="377" y="444" text-anchor="middle" font-size="9" fill="#92400E">visual_rag 파이프라인</text>
+
+  <line x1="442" y1="435" x2="470" y2="435" stroke="#F59E0B" stroke-width="1.5" marker-end="url(#aa)"/>
+
+  <rect x="470" y="420" width="110" height="30" fill="#FDE68A" stroke="#F59E0B" stroke-width="1" rx="5"/>
+  <text x="525" y="432" text-anchor="middle" font-size="10" fill="#78350F">Redis Result</text>
+  <text x="525" y="444" text-anchor="middle" font-size="9" fill="#92400E">24h TTL 보관</text>
+
+  <line x1="580" y1="435" x2="608" y2="435" stroke="#F59E0B" stroke-width="1.5" marker-end="url(#aa)"/>
+
+  <rect x="608" y="420" width="140" height="30" fill="#FDE68A" stroke="#F59E0B" stroke-width="1" rx="5"/>
+  <text x="678" y="432" text-anchor="middle" font-size="10" fill="#78350F">GET /async/result/{id}</text>
+  <text x="678" y="444" text-anchor="middle" font-size="9" fill="#92400E">폴링 → SUCCESS</text>
+
+  <!-- ══════════════════════════════════════════
+       LEGEND
+  ══════════════════════════════════════════ -->
+  <rect x="28" y="498" width="884" height="146" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1" rx="10"/>
+
+  <!-- col 1 -->
+  <text x="50" y="518" font-size="11" font-weight="bold" fill="#334155">Foundation Model (사전학습)</text>
+  <rect x="50" y="526" width="12" height="12" fill="#BBF7D0" stroke="#16A34A" stroke-width="1" rx="2"/>
+  <text x="68" y="537" font-size="10" fill="#475569">YOLO26 (Ultralytics) — 차량 BBox 탐지</text>
+  <rect x="50" y="544" width="12" height="12" fill="#BBF7D0" stroke="#16A34A" stroke-width="1" rx="2"/>
+  <text x="68" y="555" font-size="10" fill="#475569">CLIP-ViT-B/32 (OpenAI) — 512d 이미지 임베딩</text>
+
+  <text x="50" y="578" font-size="11" font-weight="bold" fill="#334155">visual_rag 판별 흐름</text>
+  <text x="50" y="594" font-size="10" fill="#475569">① YOLO 탐지  →  ② CLIP 임베딩  →  ③ Qdrant Top-K 후보 추출  →  ④ Qwen3-VL 최종 판정</text>
+  <text x="50" y="610" font-size="10" fill="#6B7280">  ※ VLM 실패 시 VLM_FALLBACK_TO_CLIP=true이면 Voting Layer 결과로 자동 폴백</text>
+  <text x="50" y="626" font-size="10" fill="#6B7280">  ※ YOLO 미탐지 시 identified → uncertain 자동 하향 (오탐 방지)</text>
+
+  <!-- col 2 -->
+  <text x="520" y="518" font-size="11" font-weight="bold" fill="#334155">Custom 레이어 (자체 개발)</text>
+  <rect x="520" y="526" width="12" height="12" fill="#166534" rx="2"/>
+  <text x="538" y="537" font-size="10" fill="#475569">Qdrant 집계 Layer — Top-K 득표·유사도 집계 후 후보 N개 선별</text>
+  <rect x="520" y="544" width="12" height="12" fill="#14532D" rx="2"/>
+  <text x="538" y="555" font-size="10" fill="#475569">Qwen3-VL:8b — LLaMA-Factory로 파인튜닝, Ollama 배포, 최종 판정</text>
+
+  <text x="520" y="578" font-size="11" font-weight="bold" fill="#334155">인프라</text>
+  <rect x="520" y="586" width="12" height="12" fill="#1D4ED8" rx="2"/>
+  <text x="538" y="597" font-size="10" fill="#475569">Qdrant — 벡터 DB (COSINE similarity, on-disk)</text>
+  <rect x="520" y="604" width="12" height="12" fill="#FDE68A" stroke="#F59E0B" stroke-width="1" rx="2"/>
+  <text x="538" y="615" font-size="10" fill="#475569">Redis + Celery — 비동기 배치 처리 큐 (결과 24h 보관)</text>
+  <rect x="520" y="622" width="12" height="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1" rx="2"/>
+  <text x="538" y="633" font-size="10" fill="#475569">LLaMA-Factory — QLoRA 4bit 파인튜닝 WebUI (Port 7860)</text>
+
+  <!-- ══════════════════════════════════════════
+       ARROW MARKERS
+  ══════════════════════════════════════════ -->
+  <defs>
+    <marker id="ab" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3B82F6"/>
+    </marker>
+    <marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22C55E"/>
+    </marker>
+    <marker id="aa" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#F59E0B"/>
+    </marker>
+    <marker id="ap" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#6366F1"/>
+    </marker>
+  </defs>
+
+</svg>

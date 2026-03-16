@@ -102,7 +102,13 @@ copy "%ROOT%\requirements.txt"            "%DEST%\" > nul
 copy "%ROOT%\requirements-identifier.txt" "%DEST%\" > nul
 
 :: Convert .sh files to LF line endings (CRLF causes "no such file or directory" in Linux containers)
-powershell -NoProfile -Command "Get-ChildItem -Path '%DEST%' -Filter '*.sh' -Recurse | ForEach-Object { $p=$_.FullName; $c=[IO.File]::ReadAllText($p).Replace([char]13+[char]10,[char]10); [IO.File]::WriteAllText($p,$c,[Text.UTF8Encoding]::new($false)) }"
+set "_LJS=%TEMP%\reeve_lf_%RANDOM%.js"
+echo function r(p){var s=new ActiveXObject("ADODB.Stream");s.Open();s.Type=2;s.Charset="utf-8";s.LoadFromFile(p);var t=s.ReadText();s.Close();return t;} > "%_LJS%"
+echo function w(p,t){var s=new ActiveXObject("ADODB.Stream");s.Open();s.Type=2;s.Charset="utf-8";s.WriteText(t);s.Position=0;s.Type=1;s.Read(3);var b=new ActiveXObject("ADODB.Stream");b.Open();b.Type=1;s.CopyTo(b);s.Close();b.SaveToFile(p,2);b.Close();} >> "%_LJS%"
+echo function walk(fso,folder){var fi=new Enumerator(folder.Files);for(;^!fi.atEnd();fi.moveNext()){var f=fi.item();if(/\.sh$/i.test(f.Name)){w(f.Path,r(f.Path).replace(/\r\n/g,"\n"));}}var si=new Enumerator(folder.SubFolders);for(;^!si.atEnd();si.moveNext()){walk(fso,si.item());}} >> "%_LJS%"
+echo var fso=new ActiveXObject("Scripting.FileSystemObject");walk(fso,fso.GetFolder(WScript.Arguments(0))); >> "%_LJS%"
+cscript //nologo "%_LJS%" "%DEST%"
+del "%_LJS%" 2>nul
 
 :: Create empty dirs for Docker volume mounts
 for %%d in (

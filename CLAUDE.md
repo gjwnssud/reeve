@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Reeve is an AI-powered vehicle manufacturer/model identification system. It has two independent FastAPI services:
 
-- **Studio (port 8000)** — Development & admin service. Uses OpenAI Vision API (gpt-4o) for initial vehicle analysis, MySQL for structured data, and syncs verified training data to Qdrant.
+- **Studio (port 8000)** — Development & admin service. Uses OpenAI Vision API (gpt-5.2) for initial vehicle analysis, MySQL for structured data, and syncs verified training data to Qdrant.
 - **Identifier (port 8001)** — Production identification service. Lightweight, MySQL-free. Uses CLIP image embeddings + Qdrant vector search with weighted voting to identify vehicles. Supports sync batch and async (Celery) processing.
 
 **Data flow:** Image → OpenAI Vision → fuzzy match to DB → admin review → CLIP embedding → Qdrant → identifier service uses trained vectors for future identification.
@@ -14,13 +14,10 @@ Reeve is an AI-powered vehicle manufacturer/model identification system. It has 
 ## Commands
 
 ```bash
-# Start Studio (Mac)
-cd docker && ./dev/mac/start.sh
+# Start Dev (Studio + Identifier + MySQL + Qdrant + Redis + Ollama + LLaMA-Factory)
+cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-# Start Studio (Linux)
-cd docker && ./dev/linux/start.sh
-
-# Start production only (qdrant + identifier + redis + celery-worker + ollama)
+# Start production only (qdrant + identifier + redis + celery-worker + ollama + llamafactory)
 cd docker && docker compose -f docker-compose.yml up -d
 
 # Run studio locally
@@ -54,13 +51,15 @@ studio/                              identifier/
 ├── models/         (SQLAlchemy ORM: manufacturers, vehicle_models,
 │                    analyzed_vehicles, training_dataset)
 ├── services/
-│   ├── openai_vision.py   (gpt-4o integration)
+│   ├── openai_vision.py   (OpenAI Vision API, gpt-5.2)
 │   ├── matcher.py         (code match → RapidFuzz → auto-register)
 │   ├── embedding.py       (CLIP image embeddings, 512d)
 │   ├── vectordb.py        (Qdrant: training_images collection only)
 │   ├── vehicle_detector.py (YOLO26)
 │   ├── image_utils.py
 │   └── llm_local.py       (local Vision LLM, air-gapped env)
+├── tasks/
+│   └── cleanup.py         (APScheduler: daily cleanup of old unverified records)
 └── static/
     ├── index.html      (관리자: 기초DB관리 탭 + 학습데이터추출 탭)
     ├── analyze_v2.html (분석 UI, 메인 페이지 /)
@@ -77,7 +76,8 @@ studio/                              identifier/
 - **Batch processing**: YOLO/CLIP/Qdrant all run in batch mode. `/identify/batch` accepts up to 100 files / 100MB.
 - **Async queue pattern**: FastAPI (identifier) pushes to Redis queue → Celery Worker pulls and processes → result stored in Redis 24h. API and Worker share the same Docker image (`Dockerfile.identifier`) but run as separate containers.
 - **Finetune pipeline** (`studio/api/finetune.py`): Export training data → saves `vehicle_train.json`, `vehicle_val.json`, `dataset_info.json` directly to `data/finetune/` (LLaMA-Factory sharegpt format, auto-registered) → LLaMA-Factory WebUI (port 7860) → QLoRA 4bit training → LoRA merge → GGUF convert → Ollama deploy. Train/stop/status/logs endpoints removed — LLaMA-Factory WebUI handles training.
-- **Docker Compose env-specific files**: `docker-compose.yml` is the production base (qdrant + identifier + redis + celery-worker + ollama + llamafactory with NVIDIA GPU). `.env`는 `docker/.env`에 위치. OS별 override는 `docker/dev/` 하위에 분리: `dev/mac/docker-compose.yml` (ollama+llamafactory CPU 모드, mysql+studio 추가), `dev/linux/docker-compose.yml` (NVIDIA GPU 유지, mysql+studio 추가), `dev/windows/docker-compose.yml` (GPU 유지, mysql+studio 추가). `docker-compose.override.yml` 삭제됨. Identifier standalone은 `docker/prod/{linux,windows}/docker-compose.yml` (별도 compose, pre-built image 사용).
+- **Docker Compose 구조**: `docker-compose.yml`은 프로덕션 베이스 (qdrant + identifier + redis + celery-worker + ollama + llamafactory with NVIDIA GPU). `docker-compose.dev.yml`은 개발용 오버라이드 (mysql + studio 추가, source code bind-mount, restart:no). `.env`는 `docker/.env`에 위치. 개발 시작: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`.
+- **자동 정리 스케줄러** (`studio/tasks/cleanup.py`): APScheduler 기반 크론 작업. 매일 `CLEANUP_HOUR`시에 `is_verified=false`이고 `ANALYZED_VEHICLES_RETENTION_DAYS`(default 30)일이 지난 `analyzed_vehicles` 레코드와 연결된 이미지 파일을 자동 삭제. `CLEANUP_ENABLED=false`로 비활성화 가능.
 - **DB-First upload architecture** (`analyze.py`): `POST /api/upload` first saves file to `data/uploads/YYYY-MM-DD/` and creates `analyzed_vehicles` record (processing_stage='uploaded'). Frontend then calls `POST /api/detect-vehicle` (YOLO), user selects bbox, then `POST /api/analyze-vehicle-stream` triggers SSE: crop → Vision API → DB update. This separates file ingestion from analysis.
 - **Studio UI routing**: `GET /` and `GET /analyze-ui` → analyze_v2.html (main). `GET /admin-ui` → index.html with two tabs: "기초DB관리" (CRUD) and "학습데이터추출" (export + LLaMA-Factory link).
 - **Workers auto-calculation**: `workers = cpu_count // IDENTIFIER_TORCH_THREADS`. Set only `IDENTIFIER_TORCH_THREADS` in `.env`; `start.sh` calculates the rest.
@@ -115,12 +115,15 @@ Both services use Pydantic Settings loading from `.env`. Key settings:
 | `CELERY_MAX_RETRIES` | identifier | Auto-retry count on failure (default 3) |
 | `IDENTIFIER_MODE` | identifier | `clip_only` / `visual_rag` / `vlm_only` (default: clip_only) |
 | `OLLAMA_BASE_URL` | identifier | Ollama server URL (default: http://localhost:11434) |
-| `VLM_MODEL_NAME` | identifier | Ollama model name (default: vehicle-vlm-v1) |
+| `VLM_MODEL_NAME` | identifier | Ollama model name (default: qwen3-vl:8b) |
 | `VLM_TIMEOUT` | identifier | VLM request timeout in seconds (default 30) |
 | `VLM_MAX_CANDIDATES` | identifier | Candidates passed to VLM in visual_rag mode (default 5) |
 | `VLM_FALLBACK_TO_CLIP` | identifier | Fall back to CLIP result on VLM failure (default true) |
 | `VLM_BATCH_CONCURRENCY` | identifier | Concurrent VLM calls in batch mode (default 2) |
 | `FUZZY_MATCH_THRESHOLD` | studio | RapidFuzz match threshold (0-100, default 80) |
+| `CLEANUP_ENABLED` | studio | Enable scheduled cleanup of old unverified records (default true) |
+| `CLEANUP_HOUR` | studio | Hour of day (0-23) for daily cleanup job (default 3) |
+| `ANALYZED_VEHICLES_RETENTION_DAYS` | studio | Days to retain unverified analyzed_vehicles records (default 30) |
 | `LOG_LEVEL` | both | Logging level (INFO, DEBUG, etc.) |
 | `STUDIO_LOG_FILE` | studio | Application log file path |
 | `IDENTIFIER_LOG_FILE` | identifier | Identifier service log file path |
