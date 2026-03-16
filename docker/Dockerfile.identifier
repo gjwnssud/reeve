@@ -10,9 +10,10 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 의존성
+# Python 의존성 (torch는 CUDA 버전 먼저 설치)
 COPY requirements-identifier.txt .
-RUN pip install --no-cache-dir -r requirements-identifier.txt
+RUN pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124 && \
+    pip install --no-cache-dir -r requirements-identifier.txt
 
 # CLIP 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('clip-ViT-B-32')"
