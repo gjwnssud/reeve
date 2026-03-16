@@ -23,6 +23,10 @@ RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 # 애플리케이션 코드
 COPY identifier/ ./identifier/
 
+# 시작 스크립트 실행 권한 및 LF 변환 (Windows 환경 대비)
+RUN sed -i 's/\r$//' /app/identifier/start.sh /app/identifier/start_worker.sh && \
+    chmod +x /app/identifier/start.sh /app/identifier/start_worker.sh
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
