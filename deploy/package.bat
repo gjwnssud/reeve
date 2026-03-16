@@ -347,9 +347,9 @@ echo if errorlevel 1 ^(
 echo     echo [경고] NVIDIA GPU를 감지하지 못했습니다.
 echo     echo        ollama, llamafactory가 CPU로 실행됩니다.
 echo     set /p CONTINUE="계속 진행하시겠습니까? ^(y/N^): "
-echo     if /i "^^!CONTINUE^^!" neq "y" exit /b 1
+echo     if /i "%%CONTINUE%%" neq "y" exit /b 1
 echo ^) else ^(
-echo     for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name --format=csv^,noheader 2^>nul'^) do ^(
+echo     for /f "tokens=*" %%%%g in ^('nvidia-smi --query-gpu=name --format=csv^,noheader'^) do ^(
 echo         echo       GPU 감지: %%%%g
 echo     ^)
 echo ^)
@@ -848,7 +848,7 @@ echo     set IMAGE_TAR=
 echo     for %%%%f in ^(reeve-identifier-*.tar.gz^) do set IMAGE_TAR=%%%%f
 echo     if defined IMAGE_TAR ^(
 echo         echo       이미지 로드 중: ^^!IMAGE_TAR^^!
-echo         docker load ^< "^^!IMAGE_TAR^^!" ^> "%%TEMP%%\reeve_load.txt"
+echo         docker load ^< ^^!IMAGE_TAR^^! ^> "%%TEMP%%\reeve_load.txt"
 echo         if errorlevel 1 ^(
 echo             echo [오류] Docker 이미지 로드 실패.
 echo             del "%%TEMP%%\reeve_load.txt" 2^>nul
@@ -859,8 +859,8 @@ echo         set LOADED_TAG=
 echo         for /f "tokens=3" %%%%t in ^('findstr /i "Loaded image:" "%%TEMP%%\reeve_load.txt"'^) do set LOADED_TAG=%%%%t
 echo         del "%%TEMP%%\reeve_load.txt" 2^>nul
 echo         if defined LOADED_TAG ^(
-echo             if "^^!LOADED_TAG^^!" neq "reeve-identifier:latest" ^(
-echo                 docker tag "^^!LOADED_TAG^^!" reeve-identifier:latest
+echo             if ^^!LOADED_TAG^^! neq "reeve-identifier:latest" ^(
+echo                 docker tag ^^!LOADED_TAG^^! reeve-identifier:latest
 echo                 echo       태그 설정: ^^!LOADED_TAG^^! -^> reeve-identifier:latest
 echo             ^)
 echo         ^)
@@ -924,7 +924,7 @@ echo docker exec reeve-ollama ollama list ^> nul 2^>^&1
 echo if errorlevel 1 goto OLLAMA_WAIT
 echo.
 echo set MODEL_NAME=vehicle-vlm-v1
-echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^^VLM_MODEL_NAME" .env 2^>nul'^) do set MODEL_NAME=%%%%a
+echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^VLM_MODEL_NAME=" .env 2^>nul'^) do set MODEL_NAME=%%%%a
 echo.
 echo docker exec reeve-ollama ollama list ^| findstr /i "%%MODEL_NAME%%" ^> nul 2^>^&1
 echo if not errorlevel 1 ^(
