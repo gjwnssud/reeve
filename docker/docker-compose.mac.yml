@@ -1,32 +1,11 @@
 # ──────────────────────────────────────────
-# Mac 개발 환경 — GPU 제거 override
+# Mac 개발 환경 override
 # base: docker-compose.yml + docker-compose.dev.yml
 # 실행: docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
 # ──────────────────────────────────────────
-# Apple Silicon / Intel Mac 모두 NVIDIA GPU 미지원
-# devices: [] 로 GPU 예약 제거 → CPU 모드로 동작
+# GPU 설정은 docker-compose.gpu.yml에 분리되어 있으므로 Mac에서는 포함하지 않음.
+# Apple Silicon (arm64)에서 amd64 전용 이미지 실행을 위해 platform 명시.
 
 services:
-  identifier:
-    deploy:
-      resources:
-        reservations:
-          devices: []
-
-  celery-worker:
-    deploy:
-      resources:
-        reservations:
-          devices: []
-
-  ollama:
-    deploy:
-      resources:
-        reservations:
-          devices: []
-
   llamafactory:
-    deploy:
-      resources:
-        reservations:
-          devices: []
+    platform: linux/amd64

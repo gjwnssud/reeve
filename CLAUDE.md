@@ -15,13 +15,13 @@ Reeve is an AI-powered vehicle manufacturer/model identification system. It has 
 
 ```bash
 # Start Dev - Linux/Windows (NVIDIA GPU)
-cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 # Start Dev - Mac (CPU 모드, GPU 없음)
 cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
 
 # Start production only (qdrant + identifier + redis + celery-worker + ollama + llamafactory)
-cd docker && docker compose -f docker-compose.yml up -d
+cd docker && docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 # Run studio locally
 uvicorn studio.main:app --reload --port 8000

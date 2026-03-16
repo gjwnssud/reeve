@@ -19,11 +19,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 2G
+          cpus: '2.0'
+          memory: 3G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.5'
+          memory: 512M
 
   # Redis (Celery broker/backend)
   redis:
@@ -71,15 +71,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '4.0'
+          memory: 4G
         reservations:
-          cpus: '0.5'
-          memory: 1G
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+          cpus: '1.0'
+          memory: 2G
 
   # Ollama (로컬 VLM - Qwen3-VL, NVIDIA GPU)
   ollama:
@@ -94,13 +90,9 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
         limits:
-          memory: 16G
+          cpus: '4.0'
+          memory: 8G
 
   # LLaMA-Factory (VLM 파인튜닝 WebUI)
   llamafactory:
@@ -121,13 +113,9 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
         limits:
-          memory: 32G
+          cpus: '2.0'
+          memory: 8G
 
   # Celery Worker (배치 처리)
   celery-worker:
@@ -156,15 +144,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
+          cpus: '6.0'
           memory: 4G
         reservations:
           cpus: '2.0'
           memory: 2G
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
 networks:
   reeve-network:

@@ -60,6 +60,7 @@ package_dev() {
     # docker 파일 복사 (경로 패치 적용)
     patch_compose "$DOCKER_DIR/docker-compose.yml"     > "$dest/docker-compose.yml"
     patch_compose "$DOCKER_DIR/docker-compose.dev.yml" > "$dest/docker-compose.dev.yml"
+    cp "$DOCKER_DIR/docker-compose.gpu.yml" "$dest/docker-compose.gpu.yml"
     cp "$DOCKER_DIR/Dockerfile"            "$dest/"
     cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
     cp "$DOCKER_DIR/.env.example"          "$dest/"
@@ -135,8 +136,8 @@ else
 fi
 
 echo "[4/4] Docker 이미지 준비 중..."
-docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --ignore-buildable
-docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml pull --ignore-buildable
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml build
 
 echo ""
 echo "======================================"
@@ -150,7 +151,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "[Reeve Studio] Linux 서비스 시작 (GPU)"
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 echo ""
 echo "서비스가 시작되었습니다:"
@@ -166,7 +167,7 @@ EOF
 cd "$(dirname "$0")"
 
 echo "[Reeve Studio] 서비스 중지 중..."
-docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down
 
 echo "완료."
 EOF
@@ -233,8 +234,8 @@ if not exist ".env" (
 )
 
 echo [4/4] Docker 이미지 준비 중...
-docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --ignore-buildable
-docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml pull --ignore-buildable
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml build
 
 echo.
 echo ======================================
@@ -248,11 +249,11 @@ EOF
 cd /d "%~dp0"
 
 echo [Reeve Studio] Windows 서비스 시작 (GPU)...
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 if errorlevel 1 (
     echo [오류] 서비스 시작 실패. 로그를 확인하세요:
-    echo        docker compose -f docker-compose.yml -f docker-compose.dev.yml logs
+    echo        docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml logs
     pause
     exit /b 1
 )
@@ -270,7 +271,7 @@ EOF
 cd /d "%~dp0"
 
 echo [Reeve Studio] 서비스 중지 중...
-docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down
 
 echo 완료.
 EOF

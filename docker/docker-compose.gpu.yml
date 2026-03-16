@@ -1,0 +1,42 @@
+# ──────────────────────────────────────────
+# NVIDIA GPU 설정 override
+# NVIDIA GPU 환경 (Linux / Windows)에서 추가 적용
+# 실행: docker compose -f docker-compose.yml [-f docker-compose.dev.yml] -f docker-compose.gpu.yml up -d
+# ──────────────────────────────────────────
+
+services:
+  identifier:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  celery-worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  llamafactory:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

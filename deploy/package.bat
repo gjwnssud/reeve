@@ -86,6 +86,7 @@ echo patch(WScript.Arguments(0),WScript.Arguments(1)); >> "%_PJS%"
 cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.yml" "%DEST%\docker-compose.yml"
 cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.dev.yml" "%DEST%\docker-compose.dev.yml"
 del "%_PJS%" 2>nul
+copy "%DOCKER_DIR%\docker-compose.gpu.yml" "%DEST%\docker-compose.gpu.yml" > nul
 
 copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
@@ -275,8 +276,8 @@ powershell -NoProfile -Command ^
   "'fi'," ^
   "''," ^
   "'echo \"[4/4] Docker 이미지 준비 중...\"'," ^
-  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --ignore-buildable'," ^
-  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml build'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml pull --ignore-buildable'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml build'," ^
   "''," ^
   "'echo \"\"'," ^
   "'echo \"======================================\"'," ^
@@ -292,7 +293,7 @@ powershell -NoProfile -Command ^
   "'cd \"\$(dirname \"\$0\")\"'," ^
   "''," ^
   "'echo \"[Reeve Studio] Linux 서비스 시작 (GPU)\"'," ^
-  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d'," ^
   "''," ^
   "'echo \"\"'," ^
   "'echo \"서비스가 시작되었습니다:\"'," ^
@@ -310,7 +311,7 @@ powershell -NoProfile -Command ^
   "'cd \"\$(dirname \"\$0\")\"'," ^
   "''," ^
   "'echo \"[Reeve Studio] 서비스 중지 중...\"'," ^
-  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml down'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down'," ^
   "''," ^
   "'echo \"완료.\"'" ^
   "); [IO.File]::WriteAllText('%DEST%\stop.sh', ($c -join [char]10) + [char]10)"
@@ -379,8 +380,8 @@ echo     echo       .env 파일 존재 확인
 echo ^)
 echo.
 echo echo [4/4] Docker 이미지 준비 중...
-echo docker compose -f docker-compose.yml -f docker-compose.dev.yml pull --ignore-buildable
-echo docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml pull --ignore-buildable
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml build
 echo.
 echo echo.
 echo echo ======================================
@@ -395,11 +396,11 @@ echo chcp 65001 ^> nul
 echo cd /d "%%~dp0"
 echo.
 echo echo [Reeve Studio] Windows 서비스 시작 ^(GPU^)...
-echo docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 echo.
 echo if errorlevel 1 ^(
 echo     echo [오류] 서비스 시작 실패. 로그를 확인하세요:
-echo     echo        docker compose -f docker-compose.yml -f docker-compose.dev.yml logs
+echo     echo        docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml logs
 echo     pause
 echo     exit /b 1
 echo ^)
@@ -418,7 +419,7 @@ echo chcp 65001 ^> nul
 echo cd /d "%%~dp0"
 echo.
 echo echo [Reeve Studio] 서비스 중지 중...
-echo docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down
 echo.
 echo echo 완료.
 ) > "%DEST%\stop.bat"
