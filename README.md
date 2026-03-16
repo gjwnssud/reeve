@@ -2,7 +2,7 @@
 
 차량 이미지에서 제조사와 모델을 자동 식별하는 시스템.
 
-OpenAI Vision API로 차량을 1차 분석하고, 검수된 데이터를 벡터DB(Qdrant)에 CLIP 임베딩으로 축적하여 이미지 유사도 기반으로 판별하는 구조. 파인튜닝된 VLM(Ollama)을 활용한 재랭킹 모드도 지원.
+OpenAI Vision API (gpt-5.2)로 차량을 1차 분석하고, 검수된 데이터를 벡터DB(Qdrant)에 CLIP 임베딩으로 축적하여 이미지 유사도 기반으로 판별하는 구조. 파인튜닝된 VLM(Ollama)을 활용한 재랭킹 모드도 지원.
 
 ---
 
@@ -91,7 +91,7 @@ POST /api/analyze-vehicle-stream — SSE 스트리밍 분석
   ↓
 선택 bbox 크롭 → data/crops/YYYY-MM-DD/ 저장
   ↓
-OpenAI Vision API (gpt-4o) → JSON 파싱 (manufacturer_code, model_code, confidence)
+OpenAI Vision API (gpt-5.2) → JSON 파싱 (manufacturer_code, model_code, confidence)
   ↓
 기준 DB 매칭 (코드 정확매칭 → Fuzzy매칭 → 자동등록)
   ↓
@@ -194,7 +194,7 @@ reeve/
 │   │   ├── analyzed_vehicle.py      #   분석 결과 ORM 모델
 │   │   └── training_dataset.py      #   학습 데이터 ORM 모델 (7 컬럼)
 │   ├── services/
-│   │   ├── openai_vision.py         #   OpenAI gpt-4o Vision API 연동
+│   │   ├── openai_vision.py         #   OpenAI gpt-5.2 Vision API 연동
 │   │   ├── matcher.py               #   코드매칭 + RapidFuzz 퍼지매칭
 │   │   ├── embedding.py             #   CLIP 이미지 임베딩 (clip-ViT-B-32, 512d)
 │   │   ├── vectordb.py              #   Qdrant 벡터DB (training_images 컬렉션)
@@ -225,27 +225,11 @@ reeve/
 │       └── index.html               #   판별 UI
 ├── docker/
 │   ├── docker-compose.yml           # 운영 베이스 (qdrant + identifier + redis + celery-worker + ollama + llamafactory, NVIDIA GPU)
+│   ├── docker-compose.dev.yml       # 개발 override (Linux/Windows, NVIDIA GPU) — mysql + studio 추가
+│   ├── docker-compose.mac.yml       # 개발 override (Mac, GPU 없음) — GPU 예약 제거
 │   ├── Dockerfile                   # Studio 컨테이너 이미지
-│   ├── Dockerfile.identifier        # Identifier + Celery Worker 이미지
-│   ├── studio/
-│   │   ├── mac/                     # Mac 개발 환경 (ollama + llamafactory CPU 모드, mysql + studio 추가)
-│   │   │   ├── docker-compose.mac.yml
-│   │   │   └── setup.sh / start.sh / stop.sh
-│   │   ├── linux/                   # Linux 개발 환경 (ollama + llamafactory NVIDIA GPU, mysql + studio 추가)
-│   │   │   ├── docker-compose.linux.yml
-│   │   │   └── setup.sh / start.sh / stop.sh
-│   │   └── windows/                 # Windows 개발 환경 (ollama + llamafactory NVIDIA GPU, mysql + studio 추가)
-│   │       ├── docker-compose.windows.yml
-│   │       └── setup.bat / start.bat / stop.bat
-│   └── identifier/
-│       ├── linux/                   # 납품용 standalone — Linux (NVIDIA GPU)
-│       │   ├── docker-compose.yml
-│       │   ├── .env.example
-│       │   └── setup.sh / start.sh / stop.sh
-│       └── windows/                 # 납품용 standalone — Windows (NVIDIA GPU, Docker Desktop)
-│           ├── docker-compose.yml
-│           ├── .env.example
-│           └── setup.bat / start.bat / stop.bat
+│   ├── Dockerfile.identifier        # Identifier + Celery Worker 이미지 (CUDA torch 포함)
+│   └── .env.example                 # 환경변수 템플릿
 ├── deploy/                          # 납품 패키지 생성 스크립트
 │   ├── package.sh                   #   Mac/Linux에서 실행 — OS별 패키지 아카이빙
 │   └── package.bat                  #   Windows에서 실행 — OS별 패키지 아카이빙
@@ -281,78 +265,66 @@ reeve/
 
 ### 1. Studio 개발 환경
 
-#### Mac (ollama + llamafactory CPU 모드)
+#### Mac (CPU 모드, GPU 없음)
 
 ```bash
-# 최초 1회 — .env 생성 + 이미지 빌드
 cd docker
-./studio/mac/setup.sh
 
-# 이후 시작 / 중지
-./studio/mac/start.sh
-./studio/mac/stop.sh
+# 최초 1회 — .env 생성
+cp .env.example .env
+# .env 필수 수정: OPENAI_API_KEY, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD
+
+# 이미지 빌드 (최초 1회)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml build
+
+# 시작 / 중지
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml down
 ```
 
-`.env` 필수 수정 항목:
-
-```env
-OPENAI_API_KEY=sk-your-api-key-here
-MYSQL_ROOT_PASSWORD=your_root_password
-MYSQL_PASSWORD=your_password
-```
-
-#### Windows (ollama + llamafactory NVIDIA GPU)
-
-```bat
-REM 최초 1회 — .env 생성 + 이미지 빌드
-cd docker
-studio\windows\setup.bat
-
-REM 이후 시작 / 중지
-studio\windows\start.bat
-studio\windows\stop.bat
-```
-
-#### Linux (ollama + llamafactory NVIDIA GPU)
+#### Linux / Windows (NVIDIA GPU)
 
 ```bash
-# 최초 1회 — .env 생성 + 이미지 빌드
 cd docker
-./studio/linux/setup.sh
 
-# 이후 시작 / 중지
-./studio/linux/start.sh
-./studio/linux/stop.sh
+# 최초 1회 — .env 생성
+cp .env.example .env   # Windows: copy .env.example .env
+# .env 필수 수정: OPENAI_API_KEY, MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD
+
+# 이미지 빌드 (최초 1회)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+
+# 시작 / 중지
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ```
 
 ### 2. Studio 서비스 목록
 
-| 서비스 | 컨테이너 | 포트 | Mac | Linux | Windows |
-|--------|----------|------|-----|-------|---------|
-| studio | reeve-studio | 8000 | ✅ | ✅ | ✅ |
-| mysql | reeve-mysql | 3306 | ✅ | ✅ | ✅ |
-| qdrant | reeve-qdrant | 6333, 6334 | ✅ | ✅ | ✅ |
-| identifier | reeve-identifier | 8001 | ✅ | ✅ | ✅ |
-| redis | reeve-redis | 6379 | ✅ | ✅ | ✅ |
-| celery-worker | reeve-celery-worker | — | ✅ | ✅ | ✅ |
-| ollama | reeve-ollama | 11434 | CPU 모드 | NVIDIA GPU | NVIDIA GPU |
-| llamafactory | reeve-llamafactory | 7860 | CPU 모드 | NVIDIA GPU | NVIDIA GPU |
+| 서비스 | 컨테이너 | 포트 | Mac | Linux/Windows |
+|--------|----------|------|-----|---------------|
+| studio | reeve-studio | 8000 | ✅ | ✅ |
+| mysql | reeve-mysql | 3306 | ✅ | ✅ |
+| qdrant | reeve-qdrant | 6333, 6334 | ✅ | ✅ |
+| identifier | reeve-identifier | 8001 | ✅ (CPU) | ✅ (NVIDIA GPU) |
+| redis | reeve-redis | 6379 | ✅ | ✅ |
+| celery-worker | reeve-celery-worker | — | ✅ (CPU) | ✅ (NVIDIA GPU) |
+| ollama | reeve-ollama | 11434 | CPU 모드 | NVIDIA GPU |
+| llamafactory | reeve-llamafactory | 7860 | CPU 모드 | NVIDIA GPU |
 
-### 3. Identifier 납품 환경 (Linux, NVIDIA GPU)
+### 3. Identifier 납품 환경
 
-고객사 납품 시 OS에 맞는 `docker/identifier/linux/` 또는 `docker/identifier/windows/` 폴더를 전달합니다.
+`deploy/package.bat` (Windows) 또는 `deploy/package.sh` (Mac/Linux)를 실행하면 OS별 납품 패키지가 `deploy/` 하위에 생성됩니다.
 
-**Linux:**
+**Linux 납품 패키지 (deploy/prod/linux/):**
 ```bash
-cd docker/identifier/linux
 ./setup.sh    # 이미지 로드 + Qdrant 스냅샷 복원 + Ollama 모델 등록 (최초 1회)
 ./start.sh
 ./stop.sh
 ```
 
-**Windows:**
+**Windows 납품 패키지 (deploy\prod\windows\):**
 ```bat
-cd docker\identifier\windows
 setup.bat     REM 이미지 로드 + Qdrant 스냅샷 복원 + Ollama 모델 등록 (최초 1회)
 start.bat
 stop.bat
@@ -361,7 +333,7 @@ stop.bat
 납품 패키지 구성:
 
 ```
-docker/identifier/linux/
+deploy/prod/linux/
 ├── docker-compose.yml
 ├── .env.example
 ├── setup.sh / start.sh / stop.sh
@@ -369,7 +341,7 @@ docker/identifier/linux/
 │   └── training_images_*.snapshot   # Studio에서 export한 Qdrant 스냅샷
 └── models/
     ├── Modelfile
-    └── vehicle-vlm-v1.gguf          # 파인튜닝된 모델
+    └── *.gguf                       # 파인튜닝된 VLM 모델
 ```
 
 납품용 서비스 목록:
@@ -656,7 +628,7 @@ batch = db.query(TrainingDataset).filter(
 **Identifier VLM:**
 - `IDENTIFIER_MODE` — `clip_only` / `visual_rag` / `vlm_only` (기본: clip_only)
 - `OLLAMA_BASE_URL` — Ollama 서버 주소 (기본: http://localhost:11434)
-- `VLM_MODEL_NAME` — Ollama 모델명 (기본: vehicle-vlm-v1)
+- `VLM_MODEL_NAME` — Ollama 모델명 (기본: qwen3-vl:8b)
 - `VLM_TIMEOUT` — VLM 요청 타임아웃 초 (기본: 30)
 - `VLM_MAX_CANDIDATES` — visual_rag 모드 VLM에 전달할 후보 수 (기본: 5)
 - `VLM_FALLBACK_TO_CLIP` — VLM 실패 시 CLIP 결과로 폴백 (기본: true)
@@ -730,6 +702,15 @@ ALTER TABLE training_dataset PARTITION BY RANGE (YEAR(created_at)) (
 ---
 
 ## 주요 업데이트 이력
+
+### 2026-03-16
+
+**Docker 환경 정비 — Mac GPU 제거 override, CUDA torch 적용**
+
+- **`docker/docker-compose.mac.yml` 추가**: Mac 개발 환경에서 NVIDIA GPU 예약(`devices`) 제거용 override. `identifier`, `celery-worker`, `ollama`, `llamafactory` 서비스의 `devices: []` 설정으로 GPU 없이 CPU 모드 동작. 실행: `docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d`
+- **Dockerfile.identifier CUDA torch 적용**: `torch==2.6.0` CPU 전용 → PyTorch CUDA 12.4 인덱스에서 설치 (`--index-url https://download.pytorch.org/whl/cu124`). `identifier`, `celery-worker`에 NVIDIA GPU 예약 추가 (docker-compose.yml). 이미지 재빌드 필요
+- **Dockerfile.identifier .sh 파일 처리 추가**: `COPY identifier/` 후 `sed -i 's/\r$//'` + `chmod +x` 실행하여 Windows 환경에서 패키징된 `.sh` 파일의 CRLF 및 실행 권한 문제 방지
+- **package.bat 버그 수정 4건**: prod setup.bat의 `"^^!VAR^^!"` 내 delayed expansion 오류(→ 따옴표 밖으로 이동), findstr 패턴 `^^VLM_MODEL_NAME` 오류(→ `^VLM_MODEL_NAME=`). dev setup.bat GPU 감지의 `nvidia-smi --format=csv,noheader` 콤마 파싱 오류(→ `nvidia-smi -L`로 대체)
 
 ### 2026-03-09
 

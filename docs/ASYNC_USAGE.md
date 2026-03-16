@@ -178,14 +178,16 @@ while True:
 ### Docker Compose (권장)
 
 ```bash
-# Mac Studio 환경
-cd docker && ./studio/mac/start.sh
+# Mac 환경 (CPU 모드)
+cd docker
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
 
-# Linux Studio 환경
-cd docker && ./studio/linux/start.sh
+# Linux / Windows 환경 (NVIDIA GPU)
+cd docker
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # 로그 확인
-cd docker && docker compose -f docker-compose.yml logs -f celery-worker
+docker compose -f docker-compose.yml logs -f celery-worker
 ```
 
 ### 로컬 개발
@@ -250,13 +252,11 @@ celery -A identifier.celery_app flower
 ### Worker 재시작
 
 ```bash
-cd docker
 docker compose -f docker-compose.yml restart celery-worker
 ```
 
 ### Redis 데이터 삭제
 
 ```bash
-cd docker
 docker compose -f docker-compose.yml exec redis redis-cli FLUSHDB
 ```
