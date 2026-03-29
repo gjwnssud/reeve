@@ -76,7 +76,7 @@ async def get_hw_profile():
                 "batch_size": 1, "gradient_accumulation": 8,
                 "lora_rank": 16, "quantization_bit": None,
                 "learning_rate": "1e-4", "num_epochs": 3.0,
-                "flash_attn": None, "use_mps": True, "fp16": True,
+                "flash_attn": None, "use_mps": True, "fp16": False,
                 "cutoff_len": 1024,
             },
         }
@@ -309,7 +309,7 @@ async def export_data(params: ExportParams, db: Session = Depends(get_db)):
                     "value": gpt_response,
                 },
             ],
-            "images": [record.image_path],
+            "images": [str(Path(record.image_path).resolve())],
         }
 
     train_data = [to_entry(r) for r in train_records]

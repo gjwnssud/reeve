@@ -140,9 +140,8 @@ class LlamaFactoryService:
             "lora_rank": lora_rank,
             "lora_target": "all",
             "dataset": "vehicle_train",
-            "val_dataset": "vehicle_val",
             "dataset_dir": "/app/data" if not self.native else str(self.data_dir.resolve()),
-            "template": "qwen2_vl",
+            "template": "qwen3_vl_nothink",
             "cutoff_len": cutoff_len,
             "overwrite_cache": True,
             "preprocessing_num_workers": 4,
@@ -169,12 +168,10 @@ class LlamaFactoryService:
             config["quantization_type"] = "nf4"  # NF4가 fp4보다 정확도 높음
 
         # 정밀도
-        # - MPS: bf16 미지원(PyTorch 버그 #141864) → fp16 강제
+        # - MPS: use_mps_device/fp16/bf16 모두 생략 → PyTorch가 MPS 자동 감지
+        #   (transformers 5.0에서 use_mps_device deprecated, autocast fp16 MPS 버그 존재)
         # - CUDA: bf16 사용 (Ampere 이상 natively 지원)
-        if use_mps:
-            config["use_mps_device"] = True
-            config["fp16"] = True
-        else:
+        if not use_mps:
             config["bf16"] = True
 
         # Flash Attention
@@ -182,6 +179,11 @@ class LlamaFactoryService:
         # - sm_12x (Blackwell GB10 DGX Spark): 공식 미지원 → PyTorch SDPA 사용
         if flash_attn:
             config["flash_attn"] = flash_attn
+
+        # val 파일이 존재할 때만 eval_dataset 추가
+        val_path = self.data_dir / "vehicle_val.json"
+        if val_path.exists():
+            config["eval_dataset"] = "vehicle_val"
 
         import yaml
         yaml_path = self.data_dir / "train_config.yaml"
@@ -321,6 +323,23 @@ class LlamaFactoryService:
         rc, stdout, stderr = await self._exec(cmd, timeout=600)
         if rc != 0:
             return {"error": f"Export failed: {stderr}"}
+
+        # llamafactory export 버그: extra_special_tokens를 list로 저장 → dict로 수정
+        # (convert_hf_to_gguf.py에서 .keys() 호출 시 AttributeError 발생)
+        import json as _json
+        tokenizer_cfg_path = Path(output_dir) / "tokenizer_config.json"
+        if tokenizer_cfg_path.exists():
+            try:
+                cfg = _json.loads(tokenizer_cfg_path.read_text(encoding="utf-8"))
+                if isinstance(cfg.get("extra_special_tokens"), list):
+                    cfg["extra_special_tokens"] = {}
+                    tokenizer_cfg_path.write_text(
+                        _json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                    logger.info("Fixed extra_special_tokens list→dict in tokenizer_config.json")
+            except Exception as e:
+                logger.warning(f"Failed to fix tokenizer_config.json: {e}")
+
         return {"message": "Export completed", "output_dir": output_dir}
 
 
