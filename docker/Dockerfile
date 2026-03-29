@@ -26,8 +26,8 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 임베딩 모델 사전 다운로드 (빌드 시 캐싱)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('clip-ViT-B-32')"
+# EfficientNet-B3 모델 사전 다운로드 (빌드 시 캐싱)
+RUN python -c "import timm; timm.create_model('efficientnet_b3', pretrained=True, num_classes=0)"
 
 # YOLO26n 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"

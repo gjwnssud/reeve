@@ -5,628 +5,552 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reeve - 파인튜닝 관리</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/static/css/reeve-theme.css" rel="stylesheet">
     <style>
-        .finetune-layout {
-            display: grid;
-            grid-template-columns: 220px 1fr;
-            gap: 24px;
-            align-items: start;
-        }
-
-        /* 사이드바 */
-        .step-sidebar {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            overflow: hidden;
-            position: sticky;
-            top: 20px;
-        }
-
-        .step-sidebar-title {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 16px 20px;
-            font-weight: 600;
-            font-size: 0.95rem;
-        }
-
-        .step-nav-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 16px 20px;
-            cursor: pointer;
-            border-left: 3px solid transparent;
-            transition: all 0.2s;
-            color: #555;
-            font-size: 0.9rem;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .step-nav-item:hover {
-            background: #f8f9ff;
-            color: #667eea;
-        }
-
-        .step-nav-item.active {
-            background: #f0f3ff;
-            border-left-color: #667eea;
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .step-num {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: #e1e8ed;
-            color: #666;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-            flex-shrink: 0;
-        }
-
-        .step-nav-item.active .step-num {
-            background: #667eea;
-            color: white;
-        }
-
-        .step-nav-item.done .step-num {
-            background: #28a745;
-            color: white;
-        }
-
-        /* 메인 패널 */
-        .step-panel {
-            display: none;
-        }
-
-        .step-panel.active {
-            display: block;
-        }
-
-        .panel-card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            padding: 28px;
-            margin-bottom: 20px;
-        }
-
-        .panel-card h2 {
-            font-size: 1.3rem;
-            color: #333;
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        /* 통계 카드 */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, #667eea10, #764ba210);
-            border: 1px solid #667eea30;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #667eea;
-        }
-
-        .stat-label {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 4px;
-        }
-
-        /* 폼 컨트롤 */
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .form-group label {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #555;
-        }
-
-        .form-group input,
-        .form-group select {
-            padding: 9px 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            transition: border-color 0.2s;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px #667eea20;
-        }
-
-        /* 슬라이더 */
-        .slider-group {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .slider-group input[type="range"] {
-            flex: 1;
-            height: 6px;
-            accent-color: #667eea;
-        }
-
-        .slider-value {
-            font-weight: 700;
-            color: #667eea;
-            min-width: 48px;
-            text-align: right;
-        }
-
-        /* 페이지 네비게이션 */
-        .page-nav {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 16px;
-        }
-
-        .page-info {
-            font-size: 0.9rem;
-            color: #555;
-            flex: 1;
-        }
-
-        .page-info strong {
-            color: #667eea;
-        }
-
-        /* 버튼 */
-        .btn {
-            padding: 9px 18px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-
-        .btn-outline {
-            background: white;
-            border: 1px solid #667eea;
-            color: #667eea;
-        }
-
-        .btn-outline:hover:not(:disabled) {
-            background: #f0f3ff;
-        }
-
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover:not(:disabled) {
-            background: #c82333;
-        }
-
-        .btn-sm {
-            padding: 5px 12px;
-            font-size: 0.8rem;
-        }
-
-        .btn-icon {
-            padding: 6px 10px;
-            font-size: 1rem;
-        }
-
-        /* 코드 블록 */
-        .deploy-step {
-            margin-bottom: 20px;
-        }
-
-        .deploy-step-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .deploy-step-title {
-            font-weight: 600;
-            color: #444;
-            font-size: 0.95rem;
-        }
-
-        .code-block {
-            background: #f8f9fa;
-            border: 1px solid #e1e8ed;
-            border-radius: 8px;
-            padding: 14px 16px;
-            font-family: 'SFMono-Regular', Consolas, monospace;
-            font-size: 0.85rem;
-            color: #333;
-            white-space: pre-wrap;
-            word-break: break-all;
-            position: relative;
-        }
-
-        /* 알림 */
-        .alert {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-size: 0.9rem;
-        }
-
-        .alert-info { background: #cff4fc; color: #055160; border-left: 4px solid #0dcaf0; }
-        .alert-warning { background: #fff3cd; color: #664d03; border-left: 4px solid #ffc107; }
-        .alert-success { background: #d1e7dd; color: #0a3622; border-left: 4px solid #198754; }
-        .alert-error { background: #f8d7da; color: #842029; border-left: 4px solid #dc3545; }
-
-        /* 제조사 분포 테이블 */
-        .dist-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.88rem;
-            margin-top: 16px;
-        }
-
-        .dist-table th {
-            background: #f8f9fa;
-            padding: 8px 12px;
-            text-align: left;
-            border-bottom: 2px solid #e1e8ed;
-            color: #555;
-            font-weight: 600;
-        }
-
-        .dist-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
+        .step-panel { display: none; }
+        .step-panel.active { display: block; }
         .dist-bar {
             height: 6px;
             background: #667eea;
             border-radius: 3px;
             min-width: 4px;
         }
-
-        /* 버튼 그룹 */
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        /* 반응형 */
-        @media (max-width: 768px) {
-            .finetune-layout {
-                grid-template-columns: 1fr;
-            }
-            .step-sidebar {
-                position: static;
-            }
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* nav 링크 */
-        .nav-link {
-            display: inline-block;
-            padding: 8px 16px;
-            background: rgba(255,255,255,0.15);
-            color: white;
-            border-radius: 20px;
-            text-decoration: none;
-            font-size: 0.85rem;
-            margin-top: 12px;
-            margin-right: 8px;
-            transition: background 0.2s;
-        }
-
-        .nav-link:hover {
-            background: rgba(255,255,255,0.25);
-        }
-
-        .nav-link.active {
-            background: rgba(255,255,255,0.3);
-            font-weight: 600;
-        }
     </style>
 </head>
 <body>
-<div class="container">
-    <header>
-        <h1>Reeve - 파인튜닝 관리</h1>
-        <p class="subtitle">학습 데이터 Export → LLaMA-Factory 학습 → Ollama 배포 준비</p>
-        <div>
-            <a href="/admin-ui" class="nav-link">기초 DB 관리</a>
-            <a href="/analyze-ui" class="nav-link">이미지 분석</a>
-            <a href="/finetune-ui" class="nav-link active">파인튜닝</a>
-        </div>
-    </header>
+<button class="btn btn-primary position-fixed d-lg-none" style="top:.75rem;left:.75rem;z-index:1046;"
+        type="button" data-bs-toggle="offcanvas" data-bs-target="#reeveSidebar">
+    <i class="bi bi-list"></i>
+</button>
+<aside class="offcanvas offcanvas-start d-flex flex-column" id="reeveSidebar" tabindex="-1"
+       data-bs-theme="dark" style="width:220px;background:linear-gradient(180deg,#667eea 0%,#764ba2 100%);">
+    <div class="offcanvas-header border-bottom border-white border-opacity-25 d-lg-none">
+        <span class="offcanvas-title fw-bold"><i class="bi bi-car-front"></i> Reeve</span>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="py-4 text-center border-bottom border-white border-opacity-25 d-none d-lg-flex align-items-center justify-content-center">
+        <a href="/" class="text-white text-decoration-none fs-5 fw-bold"><i class="bi bi-car-front"></i> Reeve</a>
+    </div>
+    <nav class="flex-grow-1 p-2 overflow-y-auto">
+        <a href="/analyze-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white text-opacity-75"><i class="bi bi-camera"></i> 이미지 분석</a>
+        <a href="/admin-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white text-opacity-75"><i class="bi bi-database"></i> 차량데이터 관리</a>
+        <a href="/basic-data-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white text-opacity-75"><i class="bi bi-list-check"></i> 기초데이터 관리</a>
+        <a href="/finetune-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white fw-semibold bg-white bg-opacity-25"><i class="bi bi-gear"></i> 파인튜닝</a>
+    </nav>
+    <div class="p-3 border-top border-white border-opacity-25">
+        <button class="btn btn-outline-light btn-sm w-100" id="themeToggle"><i class="bi bi-moon-stars"></i> 테마</button>
+    </div>
+</aside>
 
-    <div class="finetune-layout">
+<div class="reeve-main">
+<div class="container-xxl py-4">
+    <div class="row g-4">
         <!-- 사이드바 -->
-        <aside class="step-sidebar">
-            <div class="step-sidebar-title">파인튜닝 단계</div>
-            <div class="step-nav-item active" data-step="export">
-                <div class="step-num">1</div>
-                <div>
-                    <div>데이터 Export</div>
-                    <div style="font-size:0.78rem;color:#888;font-weight:400;">학습 데이터 추출</div>
+        <div class="col-lg-3">
+            <div class="card sticky-top" style="top: 1.5rem;">
+                <div class="card-header text-white fw-semibold" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">파인튜닝 단계</div>
+                <div class="list-group list-group-flush">
+                    <button class="list-group-item list-group-item-action d-flex align-items-center gap-3 active" data-step="export">
+                        <span class="badge rounded-circle bg-primary" style="width:28px;height:28px;line-height:20px;">1</span>
+                        <div><div>데이터 Export</div><small class="text-muted">학습 데이터 추출</small></div>
+                    </button>
+                    <button class="list-group-item list-group-item-action d-flex align-items-center gap-3" data-step="train">
+                        <span class="badge rounded-circle bg-secondary" style="width:28px;height:28px;line-height:20px;">2</span>
+                        <div><div>모델 학습</div><small class="text-muted">LLaMA-Factory 학습</small></div>
+                    </button>
+                    <button class="list-group-item list-group-item-action d-flex align-items-center gap-3" data-step="evaluate">
+                        <span class="badge rounded-circle bg-secondary" style="width:28px;height:28px;line-height:20px;">3</span>
+                        <div><div>평가</div><small class="text-muted">Before/After 비교</small></div>
+                    </button>
+                    <button class="list-group-item list-group-item-action d-flex align-items-center gap-3" data-step="deploy">
+                        <span class="badge rounded-circle bg-secondary" style="width:28px;height:28px;line-height:20px;">4</span>
+                        <div><div>배포 준비</div><small class="text-muted">Ollama 커맨드 생성</small></div>
+                    </button>
                 </div>
             </div>
-            <div class="step-nav-item" data-step="train">
-                <div class="step-num">2</div>
-                <div>
-                    <div>모델 학습</div>
-                    <div style="font-size:0.78rem;color:#888;font-weight:400;">LLaMA-Factory WebUI</div>
-                </div>
-            </div>
-            <div class="step-nav-item" data-step="deploy">
-                <div class="step-num">3</div>
-                <div>
-                    <div>배포 준비</div>
-                    <div style="font-size:0.78rem;color:#888;font-weight:400;">Ollama 커맨드 생성</div>
-                </div>
-            </div>
-        </aside>
+        </div>
 
         <!-- 메인 패널 -->
-        <main>
-            <!-- ① 데이터 Export -->
+        <div class="col-lg-9">
+            <!-- Step 1: 데이터 Export -->
             <div id="panel-export" class="step-panel active">
                 <!-- 통계 카드 -->
-                <div class="panel-card">
-                    <h2>① 학습 데이터 현황</h2>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-value" id="stat-total">-</div>
-                            <div class="stat-label">총 학습 이미지</div>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">1. 학습 데이터 현황</h2>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-3 fw-bold text-primary" id="stat-total">-</div>
+                                        <div class="small text-muted mt-1">총 학습 이미지</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-3 fw-bold text-primary" id="stat-mfr-count">-</div>
+                                        <div class="small text-muted mt-1">제조사 수</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-3 fw-bold text-primary" id="stat-page-count">-</div>
+                                        <div class="small text-muted mt-1">현재 필터 페이지 수</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="stat-mfr-count">-</div>
-                            <div class="stat-label">제조사 수</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="stat-page-count">-</div>
-                            <div class="stat-label">현재 필터 페이지 수</div>
-                        </div>
-                    </div>
 
-                    <!-- 제조사 분포 -->
-                    <div id="dist-section" style="display:none;">
-                        <strong style="font-size:0.9rem;color:#555;">제조사별 분포</strong>
-                        <table class="dist-table">
-                            <thead>
-                                <tr>
-                                    <th>제조사</th>
-                                    <th>이미지 수</th>
-                                    <th style="width:140px;">비율</th>
-                                </tr>
-                            </thead>
-                            <tbody id="dist-tbody"></tbody>
-                        </table>
+                        <!-- 제조사 분포 -->
+                        <div id="dist-section" style="display:none;">
+                            <strong class="small text-muted">제조사별 분포</strong>
+                            <table class="table table-sm table-hover mt-2">
+                                <thead>
+                                    <tr>
+                                        <th>제조사</th>
+                                        <th>이미지 수</th>
+                                        <th style="width:140px;">비율</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dist-tbody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Export 설정 -->
-                <div class="panel-card">
-                    <h2>Export 설정</h2>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">Export 설정</h2>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>제조사 필터</label>
-                            <select id="filter-mfr">
-                                <option value="">전체 제조사</option>
-                            </select>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">제조사 필터</label>
+                                <select class="form-select" id="filter-mfr">
+                                    <option value="">전체 제조사</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">검증일 시작</label>
+                                <input type="date" class="form-control" id="filter-date-from">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">검증일 종료</label>
+                                <input type="date" class="form-control" id="filter-date-to">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">페이지당 건수</label>
+                                <select class="form-select" id="filter-page-size">
+                                    <option value="200">200건</option>
+                                    <option value="500" selected>500건</option>
+                                    <option value="1000">1000건</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>검증일 시작</label>
-                            <input type="date" id="filter-date-from">
-                        </div>
-                        <div class="form-group">
-                            <label>검증일 종료</label>
-                            <input type="date" id="filter-date-to">
-                        </div>
-                        <div class="form-group">
-                            <label>페이지당 건수</label>
-                            <select id="filter-page-size">
-                                <option value="200">200건</option>
-                                <option value="500" selected>500건</option>
-                                <option value="1000">1000건</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <div class="form-group" style="margin-bottom:16px;">
-                        <label>Train/Val 분리 비율</label>
-                        <div class="slider-group">
-                            <input type="range" id="split-slider" min="70" max="95" value="90" step="5">
-                            <span class="slider-value">Train <span id="split-train">90</span>% / Val <span id="split-val">10</span>%</span>
+                        <div class="mb-3">
+                            <label class="form-label">Train/Val 분리 비율</label>
+                            <div class="d-flex align-items-center gap-3">
+                                <input type="range" class="form-range" id="split-slider" min="70" max="100" value="100" step="5">
+                                <span class="fw-bold text-primary" style="min-width:200px;text-align:right;" id="split-label">전체 학습 (Val 없음)</span>
+                            </div>
+                            <small class="text-muted">100%: 전체 데이터를 학습셋으로 사용 (외부 검증셋 별도 운영 시 권장)</small>
                         </div>
-                    </div>
 
-                    <!-- 미리보기 결과 -->
-                    <div id="preview-result" class="alert alert-info" style="display:none;"></div>
+                        <!-- 미리보기 결과 -->
+                        <div id="preview-result" class="alert alert-info" style="display:none;"></div>
 
-                    <!-- 페이지 네비게이션 -->
-                    <div class="page-nav">
-                        <button class="btn btn-icon btn-outline" id="btn-prev-page" disabled>◀</button>
-                        <div class="page-info">
-                            페이지 <strong id="current-page">1</strong> / <strong id="total-pages">-</strong>
+                        <!-- 페이지 네비게이션 -->
+                        <div class="d-flex align-items-center gap-2 mt-3">
+                            <button class="btn btn-sm btn-outline-primary" id="btn-prev-page" disabled>&laquo;</button>
+                            <div class="small text-muted flex-grow-1">
+                                페이지 <strong class="text-primary" id="current-page">1</strong> / <strong class="text-primary" id="total-pages">-</strong>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" id="btn-next-page" disabled>&raquo;</button>
                         </div>
-                        <button class="btn btn-icon btn-outline" id="btn-next-page" disabled>▶</button>
-                    </div>
 
-                    <div class="btn-group" style="margin-top:16px;">
-                        <button class="btn btn-outline" id="btn-preview">미리보기</button>
-                        <button class="btn btn-primary" id="btn-export">Export 다운로드</button>
+                        <div class="d-flex gap-2 mt-3">
+                            <button class="btn btn-outline-primary" id="btn-preview">미리보기</button>
+                            <button class="btn btn-primary" id="btn-export" style="background:linear-gradient(135deg, #667eea, #764ba2);border:none;">Export 다운로드</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ② 모델 학습 (LLaMA-Factory WebUI) -->
+            <!-- Step 2: 모델 학습 -->
             <div id="panel-train" class="step-panel">
-                <div class="panel-card">
-                    <h2>② 모델 학습</h2>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">2. 모델 학습</h2>
 
-                    <div class="alert alert-info">
-                        Export 완료 후 LLaMA-Factory WebUI에서 파인튜닝을 진행하세요.<br>
-                        Export된 데이터는 <code>data/finetune/</code> 디렉토리에 자동 저장됩니다.
+                        <!-- 학습 상태 -->
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <strong>학습 상태:</strong>
+                            <span class="badge bg-secondary" id="train-status-badge">대기중</span>
+                        </div>
+
+                        <div class="row g-3 mb-3" id="train-status-grid">
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-5 fw-bold" id="ts-step">-</div>
+                                        <div class="small text-muted">Step</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-5 fw-bold" id="ts-epoch">-</div>
+                                        <div class="small text-muted">Epoch</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-5 fw-bold" id="ts-loss">-</div>
+                                        <div class="small text-muted">Loss</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <div class="fs-5 fw-bold" id="ts-lr">-</div>
+                                        <div class="small text-muted">Learning Rate</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="progress" id="train-progress-container" style="height: 8px; display:none;">
+                            <div class="progress-bar" id="train-progress-bar" style="width:0%;background:linear-gradient(135deg, #667eea, #764ba2);"></div>
+                        </div>
+                        <div id="train-progress-text" class="small text-muted mt-1" style="display:none;"></div>
                     </div>
+                </div>
 
-                    <div style="background:linear-gradient(135deg,#667eea08,#764ba215);border:1px solid #667eea40;border-radius:12px;padding:24px;margin-bottom:20px;">
-                        <h3 style="font-size:1.05rem;color:#333;margin-bottom:12px;">LLaMA-Factory WebUI</h3>
-                        <p style="font-size:0.88rem;color:#666;margin-bottom:16px;">
-                            QLoRA 4bit 학습, 학습 모니터링, 체크포인트 관리를 WebUI에서 처리할 수 있습니다.
-                        </p>
-                        <a href="http://localhost:7860" target="_blank"
-                           style="display:inline-flex;align-items:center;gap:8px;padding:10px 22px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:8px;font-size:0.9rem;font-weight:600;text-decoration:none;transition:opacity 0.2s;">
-                            LLaMA-Factory 열기 &rarr;
+                <!-- 학습 설정 -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom flex-wrap gap-2">
+                            <h2 class="h5 mb-0">학습 설정</h2>
+                            <button class="btn btn-outline-primary btn-sm" id="btn-hw-detect" onclick="detectHardware()">
+                                <i class="bi bi-cpu"></i> 하드웨어 자동감지
+                            </button>
+                        </div>
+                        <div id="hw-profile-badge" class="alert alert-info py-2 small mb-3" style="display:none;"></div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label">모델</label>
+                                <input type="text" class="form-control" id="train-model" value="Qwen/Qwen3-VL-8B-Instruct">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Output 디렉토리명</label>
+                                <input type="text" class="form-control" id="train-output-dir" value="vehicle-vlm">
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Epochs</label>
+                                <input type="number" class="form-control" id="train-epochs" value="3.0" step="0.5" min="0.5" max="50">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Learning Rate</label>
+                                <input type="text" class="form-control" id="train-lr" value="1e-4">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Batch Size</label>
+                                <select class="form-select" id="train-batch-size">
+                                    <option value="1">1</option>
+                                    <option value="2" selected>2</option>
+                                    <option value="4">4</option>
+                                    <option value="8">8</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Gradient Accumulation</label>
+                                <select class="form-select" id="train-grad-accum">
+                                    <option value="2">2</option>
+                                    <option value="4" selected>4</option>
+                                    <option value="8">8</option>
+                                    <option value="16">16</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">LoRA Rank</label>
+                                <select class="form-select" id="train-lora-rank">
+                                    <option value="4">4</option>
+                                    <option value="8" selected>8</option>
+                                    <option value="16">16</option>
+                                    <option value="32">32</option>
+                                    <option value="64">64</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Quantization Bit</label>
+                                <select class="form-select" id="train-quant-bit">
+                                    <option value="">없음 (Full LoRA)</option>
+                                    <option value="4" selected>4 (QLoRA)</option>
+                                    <option value="8">8</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Cutoff Length</label>
+                                <select class="form-select" id="train-cutoff-len">
+                                    <option value="512">512</option>
+                                    <option value="1024" selected>1024</option>
+                                    <option value="2048">2048</option>
+                                    <option value="4096">4096</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 mt-3">
+                            <button class="btn btn-success" id="btn-train-start">학습 시작</button>
+                            <button class="btn btn-danger" id="btn-train-stop" disabled>학습 중지</button>
+                        </div>
+
+                        <div id="train-message" class="alert mt-3" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- Loss 차트 -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">학습 Loss 차트</h2>
+                        <div class="bg-body-secondary border rounded p-3">
+                            <canvas id="loss-chart" width="800" height="250"></canvas>
+                        </div>
+                        <div class="small text-muted mt-2">
+                            학습 중 5초 간격으로 자동 갱신됩니다.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 원시 학습 로그 -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                            <h2 class="h5 mb-0">학습 프로세스 로그 (train.log)</h2>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="loadRawLog()">
+                                <i class="bi bi-arrow-clockwise"></i> 새로고침
+                            </button>
+                        </div>
+                        <pre id="raw-log-content" class="bg-body-secondary border rounded p-3 small"
+                             style="max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">(로그 없음)</pre>
+                    </div>
+                </div>
+
+                <!-- WebUI 대안 링크 -->
+                <div class="card mb-4">
+                    <div class="card-body d-flex align-items-center justify-content-between">
+                        <div>
+                            <strong>LLaMA-Factory WebUI (대안)</strong>
+                            <p class="small text-muted mb-0 mt-1">
+                                고급 설정이 필요하면 WebUI를 직접 사용할 수 있습니다.
+                            </p>
+                        </div>
+                        <a href="http://localhost:7860" target="_blank" class="btn btn-sm btn-outline-primary">
+                            WebUI 열기 &rarr;
                         </a>
                     </div>
+                </div>
+            </div>
 
-                    <div style="background:#f8f9fa;border-radius:10px;padding:20px;">
-                        <strong style="font-size:0.92rem;color:#555;">WebUI 학습 설정 가이드</strong>
-                        <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:0.85rem;">
-                            <tr style="border-bottom:1px solid #e9ecef;">
-                                <td style="padding:8px 12px;color:#555;font-weight:600;width:160px;">Model name</td>
-                                <td style="padding:8px 12px;"><code>Qwen/Qwen3-VL-8B-Instruct</code></td>
-                            </tr>
-                            <tr style="border-bottom:1px solid #e9ecef;">
-                                <td style="padding:8px 12px;color:#555;font-weight:600;">Finetuning method</td>
-                                <td style="padding:8px 12px;"><code>lora</code></td>
-                            </tr>
-                            <tr style="border-bottom:1px solid #e9ecef;">
-                                <td style="padding:8px 12px;color:#555;font-weight:600;">Quantization bit</td>
-                                <td style="padding:8px 12px;"><code>4</code> (QLoRA &mdash; VRAM 절약)</td>
-                            </tr>
-                            <tr style="border-bottom:1px solid #e9ecef;">
-                                <td style="padding:8px 12px;color:#555;font-weight:600;">Dataset</td>
-                                <td style="padding:8px 12px;"><code>vehicle_train</code> (Export 시 자동 등록)</td>
-                            </tr>
-                            <tr style="border-bottom:1px solid #e9ecef;">
-                                <td style="padding:8px 12px;color:#555;font-weight:600;">Val dataset</td>
-                                <td style="padding:8px 12px;"><code>vehicle_val</code></td>
-                            </tr>
-                            <tr>
-                                <td style="padding:8px 12px;color:#555;font-weight:600;">Output dir</td>
-                                <td style="padding:8px 12px;"><code>/app/output/vehicle-vlm</code></td>
-                            </tr>
-                        </table>
+            <!-- Step 3: 평가 -->
+            <div id="panel-evaluate" class="step-panel">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">3. Before/After 평가</h2>
+
+                        <div class="alert alert-info">
+                            학습된 모델을 Identifier 서비스에 배포한 후, 학습 데이터 샘플로 정확도를 측정합니다.<br>
+                            Identifier 서비스가 실행 중이어야 합니다.
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">샘플 수</label>
+                                <input type="number" class="form-control" id="eval-sample-size" value="50" min="1" max="500">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn btn-primary" id="btn-evaluate" style="background:linear-gradient(135deg, #667eea, #764ba2);border:none;">평가 실행</button>
+                            </div>
+                        </div>
+
+                        <div id="eval-loading" style="display:none;text-align:center;padding:40px;" class="text-muted">
+                            평가 진행 중... 샘플 수에 따라 시간이 걸릴 수 있습니다.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 평가 결과 -->
+                <div id="eval-results-section" style="display:none;">
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h2 class="h5 mb-3 pb-2 border-bottom">평가 결과</h2>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <div class="fs-3 fw-bold text-primary" id="eval-accuracy">-</div>
+                                            <div class="small text-muted mt-1">정확도 (%)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <div class="fs-3 fw-bold text-primary" id="eval-avg-confidence">-</div>
+                                            <div class="small text-muted mt-1">평균 Confidence</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <div class="fs-3 fw-bold text-primary" id="eval-correct">-</div>
+                                            <div class="small text-muted mt-1">정답</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <div class="fs-3 fw-bold text-primary" id="eval-evaluated">-</div>
+                                            <div class="small text-muted mt-1">평가 완료</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 오답 목록 -->
+                    <div class="card mb-4" id="eval-incorrect-section" style="display:none;">
+                        <div class="card-body">
+                            <h2 class="h5 mb-3 pb-2 border-bottom">오답 샘플 (최대 20건)</h2>
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>이미지</th>
+                                        <th>정답</th>
+                                        <th>예측</th>
+                                        <th>Confidence</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="eval-incorrect-tbody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ③ 배포 준비 -->
+            <!-- Step 4: 배포 준비 -->
             <div id="panel-deploy" class="step-panel">
-                <div class="panel-card">
-                    <h2>③ Ollama 배포 준비</h2>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">4. Ollama 배포 준비</h2>
 
-                    <div class="alert alert-warning">
-                        GGUF 변환은 환경마다 다르므로 커맨드만 생성합니다.
-                        아래 단계를 순서대로 실행하세요.
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group" style="grid-column: span 2;">
-                            <label>체크포인트 경로</label>
-                            <input type="text" id="deploy-checkpoint"
-                                placeholder="예: ./output/vehicle-vlm/checkpoint-500">
+                        <div class="alert alert-warning">
+                            GGUF 변환은 환경마다 다르므로 커맨드만 생성합니다.
+                            아래 단계를 순서대로 실행하세요.
                         </div>
-                        <div class="form-group">
-                            <label>Ollama 등록 모델명</label>
-                            <input type="text" id="deploy-model-name" value="vehicle-vlm-v1">
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label">체크포인트 경로</label>
+                                <input type="text" class="form-control" id="deploy-checkpoint"
+                                    placeholder="예: ./output/vehicle-vlm/checkpoint-500">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Ollama 등록 모델명</label>
+                                <input type="text" class="form-control" id="deploy-model-name" value="vehicle-vlm-v1">
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" id="btn-deploy-cmd" style="background:linear-gradient(135deg, #667eea, #764ba2);border:none;">커맨드 생성</button>
+                            <button class="btn btn-outline-primary" id="btn-export-model">LoRA 병합 실행</button>
                         </div>
                     </div>
-
-                    <button class="btn btn-primary" id="btn-deploy-cmd">커맨드 생성</button>
                 </div>
 
                 <div id="deploy-steps" style="display:none;">
-                    <div class="panel-card">
-                        <h2>배포 커맨드</h2>
-                        <div id="deploy-steps-content"></div>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h2 class="h5 mb-3 pb-2 border-bottom">배포 커맨드</h2>
+                            <div id="deploy-steps-content"></div>
+                        </div>
                     </div>
                 </div>
+
+                <div id="export-model-result" class="alert" style="display:none;"></div>
             </div>
-        </main>
+        </div>
     </div>
 </div>
+</div><!-- /.reeve-main -->
 
+<script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/theme-toggle.js"></script>
 <script>
-// ─── 상태 ───────────────────────────────────────────────────────────────────
+// === State ===
 let currentPage = 1;
 let totalPages = 1;
 let statsData = null;
+let trainPollingInterval = null;
+let lossData = [];
 
-// ─── 탭 네비게이션 ──────────────────────────────────────────────────────────
-document.querySelectorAll('.step-nav-item').forEach(item => {
+// === Tab Navigation ===
+document.querySelectorAll('.list-group-item[data-step]').forEach(item => {
     item.addEventListener('click', () => {
-        document.querySelectorAll('.step-nav-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('.list-group-item[data-step]').forEach(i => {
+            i.classList.remove('active');
+            i.querySelector('.badge').classList.remove('bg-primary');
+            i.querySelector('.badge').classList.add('bg-secondary');
+        });
         document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
         item.classList.add('active');
+        item.querySelector('.badge').classList.remove('bg-secondary');
+        item.querySelector('.badge').classList.add('bg-primary');
         document.getElementById(`panel-${item.dataset.step}`).classList.add('active');
-
-        // Step 2 (학습)는 LLaMA-Factory WebUI 링크만 표시
+        // 모델 학습 탭 진입 시 항상 상태 최신화
+        if (item.dataset.step === 'train') {
+            updateTrainStatus();
+            loadRawLog();
+        }
     });
 });
 
-// ─── 슬라이더 ───────────────────────────────────────────────────────────────
+// === Slider ===
 document.getElementById('split-slider').addEventListener('input', function () {
-    document.getElementById('split-train').textContent = this.value;
-    document.getElementById('split-val').textContent = 100 - this.value;
+    const val = parseInt(this.value);
+    const label = document.getElementById('split-label');
+    if (val >= 100) {
+        label.textContent = '전체 학습 (Val 없음)';
+        label.className = 'fw-bold text-success';
+    } else {
+        label.textContent = `Train ${val}% / Val ${100 - val}%`;
+        label.className = 'fw-bold text-primary';
+    }
 });
 
-// ─── 통계 로드 ──────────────────────────────────────────────────────────────
+// === Load Stats ===
 async function loadStats() {
     try {
         const res = await fetch('/finetune/stats');
@@ -636,7 +560,6 @@ async function loadStats() {
         document.getElementById('stat-total').textContent = statsData.total.toLocaleString();
         document.getElementById('stat-mfr-count').textContent = statsData.manufacturers_count;
 
-        // 제조사 필터 옵션
         const mfrSel = document.getElementById('filter-mfr');
         mfrSel.innerHTML = '<option value="">전체 제조사</option>';
         statsData.by_manufacturer.forEach(m => {
@@ -646,7 +569,6 @@ async function loadStats() {
             mfrSel.appendChild(opt);
         });
 
-        // 제조사 분포 테이블
         const tbody = document.getElementById('dist-tbody');
         tbody.innerHTML = '';
         const maxCount = statsData.by_manufacturer[0]?.count || 1;
@@ -655,11 +577,11 @@ async function loadStats() {
             const barW = Math.max(4, Math.round((m.count / maxCount) * 120));
             tbody.innerHTML += `
                 <tr>
-                    <td>${m.korean_name}<br><small style="color:#888">${m.english_name}</small></td>
+                    <td>${m.korean_name}<br><small class="text-muted">${m.english_name}</small></td>
                     <td>${m.count.toLocaleString()}</td>
                     <td><div style="display:flex;align-items:center;gap:8px;">
                         <div class="dist-bar" style="width:${barW}px;"></div>
-                        <span style="font-size:0.8rem;color:#888;">${pct}%</span>
+                        <span class="small text-muted">${pct}%</span>
                     </div></td>
                 </tr>`;
         });
@@ -669,7 +591,7 @@ async function loadStats() {
     }
 }
 
-// ─── 미리보기 ────────────────────────────────────────────────────────────────
+// === Preview ===
 document.getElementById('btn-preview').addEventListener('click', async () => {
     const params = getExportParams();
     try {
@@ -689,13 +611,13 @@ document.getElementById('btn-preview').addEventListener('click', async () => {
         const el = document.getElementById('preview-result');
         el.style.display = '';
         el.className = 'alert alert-info';
-        el.innerHTML = `총 <strong>${data.total.toLocaleString()}건</strong>의 데이터, 페이지당 <strong>${data.page_size}건</strong> → 총 <strong>${data.total_pages}페이지</strong>`;
+        el.innerHTML = `총 <strong>${data.total.toLocaleString()}건</strong>의 데이터, 페이지당 <strong>${data.page_size}건</strong> &rarr; 총 <strong>${data.total_pages}페이지</strong>`;
     } catch (e) {
         showAlert('preview-result', 'error', `미리보기 실패: ${e.message}`);
     }
 });
 
-// ─── Export (서버에 저장 → LLaMA-Factory에서 바로 사용) ─────────────────────
+// === Export ===
 document.getElementById('btn-export').addEventListener('click', async () => {
     const params = getExportParams();
     try {
@@ -708,16 +630,16 @@ document.getElementById('btn-export').addEventListener('click', async () => {
         if (!res.ok) throw new Error(data.detail || res.statusText);
 
         showAlert('preview-result', 'success',
-            `✓ Export 완료 — train: <strong>${data.counts.train_count}건</strong>, ` +
+            `Export 완료 -- train: <strong>${data.counts.train_count}건</strong>, ` +
             `val: <strong>${data.counts.val_count}건</strong><br>` +
-            `<small style="color:#555;">저장 위치: ${data.export_dir} (LLaMA-Factory에서 바로 사용 가능)</small>`
+            `<small class="text-muted">저장 위치: ${data.export_dir} (LLaMA-Factory에서 바로 사용 가능)</small>`
         );
     } catch (e) {
         showAlert('preview-result', 'error', `Export 실패: ${e.message}`);
     }
 });
 
-// ─── 페이지 네비게이션 ───────────────────────────────────────────────────────
+// === Page Navigation ===
 document.getElementById('btn-prev-page').addEventListener('click', () => {
     if (currentPage > 1) { currentPage--; updatePageNav(); }
 });
@@ -743,7 +665,368 @@ function getExportParams() {
     };
 }
 
-// ─── 배포 커맨드 ─────────────────────────────────────────────────────────────
+// === Training Controls ===
+// === Hardware Auto-detect ===
+async function detectHardware() {
+    const btn = document.getElementById('btn-hw-detect');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 감지 중...';
+    try {
+        const res = await fetch('/finetune/hw-profile');
+        if (!res.ok) throw new Error(await res.text());
+        const { hw, label, preset } = await res.json();
+
+        // 배지 표시
+        const hwIcons = {
+            dgx_spark: 'bi-gpu-card', high_end_gpu: 'bi-gpu-card',
+            mid_gpu: 'bi-gpu-card', low_gpu: 'bi-gpu-card',
+            apple_silicon: 'bi-apple', cpu: 'bi-cpu',
+        };
+        const icon = hwIcons[hw] || 'bi-cpu';
+        const badge = document.getElementById('hw-profile-badge');
+        badge.style.display = '';
+        badge.innerHTML = `<i class="bi ${icon}"></i> <strong>${label}</strong> — 최적 설정으로 자동완성되었습니다.`;
+
+        // 폼 자동입력
+        const selectOrSet = (id, val) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.value = String(val ?? '');
+        };
+        selectOrSet('train-batch-size', preset.batch_size);
+        selectOrSet('train-grad-accum', preset.gradient_accumulation);
+        selectOrSet('train-lora-rank', preset.lora_rank);
+        selectOrSet('train-quant-bit', preset.quantization_bit ?? '');
+        selectOrSet('train-cutoff-len', preset.cutoff_len);
+        document.getElementById('train-lr').value = preset.learning_rate;
+        document.getElementById('train-epochs').value = preset.num_epochs;
+
+        // hw 메타 저장 (학습 시작 시 전달용)
+        window._hwPreset = { flash_attn: preset.flash_attn, use_mps: preset.use_mps, fp16: preset.fp16 };
+    } catch (e) {
+        alert('하드웨어 감지 실패: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cpu"></i> 하드웨어 자동감지';
+    }
+}
+
+document.getElementById('btn-train-start').addEventListener('click', async () => {
+    const quantRaw = document.getElementById('train-quant-bit').value;
+    const hwPreset = window._hwPreset || {};
+    const config = {
+        model_name: document.getElementById('train-model').value,
+        learning_rate: parseFloat(document.getElementById('train-lr').value),
+        num_epochs: parseFloat(document.getElementById('train-epochs').value),
+        batch_size: parseInt(document.getElementById('train-batch-size').value),
+        gradient_accumulation: parseInt(document.getElementById('train-grad-accum').value),
+        lora_rank: parseInt(document.getElementById('train-lora-rank').value),
+        quantization_bit: quantRaw ? parseInt(quantRaw) : null,
+        cutoff_len: parseInt(document.getElementById('train-cutoff-len').value),
+        output_dir: document.getElementById('train-output-dir').value,
+        flash_attn: hwPreset.flash_attn || null,
+        use_mps: hwPreset.use_mps || false,
+        fp16: hwPreset.fp16 || false,
+    };
+
+    try {
+        document.getElementById('btn-train-start').disabled = true;
+        const res = await fetch('/finetune/train/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+
+        showAlert('train-message', 'success', `학습이 시작되었습니다. (Job ID: ${data.job_id})`);
+        startTrainPolling();
+    } catch (e) {
+        showAlert('train-message', 'error', `학습 시작 실패: ${e.message}`);
+    } finally {
+        document.getElementById('btn-train-start').disabled = false;
+    }
+});
+
+document.getElementById('btn-train-stop').addEventListener('click', async () => {
+    if (!confirm('학습을 중지하시겠습니까?')) return;
+
+    try {
+        const res = await fetch('/finetune/train/stop', { method: 'POST' });
+        const data = await res.json();
+        showAlert('train-message', 'info', data.message);
+        stopTrainPolling();
+        await updateTrainStatus();
+    } catch (e) {
+        showAlert('train-message', 'error', `학습 중지 실패: ${e.message}`);
+    }
+});
+
+function resetTrainButtons() {
+    document.getElementById('btn-train-start').disabled = false;
+    document.getElementById('btn-train-stop').disabled = true;
+}
+
+async function updateTrainStatus() {
+    try {
+        const res = await fetch('/finetune/train/status');
+        if (!res.ok) { resetTrainButtons(); return; }
+        const status = await res.json();
+
+        const badge = document.getElementById('train-status-badge');
+        const trainMsg = document.getElementById('train-message');
+        if (status.is_running) {
+            badge.textContent = '학습 중';
+            badge.className = 'badge bg-success';
+            document.getElementById('btn-train-start').disabled = true;
+            document.getElementById('btn-train-stop').disabled = false;
+            trainMsg.style.display = '';
+            trainMsg.className = 'alert alert-warning mt-3';
+            trainMsg.textContent = '학습이 진행 중입니다. 새 학습을 시작하려면 먼저 [학습 중지]를 눌러 주세요.';
+        } else {
+            badge.textContent = '대기중';
+            badge.className = 'badge bg-secondary';
+            document.getElementById('btn-train-start').disabled = false;
+            document.getElementById('btn-train-stop').disabled = true;
+            if (trainMsg.textContent.includes('학습이 진행 중')) {
+                trainMsg.style.display = 'none';
+            }
+        }
+
+        document.getElementById('ts-step').textContent = status.step || '-';
+        document.getElementById('ts-epoch').textContent = status.epoch ? status.epoch.toFixed(2) : '-';
+        document.getElementById('ts-loss').textContent = status.loss != null ? status.loss.toFixed(4) : '-';
+        document.getElementById('ts-lr').textContent = status.learning_rate != null ? status.learning_rate.toExponential(2) : '-';
+
+        // Progress bar
+        if (status.percentage != null) {
+            document.getElementById('train-progress-container').style.display = '';
+            document.getElementById('train-progress-bar').style.width = `${Math.min(100, status.percentage)}%`;
+            document.getElementById('train-progress-text').style.display = '';
+            const totalSteps = status.total_steps || '?';
+            document.getElementById('train-progress-text').textContent =
+                `Step ${status.step} / ${totalSteps} (${status.percentage.toFixed(1)}%)`;
+        }
+
+        // 자동으로 학습 완료 감지
+        if (!status.is_running && trainPollingInterval && status.step > 0) {
+            stopTrainPolling();
+        }
+
+    } catch (e) {
+        console.error('상태 조회 실패:', e);
+        resetTrainButtons();
+    }
+}
+
+async function updateLossChart() {
+    try {
+        const res = await fetch('/finetune/train/logs?tail=200');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (!data.logs || data.logs.length === 0) return;
+
+        lossData = data.logs.filter(l => l.loss != null).map(l => ({
+            step: l.current_steps,
+            loss: l.loss,
+        }));
+
+        drawLossChart();
+    } catch (e) {
+        console.error('로그 로드 실패:', e);
+    }
+}
+
+function drawLossChart() {
+    const canvas = document.getElementById('loss-chart');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = 250 * dpr;
+    ctx.scale(dpr, dpr);
+    const W = rect.width;
+    const H = 250;
+
+    ctx.clearRect(0, 0, W, H);
+
+    if (lossData.length < 2) {
+        ctx.fillStyle = '#888';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('데이터가 충분하지 않습니다.', W / 2, H / 2);
+        return;
+    }
+
+    const pad = { top: 20, right: 20, bottom: 40, left: 60 };
+    const cW = W - pad.left - pad.right;
+    const cH = H - pad.top - pad.bottom;
+
+    const steps = lossData.map(d => d.step);
+    const losses = lossData.map(d => d.loss);
+    const minStep = Math.min(...steps);
+    const maxStep = Math.max(...steps);
+    const minLoss = Math.min(...losses);
+    const maxLoss = Math.max(...losses);
+    const lossRange = maxLoss - minLoss || 1;
+    const stepRange = maxStep - minStep || 1;
+
+    // Grid
+    ctx.strokeStyle = '#e9ecef';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (cH / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(W - pad.right, y);
+        ctx.stroke();
+    }
+
+    // Y axis labels
+    ctx.fillStyle = '#888';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+        const val = maxLoss - (lossRange / 4) * i;
+        const y = pad.top + (cH / 4) * i;
+        ctx.fillText(val.toFixed(3), pad.left - 8, y + 4);
+    }
+
+    // X axis labels
+    ctx.textAlign = 'center';
+    for (let i = 0; i <= 4; i++) {
+        const val = minStep + (stepRange / 4) * i;
+        const x = pad.left + (cW / 4) * i;
+        ctx.fillText(Math.round(val), x, H - pad.bottom + 20);
+    }
+
+    // Axis labels
+    ctx.fillStyle = '#666';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('Step', W / 2, H - 4);
+    ctx.save();
+    ctx.translate(14, H / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Loss', 0, 0);
+    ctx.restore();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = '#667eea';
+    ctx.lineWidth = 2;
+    lossData.forEach((d, i) => {
+        const x = pad.left + ((d.step - minStep) / stepRange) * cW;
+        const y = pad.top + ((maxLoss - d.loss) / lossRange) * cH;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Gradient fill
+    const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
+    gradient.addColorStop(0, 'rgba(102, 126, 234, 0.15)');
+    gradient.addColorStop(1, 'rgba(102, 126, 234, 0.01)');
+    ctx.lineTo(pad.left + cW, pad.top + cH);
+    ctx.lineTo(pad.left, pad.top + cH);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+}
+
+async function loadRawLog() {
+    try {
+        const res = await fetch('/finetune/train/raw-log?tail=100');
+        if (!res.ok) return;
+        const data = await res.json();
+        const el = document.getElementById('raw-log-content');
+        el.textContent = data.content || '(로그 없음)';
+        el.scrollTop = el.scrollHeight;
+    } catch (e) {
+        console.error('원시 로그 로드 실패:', e);
+    }
+}
+
+function startTrainPolling() {
+    stopTrainPolling();
+    updateTrainStatus();
+    updateLossChart();
+    loadRawLog();
+    trainPollingInterval = setInterval(() => {
+        updateTrainStatus();
+        updateLossChart();
+        loadRawLog();
+    }, 5000);
+}
+
+function stopTrainPolling() {
+    if (trainPollingInterval) {
+        clearInterval(trainPollingInterval);
+        trainPollingInterval = null;
+    }
+}
+
+// === Evaluation ===
+document.getElementById('btn-evaluate').addEventListener('click', async () => {
+    const sampleSize = parseInt(document.getElementById('eval-sample-size').value);
+    const loading = document.getElementById('eval-loading');
+    const resultsSection = document.getElementById('eval-results-section');
+
+    loading.style.display = '';
+    resultsSection.style.display = 'none';
+    document.getElementById('btn-evaluate').disabled = true;
+
+    try {
+        const res = await fetch(`/finetune/evaluate?sample_size=${sampleSize}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+
+        // 결과 표시
+        document.getElementById('eval-accuracy').textContent = `${data.accuracy}%`;
+        document.getElementById('eval-avg-confidence').textContent = data.avg_confidence.toFixed(4);
+        document.getElementById('eval-correct').textContent = `${data.correct} / ${data.evaluated}`;
+        document.getElementById('eval-evaluated').textContent = `${data.evaluated} / ${data.total}`;
+
+        // 색상 표시
+        const accEl = document.getElementById('eval-accuracy');
+        if (data.accuracy >= 80) accEl.style.color = '#28a745';
+        else if (data.accuracy >= 60) accEl.style.color = '#ffc107';
+        else accEl.style.color = '#dc3545';
+
+        resultsSection.style.display = '';
+
+        // 오답 목록
+        const incorrectSection = document.getElementById('eval-incorrect-section');
+        const tbody = document.getElementById('eval-incorrect-tbody');
+        tbody.innerHTML = '';
+
+        if (data.incorrect_samples && data.incorrect_samples.length > 0) {
+            incorrectSection.style.display = '';
+            data.incorrect_samples.forEach((s, i) => {
+                const imgName = s.image_path ? s.image_path.split('/').pop() : '-';
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td title="${escapeHtml(s.image_path || '')}">${escapeHtml(imgName)}</td>
+                        <td>${escapeHtml(s.expected?.manufacturer || '-')} / ${escapeHtml(s.expected?.model || '-')}</td>
+                        <td>ID: ${s.predicted?.manufacturer_id ?? '-'} / ${s.predicted?.model_id ?? '-'}<br>
+                            <small class="text-muted">status: ${s.predicted?.status || '-'}</small></td>
+                        <td>${s.confidence != null ? s.confidence.toFixed(4) : '-'}</td>
+                    </tr>`;
+            });
+        } else {
+            incorrectSection.style.display = 'none';
+        }
+
+    } catch (e) {
+        alert(`평가 실패: ${e.message}`);
+    } finally {
+        loading.style.display = 'none';
+        document.getElementById('btn-evaluate').disabled = false;
+    }
+});
+
+// === Deploy Commands ===
 document.getElementById('btn-deploy-cmd').addEventListener('click', async () => {
     const checkpoint = document.getElementById('deploy-checkpoint').value.trim();
     const modelName = document.getElementById('deploy-model-name').value.trim();
@@ -765,13 +1048,13 @@ document.getElementById('btn-deploy-cmd').addEventListener('click', async () => 
         data.steps.forEach((step, idx) => {
             const content = step.cmd || step.content || '';
             const div = document.createElement('div');
-            div.className = 'deploy-step';
+            div.className = 'mb-4';
             div.innerHTML = `
-                <div class="deploy-step-header">
-                    <div class="deploy-step-title">${step.title}</div>
-                    <button class="btn btn-sm btn-outline" onclick="copyText(this, \`${escapeBacktick(content)}\`)">복사</button>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-semibold">${step.title}</div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="copyText(this, \`${escapeBacktick(content)}\`)">복사</button>
                 </div>
-                <div class="code-block">${escapeHtml(content)}</div>
+                <pre class="bg-body-secondary border rounded p-3 small" style="white-space:pre-wrap;word-break:break-all;">${escapeHtml(content)}</pre>
             `;
             container.appendChild(div);
         });
@@ -782,10 +1065,51 @@ document.getElementById('btn-deploy-cmd').addEventListener('click', async () => 
     }
 });
 
+// === LoRA Export ===
+document.getElementById('btn-export-model').addEventListener('click', async () => {
+    const checkpoint = document.getElementById('deploy-checkpoint').value.trim();
+    if (!checkpoint) {
+        alert('체크포인트 경로를 입력하세요.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-export-model');
+    btn.disabled = true;
+    btn.textContent = '병합 중...';
+
+    try {
+        const res = await fetch('/finetune/train/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                checkpoint_path: checkpoint,
+                output_dir: '/app/output/merged',
+                model_name: document.getElementById('train-model').value || 'Qwen/Qwen3-VL-8B-Instruct',
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+
+        const el = document.getElementById('export-model-result');
+        el.style.display = '';
+        el.className = 'alert alert-success';
+        el.textContent = `LoRA 병합 완료: ${data.output_dir}`;
+    } catch (e) {
+        const el = document.getElementById('export-model-result');
+        el.style.display = '';
+        el.className = 'alert alert-danger';
+        el.textContent = `병합 실패: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'LoRA 병합 실행';
+    }
+});
+
+// === Utilities ===
 function copyText(btn, text) {
     navigator.clipboard.writeText(text).then(() => {
         const orig = btn.textContent;
-        btn.textContent = '✓ 복사됨';
+        btn.textContent = '복사됨';
         setTimeout(() => { btn.textContent = orig; }, 1500);
     });
 }
@@ -801,14 +1125,21 @@ function escapeBacktick(str) {
 function showAlert(id, type, msg) {
     const el = document.getElementById(id);
     el.style.display = '';
-    el.className = `alert alert-${type}`;
+    el.className = `alert alert-${type === 'error' ? 'danger' : type}`;
     el.innerHTML = msg;
 }
 
-// ─── 초기화 ──────────────────────────────────────────────────────────────────
+// === Init ===
 (async () => {
     await loadStats();
     updatePageNav();
+    // 초기 학습 상태 확인
+    await updateTrainStatus();
+    // 학습 중이면 자동 폴링 시작
+    const badge = document.getElementById('train-status-badge');
+    if (badge.textContent === '학습 중') {
+        startTrainPolling();
+    }
 })();
 </script>
 </body>

@@ -8,10 +8,10 @@ pydantic-settings==2.7.1
 # Qdrant
 qdrant-client==1.13.3
 
-# Embeddings (CLIP)
-sentence-transformers==3.4.0
+# Embeddings (EfficientNet-B3)
+timm>=1.0.0
 torch==2.6.0
-transformers==4.48.3
+torchvision>=0.21.0
 pillow==12.1.0
 
 # Vehicle Detection (YOLO26)

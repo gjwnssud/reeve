@@ -398,11 +398,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 2G
+          cpus: '2.0'
+          memory: 3G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.5'
+          memory: 512M
 
   redis:
     image: redis:7.4-alpine
@@ -447,11 +447,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '4.0'
+          memory: 4G
         reservations:
-          cpus: '0.5'
-          memory: 1G
+          cpus: '1.0'
+          memory: 2G
 
   celery-worker:
     image: reeve-identifier:latest
@@ -478,7 +478,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
+          cpus: '6.0'
           memory: 4G
         reservations:
           cpus: '2.0'
@@ -530,7 +530,7 @@ IDENTIFIER_MODE=visual_rag
 
 # VLM (Ollama)
 OLLAMA_BASE_URL=http://ollama:11434
-VLM_MODEL_NAME=vehicle-vlm-v1
+VLM_MODEL_NAME=reeve-vlm-v1
 VLM_TIMEOUT=30
 VLM_MAX_CANDIDATES=5
 VLM_FALLBACK_TO_CLIP=true
@@ -673,7 +673,7 @@ for i in $(seq 1 30); do
 done
 
 MODEL_NAME=$(grep VLM_MODEL_NAME .env | cut -d= -f2 | tr -d ' ')
-MODEL_NAME="${MODEL_NAME:-vehicle-vlm-v1}"
+MODEL_NAME="${MODEL_NAME:-reeve-vlm-v1}"
 
 if docker exec reeve-ollama ollama list | grep -q "$MODEL_NAME"; then
     echo "Ollama 모델 '$MODEL_NAME' 이미 존재합니다."
@@ -689,7 +689,7 @@ else
     else
         echo "[정보] models/ 폴더에 .gguf 파일 또는 Modelfile이 없습니다."
         echo "       파인튜닝된 모델 파일을 models/ 폴더에 넣고 setup.sh를 다시 실행하세요."
-        echo "       (models/vehicle-vlm-v1.gguf + models/Modelfile)"
+        echo "       (models/reeve-vlm-v1.gguf + models/Modelfile)"
     fi
 fi
 
@@ -853,7 +853,7 @@ timeout /t 2 /nobreak > nul
 docker exec reeve-ollama ollama list > nul 2>&1
 if errorlevel 1 goto OLLAMA_WAIT
 
-set MODEL_NAME=vehicle-vlm-v1
+set MODEL_NAME=reeve-vlm-v1
 for /f "tokens=2 delims==" %%a in ('findstr /i "^VLM_MODEL_NAME" .env 2^>nul') do set MODEL_NAME=%%a
 
 docker exec reeve-ollama ollama list | findstr /i "%MODEL_NAME%" > nul 2>&1
@@ -879,7 +879,7 @@ if not errorlevel 1 (
     ) else (
         echo [정보] models\ 폴더에 .gguf 파일이 없습니다.
         echo        파인튜닝된 모델 파일을 models\ 폴더에 넣고 setup.bat을 다시 실행하세요.
-        echo        (models\vehicle-vlm-v1.gguf + models\Modelfile)
+        echo        (models\reeve-vlm-v1.gguf + models\Modelfile)
     )
 )
 

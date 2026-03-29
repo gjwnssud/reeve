@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reeve - 기초데이터 관리</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/static/css/reeve-theme.css" rel="stylesheet">
+</head>
+<body>
+    <button class="btn btn-primary position-fixed d-lg-none" style="top:.75rem;left:.75rem;z-index:1046;"
+            type="button" data-bs-toggle="offcanvas" data-bs-target="#reeveSidebar">
+        <i class="bi bi-list"></i>
+    </button>
+    <aside class="offcanvas offcanvas-start d-flex flex-column" id="reeveSidebar" tabindex="-1"
+           data-bs-theme="dark" style="width:220px;background:linear-gradient(180deg,#667eea 0%,#764ba2 100%);">
+        <div class="offcanvas-header border-bottom border-white border-opacity-25 d-lg-none">
+            <span class="offcanvas-title fw-bold"><i class="bi bi-car-front"></i> Reeve</span>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="py-4 text-center border-bottom border-white border-opacity-25 d-none d-lg-flex align-items-center justify-content-center">
+            <a href="/" class="text-white text-decoration-none fs-5 fw-bold"><i class="bi bi-car-front"></i> Reeve</a>
+        </div>
+        <nav class="flex-grow-1 p-2 overflow-y-auto">
+            <a href="/analyze-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white text-opacity-75"><i class="bi bi-camera"></i> 이미지 분석</a>
+            <a href="/admin-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white text-opacity-75"><i class="bi bi-database"></i> 차량데이터 관리</a>
+            <a href="/basic-data-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white fw-semibold bg-white bg-opacity-25"><i class="bi bi-list-check"></i> 기초데이터 관리</a>
+            <a href="/finetune-ui" class="nav-link d-flex align-items-center gap-2 rounded px-3 py-2 mb-1 text-white text-opacity-75"><i class="bi bi-gear"></i> 파인튜닝</a>
+        </nav>
+        <div class="p-3 border-top border-white border-opacity-25">
+            <button class="btn btn-outline-light btn-sm w-100" id="themeToggle"><i class="bi bi-moon-stars"></i> 테마</button>
+        </div>
+    </aside>
+
+    <div class="reeve-main">
+    <div class="container-xxl py-4">
+
+        <!-- 탭 -->
+        <ul class="nav nav-tabs mb-0" id="pageTabs">
+            <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#manufacturers" data-tab="manufacturers">제조사 관리</button></li>
+            <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#models" data-tab="models">차량 모델 관리</button></li>
+        </ul>
+
+        <div class="tab-content">
+
+        <!-- ═══════════════════════════════════════
+             탭 ① 제조사 관리
+        ═══════════════════════════════════════ -->
+            <div id="manufacturers" class="tab-pane show active">
+                <div class="card"><div class="card-body">
+                    <h2 class="h5 mb-3">제조사 목록</h2>
+                    <div class="d-flex justify-content-between flex-wrap gap-3 mb-3">
+                        <button id="addManufacturerBtn" class="btn btn-primary">+ 제조사 추가</button>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="domesticFilter" id="filterAll" value="all" checked autocomplete="off">
+                            <label class="btn btn-outline-primary btn-sm" for="filterAll">전체</label>
+                            <input type="radio" class="btn-check" name="domesticFilter" id="filterDomestic" value="domestic" autocomplete="off">
+                            <label class="btn btn-outline-primary btn-sm" for="filterDomestic">국내</label>
+                            <input type="radio" class="btn-check" name="domesticFilter" id="filterForeign" value="foreign" autocomplete="off">
+                            <label class="btn btn-outline-primary btn-sm" for="filterForeign">해외</label>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="manufacturersTable" class="table table-hover table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th><th>코드</th><th>영문명</th>
+                                    <th>한글명</th><th>구분</th><th>등록일</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manufacturersTableBody">
+                                <tr><td colspan="6" class="text-center">데이터를 불러오는 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div></div>
+            </div>
+
+        <!-- ═══════════════════════════════════════
+             탭 ② 차량 모델 관리
+        ═══════════════════════════════════════ -->
+            <div id="models" class="tab-pane">
+                <div class="card"><div class="card-body">
+                    <h2 class="h5 mb-3">차량 모델 목록</h2>
+                    <div class="d-flex justify-content-between flex-wrap gap-3 mb-3">
+                        <button id="addModelBtn" class="btn btn-primary">+ 모델 추가</button>
+                        <select id="manufacturerFilter" class="form-select" style="width:auto;">
+                            <option value="">전체 제조사</option>
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="modelsTable" class="table table-hover table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th><th>코드</th><th>제조사</th>
+                                    <th>영문명</th><th>한글명</th><th>등록일</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modelsTableBody">
+                                <tr><td colspan="6" class="text-center">데이터를 불러오는 중...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div></div>
+            </div>
+
+        </div><!-- /.tab-content -->
+
+    </div><!-- /.container-xxl -->
+    </div><!-- /.reeve-main -->
+
+    <!-- 제조사 추가/수정 모달 -->
+    <div class="modal fade" id="manufacturerModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">제조사 추가</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="manufacturerForm">
+                    <div class="mb-3">
+                        <label for="mfCode" class="form-label">코드 *</label>
+                        <input type="text" id="mfCode" required placeholder="예: HYUNDAI" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label for="mfEnglishName" class="form-label">영문명 *</label>
+                        <input type="text" id="mfEnglishName" required placeholder="예: Hyundai Motor Company" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label for="mfKoreanName" class="form-label">한글명 *</label>
+                        <input type="text" id="mfKoreanName" required placeholder="예: 현대자동차" class="form-control">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" id="mfIsDomestic" class="form-check-input">
+                        <label for="mfIsDomestic" class="form-check-label">국내 제조사</label>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                        <button type="submit" class="btn btn-primary">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 차량 모델 추가/수정 모달 -->
+    <div class="modal fade" id="modelModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">차량 모델 추가</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="modelForm">
+                    <div class="mb-3">
+                        <label for="modelManufacturer" class="form-label">제조사 *</label>
+                        <select id="modelManufacturer" required class="form-select">
+                            <option value="">제조사 선택</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modelCode" class="form-label">모델 코드 *</label>
+                        <input type="text" id="modelCode" required placeholder="예: SONATA" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label for="modelEnglishName" class="form-label">영문명 *</label>
+                        <input type="text" id="modelEnglishName" required placeholder="예: Sonata" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label for="modelKoreanName" class="form-label">한글명 *</label>
+                        <input type="text" id="modelKoreanName" required placeholder="예: 소나타" class="form-control">
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                        <button type="submit" class="btn btn-primary">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/theme-toggle.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

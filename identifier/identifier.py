@@ -1,10 +1,10 @@
 """
 차량 판별 핵심 로직
-이미지 → YOLO26 차량 감지 → 크롭 → CLIP 임베딩 → Qdrant 벡터 검색 → 가중 투표 → payload에서 이름 조회
+이미지 → YOLO26 차량 감지 → 크롭 → EfficientNet-B3 임베딩 → Qdrant 벡터 검색 → 가중 투표 → payload에서 이름 조회
 
 판별 모드 (IDENTIFIER_MODE):
-  clip_only  : 기존 CLIP+Qdrant 투표 (기본값)
-  visual_rag : CLIP+Qdrant 후보 → VLM 최종 판별
+  clip_only  : EfficientNet-B3+Qdrant 투표 (기본값)
+  visual_rag : EfficientNet-B3+Qdrant 후보 → VLM 최종 판별
   vlm_only   : VLM만으로 판별 (Qdrant 미사용)
 """
 import logging
@@ -12,10 +12,14 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 
+import timm
+import torch
+import torch.nn.functional as F
+import torchvision.transforms as T
+import numpy as np
 from PIL import Image
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
 from identifier.config import settings
 
@@ -127,21 +131,21 @@ class VehicleIdentifier:
     """
     차량 이미지 판별기
 
-    CLIP 모델로 이미지 임베딩을 생성하고,
+    EfficientNet-B3 모델로 이미지 임베딩을 생성하고,
     Qdrant training_images 컬렉션에서 유사 이미지를 검색한 뒤,
     가중 투표로 제조사/모델을 결정한다.
     """
 
     COLLECTION_NAME = "training_images"
-    CLIP_MODEL_NAME = "clip-ViT-B-32"
-    VECTOR_DIM = 512
+    EMBEDDING_MODEL_NAME = "efficientnet_b3"
+    VECTOR_DIM = 1536
 
     # COCO 데이터셋의 차량 관련 클래스
     VEHICLE_CLASSES = {2, 3, 5, 7}  # car, motorcycle, bus, truck
 
     def __init__(self):
-        """CLIP 모델, Qdrant 클라이언트, YOLO 모델 초기화"""
-        self.clip_model: Optional[SentenceTransformer] = None
+        """임베딩 모델, Qdrant 클라이언트, YOLO 모델 초기화"""
+        self.clip_model = None
         self.qdrant: Optional[QdrantClient] = None
         self.yolo_model = None
         self.vlm_service = None  # VLMService (visual_rag / vlm_only 모드)
@@ -161,49 +165,55 @@ class VehicleIdentifier:
     # ──────────────────────────────────────────
 
     def _load_clip_model(self):
-        """CLIP 이미지 임베딩 모델 로드 (최적화 적용)"""
+        """EfficientNet-B3 이미지 임베딩 모델 로드 (최적화 적용)"""
         try:
-            import torch
-
-            # PyTorch 백엔드 최적화
+            # CPU 최적화 (MKL, OpenMP)
             if hasattr(torch.backends, "opt_einsum"):
                 torch.backends.opt_einsum.enabled = True
-
-            # CPU 최적화 (MKL, OpenMP)
             torch.set_num_threads(settings.torch_threads)
 
-            self.clip_model = SentenceTransformer(
-                self.CLIP_MODEL_NAME,
-                device=settings.embedding_device
+            self.clip_model = timm.create_model(
+                self.EMBEDDING_MODEL_NAME, pretrained=True, num_classes=0
             )
-
-            # 모델 평가 모드 + 최적화
             self.clip_model.eval()
+            self.clip_model.to(settings.embedding_device)
 
-            # PyTorch 2.0+ compile 시도 (가능하면)
+            self._transform = T.Compose([
+                T.Resize((300, 300)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
+            ])
+
+            # PyTorch 2.0+ compile 시도
             if hasattr(torch, "compile") and settings.enable_torch_compile:
                 try:
                     logger.info("Attempting torch.compile() optimization...")
-                    # sentence-transformers는 내부 모델만 컴파일 가능
-                    for module in self.clip_model.modules():
-                        if hasattr(module, "auto_model"):
-                            module.auto_model = torch.compile(
-                                module.auto_model,
-                                mode="reduce-overhead",
-                                fullgraph=False,
-                            )
+                    self.clip_model = torch.compile(
+                        self.clip_model,
+                        mode="reduce-overhead",
+                        fullgraph=False,
+                    )
                     logger.info("torch.compile() applied")
                 except Exception as e:
                     logger.warning(f"torch.compile() not available: {e}")
 
             logger.info(
-                f"CLIP model loaded: {self.CLIP_MODEL_NAME} "
+                f"Embedding model loaded: {self.EMBEDDING_MODEL_NAME} "
                 f"(device={settings.embedding_device}, "
                 f"threads={settings.torch_threads})"
             )
         except Exception as e:
-            logger.error(f"Failed to load CLIP model: {e}")
+            logger.error(f"Failed to load embedding model: {e}")
             raise
+
+    def _encode_images(self, images: list) -> np.ndarray:
+        """이미지 리스트를 L2-정규화된 EfficientNet-B3 임베딩 배열로 변환"""
+        tensors = [self._transform(img.convert("RGB")) for img in images]
+        batch = torch.stack(tensors).to(settings.embedding_device)
+        with torch.no_grad():
+            vecs = self.clip_model(batch)
+        return F.normalize(vecs, dim=-1).cpu().numpy()
 
     def _connect_qdrant(self):
         """Qdrant 클라이언트 연결"""
@@ -498,11 +508,7 @@ class VehicleIdentifier:
             if settings.vlm_fallback_to_clip:
                 logger.warning("VLM failed, falling back to CLIP+Qdrant")
                 optimized = self._optimize_image_for_clip(crop_image)
-                embedding = self.clip_model.encode(
-                    optimized,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                )
+                embedding = self._encode_images([optimized])[0]
                 search_results = self._search_qdrant(embedding.tolist())
                 return self._build_identification_result(search_results, detection, img_w, img_h)
             raise
@@ -687,11 +693,7 @@ class VehicleIdentifier:
         # 이미지 최적화 (고해상도 불필요 연산 제거)
         optimized_image = self._optimize_image_for_clip(cropped_image)
 
-        embedding = self.clip_model.encode(
-            optimized_image,
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-        )
+        embedding = self._encode_images([optimized_image])[0]
         return embedding.tolist(), detection, w, h
 
     def _search_qdrant(
@@ -989,12 +991,7 @@ class VehicleIdentifier:
                 self._optimize_image_for_clip(cropped_images[i])
                 for i in clip_indices
             ]
-            batch_embeddings = self.clip_model.encode(
-                clip_inputs,
-                batch_size=len(clip_inputs),
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-            )
+            batch_embeddings = self._encode_images(clip_inputs)
             for batch_idx, orig_idx in enumerate(clip_indices):
                 embeddings_map[orig_idx] = batch_embeddings[batch_idx].tolist()
 

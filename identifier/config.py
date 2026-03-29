@@ -50,8 +50,8 @@ class IdentifierSettings(BaseSettings):
     torch_threads: int = Field(default=8, alias="IDENTIFIER_TORCH_THREADS")
     enable_torch_compile: bool = Field(default=True, alias="IDENTIFIER_ENABLE_TORCH_COMPILE")
 
-    # 판별 모드: "clip_only" (기본), "visual_rag", "vlm_only"
-    identifier_mode: str = Field(default="clip_only", alias="IDENTIFIER_MODE")
+    # 판별 모드: "clip_only", "visual_rag" (기본), "vlm_only"
+    identifier_mode: str = Field(default="visual_rag", alias="IDENTIFIER_MODE")
 
     # VLM (Ollama) 설정
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")

@@ -5,420 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>차량 판별 서비스</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f7fa;
-            color: #333;
-            min-height: 100vh;
-        }
-
-        /* 헤더 */
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px 20px;
-            text-align: center;
-        }
-
-        header h1 {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 6px;
-        }
-
-        header p {
-            font-size: 0.95rem;
-            opacity: 0.85;
-        }
-
-        /* 컨테이너 */
-        .container {
-            max-width: 800px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
-
-        /* 섹션 */
-        .section {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-            padding: 24px;
-            margin-bottom: 20px;
-        }
-
-        .section h2 {
-            font-size: 1.1rem;
-            margin-bottom: 16px;
-            color: #333;
-        }
-
-        /* 업로드 영역 */
-        .upload-area {
-            border: 2px dashed #667eea;
-            border-radius: 10px;
-            padding: 40px 30px;
-            text-align: center;
-            background: #f8f9ff;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .upload-area:hover {
-            background: #eef0fd;
-            border-color: #5568d3;
-        }
-
-        .upload-area.dragging {
-            background: #e7eafd;
-            border-color: #4a5bc8;
-            transform: scale(1.02);
-        }
-
-        .upload-icon {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-        }
-
-        .upload-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 6px;
-            color: #444;
-        }
-
-        .upload-desc {
-            font-size: 0.85rem;
-            color: #888;
-        }
-
-        /* 이미지 카드 */
-        .image-card {
-            display: none;
-            border: 2px solid #e1e8ed;
-            border-radius: 12px;
-            overflow: hidden;
-            background: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-
-        .image-card.show {
-            display: block;
-        }
-
-        .image-container {
-            position: relative;
-            width: 100%;
-            background: #000;
-            min-height: 250px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .image-container img {
-            max-width: 100%;
-            max-height: 450px;
-            display: block;
-        }
-
-        /* 드래그 가능한 바운딩 박스 오버레이 */
-        .bbox-overlay {
-            position: absolute;
-            border: 2px solid #00ff00;
-            box-shadow: 0 0 0 2000px rgba(0,0,0,0.3);
-            cursor: move;
-        }
-
-        .bbox-label {
-            position: absolute;
-            top: -25px;
-            left: 0;
-            background: #00ff00;
-            color: #000;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-            font-weight: bold;
-            white-space: nowrap;
-        }
-
-        .bbox-handle {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background: #00ff00;
-            border: 2px solid #fff;
-            border-radius: 50%;
-        }
-
-        .bbox-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
-        .bbox-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
-        .bbox-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
-        .bbox-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
-
-        /* 이미지 정보 영역 */
-        .image-info {
-            padding: 15px;
-        }
-
-        .image-info-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .image-info-header h4 {
-            margin: 0;
-            font-size: 14px;
-            color: #333;
-        }
-
-        .status-badge {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .status-ready {
-            background: #e0f2fe;
-            color: #0369a1;
-        }
-
-        .status-detecting {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status-detected {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .status-identifying {
-            background: #cce5ff;
-            color: #004085;
-        }
-
-        .status-completed {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        /* 감지 목록 */
-        .detection-list {
-            margin: 10px 0;
-        }
-
-        .detection-item {
-            padding: 8px 12px;
-            margin: 6px 0;
-            background: #f8f9fa;
-            border-left: 3px solid #667eea;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .detection-item:hover {
-            background: #e9ecef;
-            transform: translateX(4px);
-        }
-
-        .detection-item.selected {
-            background: #e7eafd;
-            border-color: #4a5bc8;
-        }
-
-        .detection-item strong {
-            font-size: 14px;
-        }
-
-        .detection-item small {
-            color: #666;
-            font-size: 12px;
-        }
-
-        /* 결과 영역 */
-        .result-section {
-            display: none;
-            margin-top: 12px;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 6px;
-        }
-
-        .result-section.show {
-            display: block;
-        }
-
-        .result-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            font-size: 14px;
-        }
-
-        .result-label {
-            font-weight: 600;
-            color: #666;
-        }
-
-        .result-value {
-            color: #333;
-            font-weight: 500;
-        }
-
-        /* 버튼 */
-        .action-buttons {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        .btn {
-            padding: 8px 18px;
-            font-size: 13px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            background: #5568d3;
-        }
-
-        .btn-danger {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn-danger:hover:not(:disabled) {
-            background: #dc2626;
-        }
-
-        /* 로딩 */
-        .loading-spinner {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .loading-spinner.show {
-            display: block;
-        }
-
-        .spinner {
-            width: 36px;
-            height: 36px;
-            border: 3px solid #e1e8ed;
-            border-top-color: #667eea;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* 토스트 */
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #333;
-            color: white;
-            padding: 14px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 10000;
-            animation: slideIn 0.3s ease-out;
-            max-width: 320px;
-            font-size: 0.9rem;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* 푸터 */
-        footer {
-            text-align: center;
-            padding: 20px;
-            color: #aaa;
-            font-size: 0.8rem;
-        }
-
-        /* 반응형 */
-        @media (max-width: 640px) {
-            .container {
-                padding: 0 12px;
-                margin: 16px auto;
-            }
-
-            header h1 {
-                font-size: 1.4rem;
-            }
-
-            .upload-area {
-                padding: 30px 20px;
-            }
-        }
-    </style>
+    <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/static/css/reeve-theme.css" rel="stylesheet">
 </head>
 <body>
 
-<header>
-    <h1>차량 판별 서비스</h1>
-    <p>차량 이미지를 업로드하면 제조사와 모델을 판별합니다</p>
-</header>
+<nav class="navbar navbar-expand-lg" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);" data-bs-theme="dark">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="/">
+      <i class="bi bi-car-front"></i> Reeve Identifier
+    </a>
+    <button class="btn btn-sm btn-outline-light" id="themeToggle"><i class="bi bi-moon-stars"></i></button>
+  </div>
+</nav>
 
-<div class="container">
+<div class="container py-4" style="max-width: 800px;">
 
     <!-- 업로드 섹션 -->
-    <div class="section">
-        <h2>📤 이미지 업로드</h2>
-        <div id="uploadArea" class="upload-area">
+    <div class="card mb-4"><div class="card-body">
+        <h5 class="card-title mb-3">📤 이미지 업로드</h5>
+        <div id="uploadArea" class="upload-area bg-body-secondary">
             <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;">
             <div class="upload-icon">📷</div>
             <div class="upload-title">이미지를 드래그하거나 클릭하여 선택</div>
             <div class="upload-desc">JPG, PNG, WebP 지원 · 최대 10MB</div>
         </div>
-    </div>
+    </div></div>
 
     <!-- 이미지 카드 -->
-    <div class="section">
-        <h2>🖼️ 업로드된 이미지</h2>
+    <div class="card mb-4"><div class="card-body">
+        <h5 class="card-title mb-3">🖼️ 업로드된 이미지</h5>
 
-        <div id="imageCard" class="image-card">
+        <div id="imageCard" class="card d-none">
             <!-- 이미지 컨테이너 -->
             <div id="imageContainer" class="image-container">
                 <img id="previewImage" alt="업로드 이미지">
@@ -426,33 +45,33 @@
             </div>
 
             <!-- 이미지 정보 -->
-            <div class="image-info">
-                <div class="image-info-header">
+            <div class="image-info p-3">
+                <div class="d-flex align-items-center gap-2 mb-3">
                     <h4 id="fileName">파일명</h4>
-                    <span id="statusBadge" class="status-badge status-ready">준비</span>
+                    <span id="statusBadge" class="badge rounded-pill bg-info">준비</span>
                 </div>
 
                 <!-- 감지 목록 -->
-                <div id="detectionList" class="detection-list"></div>
+                <div id="detectionList" class="list-group list-group-flush my-2"></div>
 
                 <!-- 결과 영역 -->
-                <div id="resultSection" class="result-section">
-                    <div class="result-row">
+                <div id="resultSection" class="card bg-body-secondary p-3 mt-3 d-none">
+                    <div class="d-flex justify-content-between py-1 small">
                         <span class="result-label">제조사:</span>
                         <span id="resultManufacturer" class="result-value">-</span>
                     </div>
-                    <div class="result-row">
+                    <div class="d-flex justify-content-between py-1 small">
                         <span class="result-label">모델:</span>
                         <span id="resultModel" class="result-value">-</span>
                     </div>
-                    <div class="result-row">
+                    <div class="d-flex justify-content-between py-1 small">
                         <span class="result-label">식별 신뢰도:</span>
                         <span id="resultConfidence" class="result-value">-</span>
                     </div>
                 </div>
 
                 <!-- 버튼 -->
-                <div class="action-buttons">
+                <div class="d-flex gap-2 mt-3">
                     <button id="identifyBtn" class="btn btn-primary" disabled>판별하기</button>
                     <button id="deleteBtn" class="btn btn-danger">삭제</button>
                 </div>
@@ -460,23 +79,25 @@
         </div>
 
         <!-- 로딩 -->
-        <div id="loadingSpinner" class="loading-spinner">
-            <div class="spinner"></div>
-            <div id="loadingText">처리 중...</div>
+        <div class="text-center p-4 d-none" id="loadingSpinner">
+            <div class="spinner-border text-primary"></div>
+            <div id="loadingText" class="mt-2">처리 중...</div>
         </div>
 
         <!-- 빈 상태 -->
-        <div id="emptyState" style="text-align: center; padding: 40px; color: #999;">
+        <div id="emptyState" class="text-center text-muted py-5">
             이미지를 업로드하세요
         </div>
-    </div>
+    </div></div>
 
 </div>
 
-<footer>
+<footer class="text-center text-muted py-4 small">
     Reeve Vehicle Identification Service
 </footer>
 
+<script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/theme-toggle.js"></script>
 <script>
     // ──────────────────────────────────────
     // State
@@ -574,8 +195,8 @@
         reader.readAsDataURL(file);
 
         fileName.textContent = file.name;
-        emptyState.style.display = 'none';
-        imageCard.classList.add('show');
+        emptyState.classList.add('d-none');
+        imageCard.classList.remove('d-none');
         updateStatus('detecting', '감지 중');
     }
 
@@ -585,7 +206,7 @@
         currentBbox = null;
         detectionList.innerHTML = '';
         bboxOverlayContainer.innerHTML = '';
-        resultSection.classList.remove('show');
+        resultSection.classList.add('d-none');
         identifyBtn.disabled = true;
     }
 
@@ -593,7 +214,7 @@
     // 차량 감지
     // ──────────────────────────────────────
     async function detectVehicles() {
-        loadingSpinner.classList.add('show');
+        loadingSpinner.classList.remove('d-none');
         loadingText.textContent = '차량을 감지하고 있습니다...';
 
         try {
@@ -617,7 +238,7 @@
             showToast(`감지 실패: ${e.message}`, 'error');
             updateStatus('error', '감지 실패');
         } finally {
-            loadingSpinner.classList.remove('show');
+            loadingSpinner.classList.add('d-none');
         }
     }
 
@@ -644,7 +265,7 @@
 
     function displayDetectionList() {
         detectionList.innerHTML = detections.map((det, idx) => `
-            <div class="detection-item" id="det-item-${idx}" onclick="selectDetection(${idx})">
+            <div class="list-group-item list-group-item-action" id="det-item-${idx}" onclick="selectDetection(${idx})">
                 <strong>${det.class_name}</strong> (신뢰도: ${(det.confidence * 100).toFixed(1)}%)
                 <br>
                 <small>면적: ${det.area.toLocaleString()} px²</small>
@@ -658,8 +279,8 @@
         currentBbox = [...detection.bbox];
 
         // 목록 하이라이트 업데이트
-        document.querySelectorAll('.detection-item').forEach((item, idx) => {
-            item.classList.toggle('selected', idx === index);
+        document.querySelectorAll('.list-group-item').forEach((item, idx) => {
+            item.classList.toggle('active', idx === index);
         });
 
         // 바운딩 박스 오버레이 생성
@@ -875,10 +496,10 @@
         if (!selectedFile) return;
 
         identifyBtn.disabled = true;
-        loadingSpinner.classList.add('show');
+        loadingSpinner.classList.remove('d-none');
         loadingText.textContent = '차량을 판별하고 있습니다...';
         updateStatus('identifying', '판별 중');
-        resultSection.classList.remove('show');
+        resultSection.classList.add('d-none');
 
         try {
             const formData = new FormData();
@@ -906,7 +527,7 @@
             updateStatus('error', '판별 실패');
             identifyBtn.disabled = false;
         } finally {
-            loadingSpinner.classList.remove('show');
+            loadingSpinner.classList.add('d-none');
         }
     });
 
@@ -917,7 +538,7 @@
         resultModel.textContent = result.model_korean || '-';
         resultConfidence.textContent = result.confidence ? `${(result.confidence * 100).toFixed(1)}%` : '-';
 
-        resultSection.classList.add('show');
+        resultSection.classList.remove('d-none');
         identifyBtn.textContent = '재분석';
         identifyBtn.disabled = false;
     }
@@ -929,8 +550,8 @@
         selectedFile = null;
         fileInput.value = '';
         previewImage.src = '';
-        imageCard.classList.remove('show');
-        emptyState.style.display = 'block';
+        imageCard.classList.add('d-none');
+        emptyState.classList.remove('d-none');
         resetState();
     });
 
@@ -938,13 +559,14 @@
     // 유틸리티
     // ──────────────────────────────────────
     function updateStatus(type, text) {
-        statusBadge.className = `status-badge status-${type}`;
+        const typeMap = { ready: 'info', detecting: 'warning', detected: 'info', identifying: 'primary', completed: 'success', error: 'danger' };
+        statusBadge.className = `badge rounded-pill bg-${typeMap[type] || 'secondary'}`;
         statusBadge.textContent = text;
     }
 
     function showToast(message, type = 'info') {
         const toast = document.createElement('div');
-        toast.className = 'toast';
+        toast.className = 'reeve-toast';
         toast.textContent = message;
 
         if (type === 'error') toast.style.background = '#ef4444';

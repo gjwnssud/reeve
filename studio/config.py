@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # OpenAI API
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
 
+    # Gemini API
+    gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+
     # 임베딩 설정
     embedding_device: str = Field(default="cpu", alias="EMBEDDING_DEVICE")
 
@@ -59,6 +63,58 @@ class Settings(BaseSettings):
         default=3,
         alias="CLEANUP_HOUR",
         description="자동 정리 실행 시간 (0-23시)"
+    )
+
+    # Qdrant 사전 중복제거 설정
+    dedup_enabled: bool = Field(
+        default=True,
+        alias="DEDUP_ENABLED",
+        description="분석 전 Qdrant 학습 데이터로 사전 중복제거 활성화"
+    )
+    dedup_similarity_threshold: float = Field(
+        default=0.92,
+        alias="DEDUP_SIMILARITY_THRESHOLD",
+        description="중복으로 판정할 코사인 유사도 임계값 (0.0~1.0)"
+    )
+    dedup_top_k: int = Field(
+        default=3,
+        alias="DEDUP_TOP_K",
+        description="중복제거 검색 시 조회할 상위 결과 수"
+    )
+
+    # LLaMA-Factory 설정
+    llamafactory_container: str = Field(
+        default="reeve-llamafactory",
+        alias="LLAMAFACTORY_CONTAINER",
+        description="LLaMA-Factory Docker 컨테이너 이름"
+    )
+
+    identifier_url: str = Field(
+        default="http://localhost:8001",
+        alias="IDENTIFIER_URL",
+        description="Identifier 서비스 URL (Before/After 평가용)"
+    )
+
+    # Vision 백엔드 설정
+    vision_backend: str = Field(
+        default="openai",
+        alias="VISION_BACKEND",
+        description="Vision 분석 백엔드 (openai 또는 ollama)"
+    )
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        alias="OLLAMA_BASE_URL",
+        description="Ollama 서버 URL"
+    )
+    studio_vlm_model: str = Field(
+        default="qwen3-vl:8b",
+        alias="STUDIO_VLM_MODEL",
+        description="Studio용 VLM 모델명"
+    )
+    studio_vlm_timeout: int = Field(
+        default=60,
+        alias="STUDIO_VLM_TIMEOUT",
+        description="VLM 요청 타임아웃 (초)"
     )
 
     class Config:

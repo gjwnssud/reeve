@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS `analyzed_vehicles`
 CREATE TABLE IF NOT EXISTS `training_dataset`
 (
     `id`                bigint                                  NOT NULL AUTO_INCREMENT,
-    `image_path`        varchar(100) COLLATE utf8mb4_general_ci NOT NULL COMMENT '검증된 이미지 경로',
+    `image_path`        varchar(500) COLLATE utf8mb4_general_ci NOT NULL COMMENT '검증된 이미지 경로',
     `manufacturer_id`   bigint                                  NOT NULL COMMENT '제조사 ID',
     `model_id`          bigint                                  NOT NULL COMMENT '모델 ID',
     `qdrant_id`         varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'QdrantDB 문서 ID',

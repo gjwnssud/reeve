@@ -151,6 +151,50 @@ async def create_vehicle_model(model: VehicleModelCreate, db: Session = Depends(
 
 
 # 검수 관리 API
+@router.get("/analyzed-vehicles")
+async def get_all_analyzed_vehicles(
+    skip: int = 0,
+    limit: int = 20,
+    status: Optional[str] = None,
+    manufacturer_id: Optional[int] = None,
+    model_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """전체 분석 레코드 조회 (차량데이터 관리용)
+    status 필터 (DB processing_stage 기준):
+      uploaded         - stage='uploaded' (YOLO 미실행)
+      yolo_detected    - stage='yolo_detected' (탐지완료, 성공/실패 포함)
+      analysis_complete - stage='analysis_complete', is_verified=False (분석완료, 미검증)
+      verified         - is_verified=True (검증완료)
+    """
+    query = db.query(AnalyzedVehicle)
+
+    if status == 'uploaded':
+        query = query.filter(AnalyzedVehicle.processing_stage == 'uploaded')
+    elif status == 'yolo_detected':
+        query = query.filter(AnalyzedVehicle.processing_stage == 'yolo_detected')
+    elif status == 'analysis_complete':
+        query = query.filter(
+            AnalyzedVehicle.processing_stage == 'analysis_complete',
+            AnalyzedVehicle.is_verified == False
+        )
+    elif status == 'verified':
+        query = query.filter(AnalyzedVehicle.is_verified == True)
+
+    if manufacturer_id is not None:
+        query = query.filter(AnalyzedVehicle.matched_manufacturer_id == manufacturer_id)
+    if model_id is not None:
+        query = query.filter(AnalyzedVehicle.matched_model_id == model_id)
+
+    total = query.count()
+    items = query.order_by(AnalyzedVehicle.created_at.desc()).offset(skip).limit(limit).all()
+
+    return {
+        "total": total,
+        "items": [item.to_dict() for item in items]
+    }
+
+
 @router.get("/analyzed-vehicles-pending")
 def get_pending_vehicles(
     skip: int = 0,
@@ -383,12 +427,48 @@ async def batch_save_all_to_vectordb(
                 current += 1
                 vectordb_ok = False
                 try:
-                    # 기존 학습 데이터 확인 (중복 방지)
+                    # 기존 학습 데이터 확인
                     existing = db.query(TrainingDataset).filter(
                         TrainingDataset.image_path == analyzed.image_path
                     ).first()
 
+                    mfr = analyzed.matched_manufacturer
+                    mdl = analyzed.matched_model
+
                     if existing:
+                        # qdrant_id 없거나 제조사/모델 변경 시 재저장
+                        needs_update = (
+                            existing.qdrant_id is None
+                            or existing.manufacturer_id != analyzed.matched_manufacturer_id
+                            or existing.model_id != analyzed.matched_model_id
+                        )
+                        if needs_update:
+                            if existing.qdrant_id:
+                                vectordb_service.delete_training_image(existing.id)
+                            existing.manufacturer_id = analyzed.matched_manufacturer_id
+                            existing.model_id = analyzed.matched_model_id
+                            db.flush()
+                            image_embedding = embedding_service.encode_image(analyzed.image_path)
+                            qdrant_metadata = {
+                                "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
+                                "verified_by": "admin",
+                                "verified_at": datetime.now().isoformat()
+                            }
+                            qdrant_success = vectordb_service.add_training_image(
+                                training_id=existing.id,
+                                image_path=existing.image_path,
+                                manufacturer_id=existing.manufacturer_id,
+                                model_id=existing.model_id,
+                                embedding=image_embedding,
+                                metadata=qdrant_metadata,
+                                manufacturer_korean=mfr.korean_name if mfr else None,
+                                manufacturer_english=mfr.english_name if mfr else None,
+                                model_korean=mdl.korean_name if mdl else None,
+                                model_english=mdl.english_name if mdl else None,
+                            )
+                            if qdrant_success:
+                                existing.qdrant_id = f"train_{existing.id}"
+                            db.commit()
                         vectordb_ok = True
                     else:
                         # 이미지 임베딩 생성
@@ -404,10 +484,6 @@ async def batch_save_all_to_vectordb(
 
                         db.add(training_data)
                         db.flush()
-
-                        # 제조사/모델 이름 (이미 joinedload로 로드됨, 추가 쿼리 없음)
-                        mfr = analyzed.matched_manufacturer
-                        mdl = analyzed.matched_model
 
                         # Qdrant 메타데이터
                         qdrant_metadata = {
@@ -511,12 +587,54 @@ async def save_to_vectordb(
     # 1) training_dataset + QdrantDB 저장 시도
     vectordb_ok = False
     try:
-        # 기존 학습 데이터 확인 (중복 방지)
+        # 기존 학습 데이터 확인 (동일 이미지 경로 기준)
         existing = db.query(TrainingDataset).filter(
             TrainingDataset.image_path == analyzed.image_path
         ).first()
 
+        mfr = analyzed.matched_manufacturer
+        mdl = analyzed.matched_model
+
         if existing:
+            # 기존 레코드가 있더라도: qdrant_id가 없거나 제조사/모델이 변경된 경우 재저장
+            needs_qdrant_update = (
+                existing.qdrant_id is None
+                or existing.manufacturer_id != analyzed.matched_manufacturer_id
+                or existing.model_id != analyzed.matched_model_id
+            )
+            if needs_qdrant_update:
+                # 기존 Qdrant 항목 삭제 후 재등록
+                if existing.qdrant_id:
+                    vectordb_service.delete_training_image(existing.id)
+
+                existing.manufacturer_id = analyzed.matched_manufacturer_id
+                existing.model_id = analyzed.matched_model_id
+                db.flush()
+
+                image_embedding = embedding_service.encode_image(analyzed.image_path)
+                qdrant_metadata = {
+                    "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
+                    "verified_by": "admin",
+                    "verified_at": datetime.now().isoformat()
+                }
+                qdrant_success = vectordb_service.add_training_image(
+                    training_id=existing.id,
+                    image_path=existing.image_path,
+                    manufacturer_id=existing.manufacturer_id,
+                    model_id=existing.model_id,
+                    embedding=image_embedding,
+                    metadata=qdrant_metadata,
+                    manufacturer_korean=mfr.korean_name if mfr else None,
+                    manufacturer_english=mfr.english_name if mfr else None,
+                    model_korean=mdl.korean_name if mdl else None,
+                    model_english=mdl.english_name if mdl else None,
+                )
+                if not qdrant_success:
+                    raise RuntimeError(f"Qdrant 저장 실패 (training_id={existing.id})")
+                existing.qdrant_id = f"train_{existing.id}"
+                db.commit()
+                logger.info(f"Updated VectorDB: {existing.id}")
+
             vectordb_ok = True
         else:
             # 이미지 임베딩 생성
@@ -532,10 +650,6 @@ async def save_to_vectordb(
 
             db.add(training_data)
             db.flush()  # ID 생성
-
-            # 제조사/모델 이름 (이미 joinedload로 로드됨, 추가 쿼리 없음)
-            mfr = analyzed.matched_manufacturer
-            mdl = analyzed.matched_model
 
             # Qdrant 메타데이터
             qdrant_metadata = {
@@ -558,10 +672,11 @@ async def save_to_vectordb(
                 model_english=mdl.english_name if mdl else None,
             )
 
-            if qdrant_success:
-                training_data.qdrant_id = f"train_{training_data.id}"
-                logger.info(f"Added to VectorDB: {training_data.id}")
+            if not qdrant_success:
+                raise RuntimeError(f"Qdrant 저장 실패 (training_id={training_data.id})")
 
+            training_data.qdrant_id = f"train_{training_data.id}"
+            logger.info(f"Added to VectorDB: {training_data.id}")
             db.commit()
             vectordb_ok = True
 
@@ -666,16 +781,41 @@ async def delete_analyzed_vehicle(
     except Exception as e:
         logger.warning(f"Failed to delete crop file: {e}")
 
-    # 원본 업로드 이미지 파일 삭제
+    # 원본 업로드 이미지 파일 삭제 (raw_result 또는 original_image_path 컬럼 사용)
     try:
         import os
+        original_path = None
         if analyzed.raw_result and isinstance(analyzed.raw_result, dict):
             original_path = analyzed.raw_result.get("original_image")
-            if original_path and os.path.exists(original_path):
-                os.remove(original_path)
-                logger.info(f"Deleted original file: {original_path}")
+        if not original_path:
+            original_path = analyzed.original_image_path
+        # image_path와 동일하면(크롭 없음) 이미 위에서 삭제됨
+        if original_path and original_path != analyzed.image_path and os.path.exists(original_path):
+            os.remove(original_path)
+            logger.info(f"Deleted original file: {original_path}")
     except Exception as e:
         logger.warning(f"Failed to delete original file: {e}")
+
+    # 검증 완료 레코드인 경우 training_dataset + Qdrant 벡터도 함께 삭제
+    if analyzed.is_verified:
+        try:
+            from studio.models.training_dataset import TrainingDataset
+            from studio.services.vectordb import vectordb_service
+
+            training = db.query(TrainingDataset).filter(
+                TrainingDataset.image_path == analyzed.image_path
+            ).first()
+
+            if training:
+                if training.qdrant_id:
+                    try:
+                        vectordb_service.delete_training_image(training.id)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete from Qdrant: {e}")
+                db.delete(training)
+                db.flush()
+        except Exception as e:
+            logger.warning(f"Failed to cleanup training_dataset for analyzed_id={analyzed_id}: {e}")
 
     # DB에서 삭제
     db.delete(analyzed)
@@ -690,24 +830,59 @@ async def analyze_single_image(
     db: Session = Depends(get_db)
 ):
     """
-    단일 이미지 재분석 (일괄 분석용)
+    단일 이미지 재분석 (기존 크롭 또는 bbox 기반)
 
-    Args:
-        analyzed_id: 분석할 AnalyzedVehicle ID
+    - 기존 크롭이 있으면(image_path != original_image_path) → 그대로 사용
+    - 크롭이 없으면 selected_bbox → yolo_detections[0] 순서로 크롭 생성
     """
-    from studio.services.openai_vision import vision_service
+    import cv2
+    import os as _os
+    from pathlib import Path
+    from studio.services.vision_backend import get_vision_backend
     from studio.services.matcher import VehicleMatcher
 
-    # 기존 분석 결과 조회
     analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
     if not analyzed:
         raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
 
     try:
-        # OpenAI Vision API 분석
-        vision_result = await vision_service.analyze_vehicle_image(analyzed.image_path, db=db)
+        target_path = analyzed.image_path
 
-        # 기준 DB와 매칭
+        # 크롭이 없는 경우(원본 == image_path) → bbox로 크롭 생성
+        if analyzed.image_path == analyzed.original_image_path:
+            bbox = analyzed.selected_bbox
+            if not bbox and analyzed.yolo_detections:
+                bbox = analyzed.yolo_detections[0].get("bbox")
+            if not bbox:
+                raise ValueError("크롭 이미지가 없고 bbox 정보도 없습니다. 수정 모달에서 영역을 선택 후 재분석해주세요.")
+
+            image = cv2.imread(analyzed.original_image_path)
+            if image is None:
+                raise ValueError("원본 이미지를 읽을 수 없습니다.")
+
+            h, w = image.shape[:2]
+            x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            if x2 <= x1 or y2 <= y1:
+                raise ValueError(f"유효하지 않은 bbox: [{x1},{y1},{x2},{y2}]")
+
+            from datetime import datetime
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            crop_dir = Path(f"data/crops/{date_str}")
+            crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_path = crop_dir / f"{_os.urandom(16).hex()}_crop.jpg"
+            cv2.imwrite(str(crop_path), image[y1:y2, x1:x2])
+
+            analyzed.image_path = str(crop_path)
+            analyzed.selected_bbox = bbox
+            target_path = str(crop_path)
+
+        vision_service = get_vision_backend()
+        vision_result = await vision_service.analyze_vehicle_image(target_path, db=db)
+
         matcher = VehicleMatcher(db, auto_insert=True)
         match_result = matcher.match_vehicle(
             vision_result.get("manufacturer_code", ""),
@@ -715,13 +890,14 @@ async def analyze_single_image(
             vision_confidence=vision_result.get("confidence")
         )
 
-        # 분석 결과 업데이트
         analyzed.raw_result = vision_result
         analyzed.manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
         analyzed.model = match_result["model"].korean_name if match_result["model"] else None
         analyzed.matched_manufacturer_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
         analyzed.matched_model_id = match_result["model"].id if match_result["model"] else None
         analyzed.confidence_score = match_result["overall_confidence"]
+        analyzed.processing_stage = 'analysis_complete'
+        analyzed.is_verified = False  # 재분석 시 검증 상태 리셋 (재저장 필요)
 
         db.commit()
         db.refresh(analyzed)
@@ -913,6 +1089,16 @@ async def sync_vector_database(
     results["stats"] = vectordb_service.get_collection_stats()
 
     return results
+
+
+# 벡터 DB 초기화 (마이그레이션용 — 완료 후 제거)
+@router.delete("/vectordb-reset")
+async def reset_vector_database():
+    """Qdrant 컬렉션 초기화: 1536d(EfficientNet-B3) 스키마로 재생성.
+    마이그레이션 완료 후 이 엔드포인트를 제거할 것."""
+    from studio.services.vectordb import vectordb_service
+    vectordb_service.clear_all_collections()
+    return {"status": "reset complete, collection recreated at 1536d"}
 
 
 # 벡터 DB 통계 조회

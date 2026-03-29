@@ -8,6 +8,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, VectorParams, PointStruct,
     Filter, FieldCondition, MatchValue,
+    PointIdsList,
 )
 
 from studio.config import settings
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 # 컬렉션별 벡터 차원 정의
 COLLECTION_CONFIGS = {
     "training_images": {
-        "size": 512,
+        "size": 1536,
         "distance": Distance.COSINE,
         "description": "학습 이미지 벡터 컬렉션"
     }
@@ -201,6 +202,22 @@ class VectorDBService:
         except Exception as e:
             logger.error(f"Failed to search training images: {e}")
             return []
+
+    def delete_training_image(self, training_id: int) -> bool:
+        """학습 이미지 임베딩 삭제 (Qdrant에서 포인트 제거)"""
+        client = self._get_client()
+        if not client:
+            return False
+        try:
+            client.delete(
+                collection_name="training_images",
+                points_selector=PointIdsList(points=[training_id])
+            )
+            logger.info(f"Deleted training image from Qdrant: {training_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete training image {training_id} from Qdrant: {e}")
+            return False
 
     def clear_all_collections(self) -> bool:
         """모든 컬렉션 초기화 (주의!)"""

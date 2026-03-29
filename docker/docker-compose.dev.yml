@@ -52,6 +52,7 @@ services:
     environment:
       - MYSQL_HOST=mysql
       - QDRANT_HOST=qdrant
+      - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
       mysql:
         condition: service_healthy

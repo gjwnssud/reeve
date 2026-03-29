@@ -1,33 +1,52 @@
 """
 임베딩 생성 서비스
-CLIP 모델을 사용한 이미지 벡터화
+EfficientNet-B3 모델을 사용한 이미지 벡터화
 """
 import logging
 from typing import List
-from sentence_transformers import SentenceTransformer
+
+import timm
+import torch
+import torch.nn.functional as F
+import torchvision.transforms as T
 from PIL import Image
 
 from studio.config import settings
 
 logger = logging.getLogger(__name__)
 
+EFFICIENTNET_DIM = 1536
+
 
 class EmbeddingService:
-    """이미지 임베딩 생성 서비스 (CLIP)"""
+    """이미지 임베딩 생성 서비스 (EfficientNet-B3)"""
 
     def __init__(self):
         """임베딩 모델 초기화"""
         try:
-            # 이미지 임베딩 모델 (CLIP)
-            self.image_model = SentenceTransformer(
-                'clip-ViT-B-32',
-                device=settings.embedding_device
+            self.model = timm.create_model(
+                'efficientnet_b3', pretrained=True, num_classes=0
             )
-            logger.info("Image embedding model loaded: clip-ViT-B-32")
+            self.model.eval()
+            self.model.to(settings.embedding_device)
+
+            self.transform = T.Compose([
+                T.Resize((300, 300)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
+            ])
+
+            logger.info(f"Image embedding model loaded: efficientnet_b3 (device={settings.embedding_device})")
 
         except Exception as e:
             logger.error(f"Failed to initialize embedding model: {e}")
             raise
+
+    def _embed(self, tensor: torch.Tensor) -> "np.ndarray":
+        with torch.no_grad():
+            vecs = self.model(tensor)
+        return F.normalize(vecs, dim=-1).cpu().numpy()
 
     def encode_image(self, image_path: str) -> List[float]:
         """
@@ -39,25 +58,10 @@ class EmbeddingService:
         Returns:
             임베딩 벡터
         """
-        if not self.image_model:
-            raise ValueError("Image embedding model not available")
-
         try:
-            # 이미지 로드
-            image = Image.open(image_path)
-
-            # RGB로 변환
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-
-            # 임베딩 생성
-            embedding = self.image_model.encode(
-                image,
-                convert_to_numpy=True,
-                normalize_embeddings=True
-            )
-
-            return embedding.tolist()
+            image = Image.open(image_path).convert("RGB")
+            t = self.transform(image).unsqueeze(0).to(settings.embedding_device)
+            return self._embed(t)[0].tolist()
 
         except Exception as e:
             logger.error(f"Failed to encode image {image_path}: {e}")
@@ -73,27 +77,13 @@ class EmbeddingService:
         Returns:
             임베딩 벡터 리스트
         """
-        if not self.image_model:
-            raise ValueError("Image embedding model not available")
-
         try:
-            # 이미지 로드
-            images = []
-            for path in image_paths:
-                image = Image.open(path)
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                images.append(image)
-
-            # 배치 임베딩
-            embeddings = self.image_model.encode(
-                images,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-                batch_size=8
-            )
-
-            return embeddings.tolist()
+            tensors = [
+                self.transform(Image.open(p).convert("RGB"))
+                for p in image_paths
+            ]
+            batch = torch.stack(tensors).to(settings.embedding_device)
+            return self._embed(batch).tolist()
 
         except Exception as e:
             logger.error(f"Failed to encode batch images: {e}")
@@ -116,7 +106,6 @@ class EmbeddingService:
             vec1 = np.array(embedding1)
             vec2 = np.array(embedding2)
 
-            # 코사인 유사도
             similarity = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
             return float(similarity)
@@ -128,8 +117,8 @@ class EmbeddingService:
     def get_model_info(self) -> dict:
         """임베딩 모델 정보"""
         return {
-            "image_model": "clip-ViT-B-32",
-            "embedding_dimension": 512,
+            "image_model": "efficientnet_b3",
+            "embedding_dimension": EFFICIENTNET_DIM,
             "device": settings.embedding_device
         }
 

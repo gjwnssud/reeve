@@ -135,6 +135,24 @@ async def analyze_ui():
     return {"error": "Analyze UI not found"}
 
 
+@app.get("/finetune-ui", tags=["UI"])
+async def finetune_ui():
+    """파인튜닝 관리 UI 페이지"""
+    html_path = Path(__file__).parent / "static" / "finetune.html"
+    if html_path.exists():
+        return FileResponse(html_path)
+    return {"error": "Finetune UI not found"}
+
+
+@app.get("/basic-data-ui", tags=["UI"])
+async def basic_data_ui():
+    """기초데이터 관리 UI 페이지 (제조사/차량모델 CRUD)"""
+    html_path = Path(__file__).parent / "static" / "basic_data.html"
+    if html_path.exists():
+        return FileResponse(html_path)
+    return {"error": "Basic Data UI not found"}
+
+
 
 # 전역 예외 핸들러
 @app.exception_handler(Exception)

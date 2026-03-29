@@ -30,8 +30,8 @@ const state = {
     folderStats: JSON.parse(localStorage.getItem(`reeve_folder_stats_${CLIENT_UUID}`))
         || { uploaded: 0, detected: 0, detectionFailed: 0, analyzed: 0, analysisError: 0 },
     hydrateState: {
-        file:   { loading: false, skip: 0, limit: 20, hasMore: true },
-        folder: { loading: false, skip: 0, limit: 20, hasMore: true }
+        file:   { loading: false, page: 0, pageSize: 9, totalCount: 0 },
+        folder: { loading: false, page: 0, pageSize: 9, totalCount: 0 }
     }
 };
 
@@ -161,6 +161,9 @@ async function handleFiles(files, { onEachUploadSuccess, source = 'file' } = {})
                 imageState.originalImagePath = original_image_path;
                 uploadSuccess = true;
                 incrementStat(source, 'uploaded');
+                // 페이지네이션 카운트 증가 (라이브 카드는 그리드에 직접 추가되므로 컨트롤만 갱신)
+                state.hydrateState[source].totalCount++;
+                renderPagination(source);
             }
         } catch (e) {
             console.warn('즉시 업로드 실패 (하위 호환 모드):', e);
@@ -182,40 +185,42 @@ async function handleFiles(files, { onEachUploadSuccess, source = 'file' } = {})
 
 async function createImageCard(imageId, file) {
     const card = document.createElement('div');
-    card.className = 'image-item';
+    card.className = 'col';
     card.id = `image-${imageId}`;
 
     // 먼저 빈 카드 추가
     card.innerHTML = `
+        <div class="card shadow-sm overflow-hidden">
         <div class="image-container">
             <img id="img-${imageId}" alt="${file.name}" style="display:none;">
             <canvas id="canvas-${imageId}" class="image-canvas" style="display:none;"></canvas>
             <div id="bbox-overlay-${imageId}"></div>
         </div>
-        <div class="image-info">
-            <h4>
+        <div class="card-body">
+            <h6 class="d-flex align-items-center gap-2">
                 ${file.name}
-                <span class="status-badge status-detecting" id="status-${imageId}">업로드 중</span>
-            </h4>
-            <div id="detection-list-${imageId}" class="detection-list"></div>
-            <div id="result-${imageId}" class="result-section" style="display: none;"></div>
-            <div class="action-buttons">
-                <button class="btn-sm btn-primary" id="analyze-btn-${imageId}" disabled>
+                <span class="badge rounded-pill bg-warning" id="status-${imageId}">업로드 중</span>
+            </h6>
+            <div id="detection-list-${imageId}" class="list-group list-group-flush my-2"></div>
+            <div id="result-${imageId}" class="card bg-body-secondary p-3 mt-2" style="display: none;"></div>
+            <div class="d-flex gap-2 mt-3 flex-wrap">
+                <button class="btn btn-sm btn-primary" id="analyze-btn-${imageId}" disabled>
                     분석하기
                 </button>
-                <button class="btn-sm btn-success" id="edit-btn-${imageId}" style="display:none;" onclick="openAnalysisEditModal('${imageId}')">
+                <button class="btn btn-sm btn-success" id="edit-btn-${imageId}" style="display:none;" onclick="openAnalysisEditModal('${imageId}')">
                     분석결과 수정
                 </button>
-                <button class="btn-sm btn-primary" id="save-btn-${imageId}" style="display:none;" onclick="saveImageToVectorDB('${imageId}')">
+                <button class="btn btn-sm btn-primary" id="save-btn-${imageId}" style="display:none;" onclick="saveImageToVectorDB('${imageId}')">
                     저장
                 </button>
-                <button class="btn-sm btn-danger" onclick="removeImage('${imageId}')">
+                <button class="btn btn-sm btn-danger" onclick="removeImage('${imageId}')">
                     삭제
                 </button>
             </div>
-            <div class="progress-bar" style="display: none;" id="progress-${imageId}">
-                <div class="progress-fill" style="width: 0%;"></div>
+            <div class="progress mt-3" style="display: none; height: 4px;" id="progress-${imageId}">
+                <div class="progress-bar" role="progressbar" style="width: 0%; background: linear-gradient(90deg, #667eea, #764ba2);"></div>
             </div>
+        </div>
         </div>
     `;
 
@@ -358,9 +363,8 @@ function displayDetections(imageId, detections) {
     }
 
     listContainer.innerHTML = detections.map((det, idx) => `
-        <div class="detection-item" id="detection-${imageId}-${idx}" onclick="selectDetection('${imageId}', ${idx})">
+        <div class="list-group-item list-group-item-action" id="detection-${imageId}-${idx}" onclick="selectDetection('${imageId}', ${idx})">
             <strong>${det.class_name}</strong> (신뢰도: ${(det.confidence * 100).toFixed(1)}%)
-            <br>
         </div>
     `).join('');
 
@@ -511,13 +515,8 @@ function enableManualDraw(imageId) {
         createBboxOverlay(imageId, origBbox);
         imageState.selectedBbox = origBbox;
 
-        // 이전에 감지 실패 상태였으면 detectionFailed 차감
-        if (['no_vehicle', 'detection_error'].includes(imageState.status)) {
-            incrementStat(imageState.source, 'detectionFailed', -1);
-        }
         imageState.status = 'detected';
         updateStatus(imageId, 'detected', '수동 영역 지정');
-        incrementStat(imageState.source, 'detected');
 
         const analyzeBtn = document.getElementById(`analyze-btn-${imageId}`);
         if (analyzeBtn) {
@@ -552,9 +551,9 @@ function selectDetection(imageId, detectionIdx) {
     const detection = imageState.detections[detectionIdx];
 
     // UI 업데이트
-    const detectionItems = document.querySelectorAll(`#detection-list-${imageId} .detection-item`);
+    const detectionItems = document.querySelectorAll(`#detection-list-${imageId} .list-group-item`);
     detectionItems.forEach((item, idx) => {
-        item.classList.toggle('selected', idx === detectionIdx);
+        item.classList.toggle('active', idx === detectionIdx);
     });
 
     // 캔버스의 모든 박스 지우기
@@ -575,6 +574,10 @@ function createBboxOverlay(imageId, bbox) {
     const img = document.getElementById(`img-${imageId}`);
 
     if (!img || !img.naturalWidth) return;
+
+    // 오버레이 표시 전 캔버스 감지 박스 제거 (잔상 방지)
+    const canvas = document.getElementById(`canvas-${imageId}`);
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 
     // 이미지의 실제 표시 크기와 위치 계산
     const imgRect = img.getBoundingClientRect();
@@ -781,7 +784,7 @@ function updateBboxFromOverlay(imageId) {
 //=============================================================================
 
 // 분석 API 호출 공통 함수 (analyzeVehicle, analyzeImageSimple 공유)
-async function runAnalysisStream(imageId, imageState) {
+async function runAnalysisStream(imageId, imageState, countStats = false) {
     const formData = new FormData();
     formData.append('bbox', JSON.stringify(imageState.selectedBbox));
     // analyzed_id 우선: DB-first 업로드 ID 또는 재분석 시 기존 레코드 ID
@@ -818,7 +821,7 @@ async function runAnalysisStream(imageId, imageState) {
             if (line.startsWith('data: ')) {
                 try {
                     const data = JSON.parse(line.substring(6));
-                    handleStreamEvent(imageId, data);
+                    handleStreamEvent(imageId, data, countStats);
                 } catch (e) {
                     console.error('Failed to parse SSE data:', line, e);
                 }
@@ -857,7 +860,7 @@ async function analyzeVehicle(imageId) {
     const progressBar = document.getElementById(`progress-${imageId}`);
     if (progressBar) {
         progressBar.style.display = 'block';
-        const fill = progressBar.querySelector('.progress-fill');
+        const fill = progressBar.querySelector('.progress-bar');
         fill.style.width = '0%';
     }
 
@@ -880,16 +883,16 @@ async function analyzeVehicle(imageId) {
 
 // 일괄 분석용 (버튼 조작 없이 분석만 실행)
 async function analyzeImageSimple(imageId, imageState) {
-    await runAnalysisStream(imageId, imageState);
+    await runAnalysisStream(imageId, imageState, true);
 
-    // 폴더 감시 모드: 분석 완료 시 자동 벡터DB 저장 후 카드 제거
+    // 폴더 감시 모드: 분석 완료 시 자동 벡터DB 저장 (카드는 "저장 완료" 상태로 유지)
     const current = state.images.get(imageId);
     if (current?.source === 'folder' && current.status === 'completed' && current.result?.id) {
         await saveImageToVectorDB(imageId, { silent: true });
     }
 }
 
-function handleStreamEvent(imageId, data) {
+function handleStreamEvent(imageId, data, countStats = false) {
     const imageState = state.images.get(imageId);
     if (!imageState) return;
 
@@ -899,10 +902,31 @@ function handleStreamEvent(imageId, data) {
     if (data.event === 'progress') {
         // 진행률 업데이트
         if (progressBar) {
-            const fill = progressBar.querySelector('.progress-fill');
+            const fill = progressBar.querySelector('.progress-bar');
             fill.style.width = `${data.progress}%`;
         }
         updateStatus(imageId, 'analyzing', data.message || '분석 중');
+
+    } else if (data.event === 'dedup_match') {
+        // 학습 데이터 중복제거 매치
+        if (progressBar) {
+            const fill = progressBar.querySelector('.progress-bar');
+            fill.style.width = data.progress + '%';
+        }
+        updateStatus(imageId, 'analyzing', data.message || '학습 데이터 일치');
+
+        // dedup 배지 표시
+        const infoDiv = document.getElementById(`info-${imageId}`);
+        if (infoDiv) {
+            let badge = infoDiv.querySelector('.dedup-badge');
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'badge bg-info-subtle text-info-emphasis mt-1';
+                const h4 = infoDiv.querySelector('h6') || infoDiv.querySelector('h4');
+                if (h4) h4.after(badge);
+            }
+            badge.textContent = data.message || `학습 데이터 일치 (유사도: ${data.similarity})`;
+        }
 
     } else if (data.event === 'completed') {
         imageState.result = data.result;
@@ -912,7 +936,7 @@ function handleStreamEvent(imageId, data) {
         if (hasNull) {
             // 제조사 또는 모델이 null → 분석 실패로 카운트
             imageState.status = 'analysis_error';
-            incrementStat(imageState.source, 'analysisError');
+            if (countStats) incrementStat(imageState.source, 'analysisError');
             displayResult(imageId, data.result);
             updateStatus(imageId, 'error', 'null 인식 실패');
             renderStats();
@@ -929,31 +953,39 @@ function handleStreamEvent(imageId, data) {
 
             showToast(`인식 실패: 제조사 또는 모델이 null입니다. 수정 후 저장해주세요.`, 'error');
         } else {
-            // 정상 완료
+            // 정상 완료 → 재시도 큐(이미지 분석 페이지)에서 자동 제거
             imageState.status = 'completed';
-            incrementStat(imageState.source, 'analyzed');
+            if (countStats) incrementStat(imageState.source, 'analyzed');
             displayResult(imageId, data.result);
-            updateStatus(imageId, 'completed', '분석 완료');
+            updateStatus(imageId, 'completed', '분석 완료 — 관리자 페이지로 이동됩니다');
             renderStats();
 
             if (progressBar) progressBar.style.display = 'none';
-            if (analyzeBtn) {
-                analyzeBtn.disabled = false;
-                analyzeBtn.textContent = '재분석';
-            }
+            if (analyzeBtn) analyzeBtn.disabled = true;
 
-            const editBtn = document.getElementById(`edit-btn-${imageId}`);
-            if (editBtn) editBtn.style.display = '';
-            const saveBtn = document.getElementById(`save-btn-${imageId}`);
-            if (saveBtn) saveBtn.style.display = '';
+            showToast(`분석 완료: ${data.result.manufacturer} ${data.result.model} — 관리자에서 확인하세요`);
 
-            showToast(`분석 완료: ${data.result.manufacturer} ${data.result.model}`);
+            // 2초 후 카드 자동 제거 (성공 결과 확인 시간 허용)
+            setTimeout(() => {
+                const card = document.getElementById(`image-${imageId}`);
+                if (card) {
+                    card.style.transition = 'opacity 0.5s';
+                    card.style.opacity = '0';
+                    setTimeout(() => {
+                        card.remove();
+                        if (state.hydrateState[imageState.source].totalCount > 0)
+                            state.hydrateState[imageState.source].totalCount--;
+                        state.images.delete(imageId);
+                        renderStats();
+                    }, 500);
+                }
+            }, 2000);
         }
 
     } else if (data.event === 'error') {
         // 에러 처리
         imageState.status = 'analysis_error';
-        incrementStat(imageState.source, 'analysisError');
+        if (countStats) incrementStat(imageState.source, 'analysisError');
         updateStatus(imageId, 'error', '분석 실패');
         renderStats();
 
@@ -973,17 +1005,17 @@ function displayResult(imageId, result) {
 
     resultContainer.style.display = 'block';
     resultContainer.innerHTML = `
-        <div class="result-row">
-            <span class="result-label">제조사:</span>
-            <span class="result-value">${result.manufacturer || 'N/A'}</span>
+        <div class="d-flex justify-content-between py-1 small">
+            <span class="fw-semibold text-muted">제조사:</span>
+            <span class="fw-medium">${result.manufacturer || 'N/A'}</span>
         </div>
-        <div class="result-row">
-            <span class="result-label">모델:</span>
-            <span class="result-value">${result.model || 'N/A'}</span>
+        <div class="d-flex justify-content-between py-1 small">
+            <span class="fw-semibold text-muted">모델:</span>
+            <span class="fw-medium">${result.model || 'N/A'}</span>
         </div>
-        <div class="result-row">
-            <span class="result-label">식별 신뢰도:</span>
-            <span class="result-value">${result.confidence_score ? result.confidence_score.toFixed(1) + '%' : 'N/A'}</span>
+        <div class="d-flex justify-content-between py-1 small">
+            <span class="fw-semibold text-muted">식별 신뢰도:</span>
+            <span class="fw-medium">${result.confidence_score ? result.confidence_score.toFixed(1) + '%' : 'N/A'}</span>
         </div>
     `;
 }
@@ -996,7 +1028,8 @@ function updateStatus(imageId, statusType, text) {
     const statusBadge = document.getElementById(`status-${imageId}`);
     if (!statusBadge) return;
 
-    statusBadge.className = `status-badge status-${statusType}`;
+    const typeMap = { detecting: 'warning', detected: 'info', analyzing: 'primary', completed: 'success', verified: 'success', error: 'danger', 'manually-edited': 'info' };
+    statusBadge.className = `badge rounded-pill bg-${typeMap[statusType] || 'secondary'}`;
     statusBadge.textContent = text;
 }
 
@@ -1081,13 +1114,17 @@ async function removeImage(imageId) {
     const card = document.getElementById(`image-${imageId}`);
     if (card) card.remove();
 
+    const src = imageState?.source || 'file';
+    if (state.hydrateState[src].totalCount > 0) state.hydrateState[src].totalCount--;
     state.images.delete(imageId);
     renderStats();
+    // 현재 페이지 리로드 (빈 자리 채우기)
+    loadRecordsPage(src);
 }
 
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = 'reeve-toast';
     toast.textContent = message;
 
     if (type === 'error') {
@@ -1126,8 +1163,11 @@ function stopBatchAnalysis() {
 
 async function startBatchAnalysis() {
     // 파일 탭 이미지만 대상 (폴더 감시는 자동 분석)
+    // detected(감지 완료) + analysis_error(재분석 대상) 카드를 배치 분석
     const unanalyzedImages = Array.from(state.images.entries())
-        .filter(([id, img]) => img.source !== 'folder' && img.status === 'detected' && !img.result);
+        .filter(([id, img]) => img.source !== 'folder' &&
+            (img.status === 'detected' || img.status === 'analysis_error') &&
+            img.selectedBbox);
 
     if (unanalyzedImages.length === 0) {
         showToast('분석할 이미지가 없습니다. (차량이 감지된 이미지가 필요합니다)', 'error');
@@ -1303,22 +1343,38 @@ async function openAnalysisEditModal(imageId) {
     closeInlineAddManufacturer();
     closeInlineAddModel();
 
-    modal.style.display = 'block';
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+}
+
+// 탭 전환 후 숨겨진 상태에서 렌더된 canvas/bbox 재초기화
+function refreshTabBboxes(source) {
+    state.images.forEach((imageState, imageId) => {
+        if (imageState.source !== source) return;
+        const img    = document.getElementById(`img-${imageId}`);
+        const canvas = document.getElementById(`canvas-${imageId}`);
+        if (!img || !canvas || img.clientWidth === 0) return;
+
+        canvas.width  = img.clientWidth;
+        canvas.height = img.clientHeight;
+
+        if (imageState.detections?.length > 0) {
+            drawAllBboxes(imageId, imageState.detections);
+        }
+        if (imageState.selectedBbox) {
+            createBboxOverlay(imageId, imageState.selectedBbox);
+        }
+    });
 }
 
 // 제조사 변경 시 모델 목록 업데이트
 document.addEventListener('DOMContentLoaded', async () => {
-    // 모달 닫기 버튼
+    // 모달 닫기 버튼 (Bootstrap Modal API)
+    const imageDetailModal = document.getElementById('imageDetailModal');
     document.getElementById('imageDetailCloseBtn').addEventListener('click', () => {
-        document.getElementById('imageDetailModal').style.display = 'none';
+        bootstrap.Modal.getInstance(imageDetailModal)?.hide();
     });
     document.getElementById('imageDetailCloseBtn2').addEventListener('click', () => {
-        document.getElementById('imageDetailModal').style.display = 'none';
-    });
-    document.getElementById('imageDetailModal').addEventListener('click', (e) => {
-        if (e.target === document.getElementById('imageDetailModal')) {
-            document.getElementById('imageDetailModal').style.display = 'none';
-        }
+        bootstrap.Modal.getInstance(imageDetailModal)?.hide();
     });
 
     // 제조사 변경 시 모델 업데이트
@@ -1335,17 +1391,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 탭 복원
     const savedTab = localStorage.getItem('reeve_active_tab') || 'file';
-    switchUploadTab(savedTab);
+    if (savedTab === 'folder') {
+        bootstrap.Tab.getOrCreateInstance(document.getElementById('snbTabFolder')).show();
+    }
+
+    // SNB 탭 전환 이벤트: localStorage 저장 + 폴더감시 중지 + bbox 재렌더
+    document.getElementById('snbTabFile')?.addEventListener('shown.bs.tab', () => {
+        localStorage.setItem('reeve_active_tab', 'file');
+        if (folderWatch.intervalId) stopFolderWatch();
+        refreshTabBboxes('file');
+    });
+    document.getElementById('snbTabFolder')?.addEventListener('shown.bs.tab', () => {
+        localStorage.setItem('reeve_active_tab', 'folder');
+        refreshTabBboxes('folder');
+    });
 
     // Stats 복원 (이미 state 초기화에서 localStorage로부터 로드됨)
     renderStats();
 
-    // DB에서 미완료 레코드 복원 (탭별 병렬) + 무한 스크롤 + SSE 피드
+    // DB에서 미완료 레코드 복원 (탭별 병렬) + SSE 피드
     await Promise.all([
-        loadMorePendingRecords('file'),
-        loadMorePendingRecords('folder')
+        loadRecordsPage('file'),
+        loadRecordsPage('folder')
     ]);
-    setupInfiniteScroll();
     startAnalyzeFeed();
 });
 
@@ -1412,7 +1480,6 @@ async function saveEditedAnalysis() {
             // (통계상 자동 인식 완료로는 카운트되지 않음)
             if (imageState.status === 'analysis_error') {
                 imageState.status = 'manually_edited';
-                incrementStat('file', 'manuallyEdited');
                 updateStatus(imageId, 'manually-edited', '수동 수정');
                 const saveBtn = document.getElementById(`save-btn-${imageId}`);
                 if (saveBtn) saveBtn.style.display = '';
@@ -1421,7 +1488,7 @@ async function saveEditedAnalysis() {
             displayResult(imageId, imageState.result);
         }
 
-        document.getElementById('imageDetailModal').style.display = 'none';
+        bootstrap.Modal.getInstance(document.getElementById('imageDetailModal'))?.hide();
         showToast(`수정 완료: ${newManufacturer} ${newModel}`, 'success');
     } catch (e) {
         alert('오류: ' + e.message);
@@ -1558,19 +1625,20 @@ async function saveImageToVectorDB(imageId, { silent = false } = {}) {
 
         showToast('벡터DB에 저장되었습니다.', 'success');
 
-        // 저장 완료 후 카드 제거 (페이드 아웃)
+        // 저장 완료 → 재시도 큐에서 자동 제거
+        imageState.status = 'verified';
         const card = document.getElementById(`image-${imageId}`);
         if (card) {
-            card.style.transition = 'opacity 0.3s';
+            card.style.transition = 'opacity 0.5s';
             card.style.opacity = '0';
             setTimeout(() => {
                 card.remove();
-
+                if (state.hydrateState[imageState.source].totalCount > 0)
+                    state.hydrateState[imageState.source].totalCount--;
                 state.images.delete(imageId);
-                renderStats(); // 전체 이미지 수 등 재계산
-            }, 300);
+                renderStats();
+            }, 500);
         } else {
-            state.images.delete(imageId);
             renderStats();
         }
     } catch (e) {
@@ -1665,51 +1733,114 @@ async function startVectorBatchSave() {
 // DB-First 복원 및 실시간 피드
 //=============================================================================
 
-async function loadMorePendingRecords(source = 'file') {
+async function loadRecordsPage(source = 'file') {
     const h = state.hydrateState[source];
-    if (h.loading || !h.hasMore) return;
+    if (h.loading) return;
     h.loading = true;
 
-    const indicator = document.getElementById('loadingMoreIndicator');
-    if (source === 'file' && indicator) indicator.style.display = '';
-
     try {
-        const resp = await fetch(`/api/pending-records?skip=${h.skip}&limit=${h.limit}&source=${source}&client_uuid=${CLIENT_UUID}`);
+        const skip = h.page * h.pageSize;
+        const resp = await fetch(`/api/pending-records?skip=${skip}&limit=${h.pageSize}&source=${source}&client_uuid=${CLIENT_UUID}&failure_only=true`);
         if (!resp.ok) return;
-        const { items, has_more } = await resp.json();
+        const { items, total } = await resp.json();
+        h.totalCount = total;
+
+        // 현재 페이지가 범위를 벗어나면 마지막 유효 페이지로 보정 후 재로드
+        if (items.length === 0 && total > 0 && h.page > 0) {
+            h.page = Math.max(0, Math.ceil(total / h.pageSize) - 1);
+            clearDbCards(source);
+            renderPagination(source);
+            setTimeout(() => loadRecordsPage(source), 0);
+            return;
+        }
+
+        // 이전 DB 로드 카드 제거 후 새 페이지 렌더
+        clearDbCards(source);
         for (const record of items) {
             createImageCardFromRecord(record);
         }
-        h.skip += items.length;
-        h.hasMore = has_more;
+        renderPagination(source);
     } catch (e) {
-        console.warn('레코드 복원 실패:', e);
+        console.warn('레코드 조회 실패:', e);
     } finally {
         h.loading = false;
-        if (source === 'file' && indicator) indicator.style.display = 'none';
     }
 }
 
-function setupInfiniteScroll() {
-    const sentinel = document.getElementById('scrollSentinelFile');
-    if (!sentinel) return;
-    const observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-            loadMorePendingRecords('file');
-        }
-    }, { rootMargin: '200px' });
-    observer.observe(sentinel);
+function clearDbCards(source) {
+    const grid = source === 'folder' ? imageGridFolder : imageGridFile;
+    grid.querySelectorAll('[data-db-record]').forEach(el => {
+        const imageId = el.id.replace('image-', '');
+        state.images.delete(imageId);
+        el.remove();
+    });
+}
+
+function _getPaginatedTotal(source) {
+    // 라이브 업로드 카드(현재 세션)는 항상 표시되므로 페이지네이션 대상에서 제외
+    const liveCount = Array.from(state.images.values())
+        .filter(s => s.source === source && s.file !== null && s.analyzedId != null)
+        .length;
+    return Math.max(0, state.hydrateState[source].totalCount - liveCount);
+}
+
+function goToPage(source, page) {
+    const totalPages = Math.ceil(_getPaginatedTotal(source) / state.hydrateState[source].pageSize);
+    if (page < 0 || page >= totalPages) return;
+    state.hydrateState[source].page = page;
+    loadRecordsPage(source);
+}
+
+function renderPagination(source) {
+    const h = state.hydrateState[source];
+    const navEl = document.getElementById(source === 'folder' ? 'paginationFolder' : 'paginationFile');
+    if (!navEl) return;
+
+    const effectiveTotal = _getPaginatedTotal(source);
+    const totalPages = Math.ceil(effectiveTotal / h.pageSize);
+    if (totalPages <= 1) { navEl.innerHTML = ''; return; }
+
+    const cur = h.page;
+    // 최대 5페이지씩 슬라이딩 윈도우
+    const half = 2;
+    const start = Math.max(0, Math.min(cur - half, totalPages - 5));
+    const end   = Math.min(totalPages - 1, start + 4);
+
+    let items = '';
+    if (start > 0) items += `<li class="page-item"><button class="page-link" onclick="goToPage('${source}',0)">1</button></li><li class="page-item disabled"><span class="page-link">…</span></li>`;
+    for (let i = start; i <= end; i++) {
+        items += `<li class="page-item${i === cur ? ' active' : ''}"><button class="page-link" onclick="goToPage('${source}',${i})">${i + 1}</button></li>`;
+    }
+    if (end < totalPages - 1) items += `<li class="page-item disabled"><span class="page-link">…</span></li><li class="page-item"><button class="page-link" onclick="goToPage('${source}',${totalPages - 1})">${totalPages}</button></li>`;
+
+    navEl.innerHTML = `
+        <ul class="pagination justify-content-center flex-wrap">
+            <li class="page-item${cur === 0 ? ' disabled' : ''}">
+                <button class="page-link" onclick="goToPage('${source}',${cur - 1})"><i class="bi bi-chevron-left"></i></button>
+            </li>
+            ${items}
+            <li class="page-item${cur >= totalPages - 1 ? ' disabled' : ''}">
+                <button class="page-link" onclick="goToPage('${source}',${cur + 1})"><i class="bi bi-chevron-right"></i></button>
+            </li>
+        </ul>
+        <p class="text-center text-muted small">${effectiveTotal}개 중 ${source === 'folder' ? '폴더' : '파일'} ${cur + 1}/${totalPages} 페이지</p>`;
 }
 
 function createImageCardFromRecord(record) {
     const imageId = `db_${record.id}`;
 
-    // 중복 방지
+    // 중복 방지 (db_ 키 또는 같은 analyzedId를 가진 라이브 카드)
     if (state.images.has(imageId)) return;
+    const alreadyLive = Array.from(state.images.values()).some(s => s.analyzedId === record.id);
+    if (alreadyLive) return;
 
     // status 결정
     let status, statusType, statusText;
-    if (['analysis_complete', 'verified'].includes(record.processing_stage)) {
+    if (record.processing_stage === 'verified') {
+        status = 'verified';
+        statusType = 'verified';
+        statusText = '저장 완료';
+    } else if (record.processing_stage === 'analysis_complete') {
         if (record.manufacturer && record.model) {
             status = 'completed';
             statusType = 'completed';
@@ -1730,11 +1861,20 @@ function createImageCardFromRecord(record) {
             statusType = 'error';
             statusText = '차량 미감지';
         }
+    } else if (record.processing_stage === 'uploaded') {
+        status = 'uploading';
+        statusType = 'warning';
+        statusText = '업로드 완료';
     } else {
         return;
     }
 
-    const result = (status === 'completed' || status === 'analysis_error') ? {
+    // 이미지 분석 페이지: 실패 카드(분석실패/탐지실패)만 표시
+    if (status !== 'analysis_error' && status !== 'no_vehicle') {
+        return;
+    }
+
+    const result = (status === 'completed' || status === 'verified' || status === 'analysis_error') ? {
         id: record.id,
         manufacturer: record.manufacturer,
         model: record.model,
@@ -1763,44 +1903,49 @@ function createImageCardFromRecord(record) {
         : `#${record.id}`;
 
     const card = document.createElement('div');
-    card.className = 'image-item';
+    card.className = 'col';
     card.id = `image-${imageId}`;
+    card.dataset.dbRecord = 'true';
 
     const analyzeDisabled = status === 'detected' ? '' : 'disabled';
     const editDisplay = (status === 'completed' || status === 'analysis_error') ? '' : 'none';
-    const saveDisplay = status === 'completed' ? '' : 'none';
+    const saveDisplay = status === 'completed' ? '' : 'none';  // verified는 이미 저장됨 → 숨김
     const analyzeLabel = status === 'detected' ? '분석하기' : '재분석';
+    const badgeTypeMap = { detecting: 'warning', detected: 'info', analyzing: 'primary', completed: 'success', verified: 'success', error: 'danger', 'manually-edited': 'info' };
+    const badgeClass = badgeTypeMap[statusType] || 'secondary';
 
     card.innerHTML = `
+        <div class="card shadow-sm overflow-hidden">
         <div class="image-container">
             <img id="img-${imageId}" alt="${displayName}" style="display:none;">
             <canvas id="canvas-${imageId}" class="image-canvas" style="display:none;"></canvas>
             <div id="bbox-overlay-${imageId}"></div>
         </div>
-        <div class="image-info">
-            <h4>
+        <div class="card-body">
+            <h6 class="d-flex align-items-center gap-2">
                 ${displayName}
-                <span class="status-badge status-${statusType}" id="status-${imageId}">${statusText}</span>
-            </h4>
-            <div id="detection-list-${imageId}" class="detection-list"></div>
-            <div id="result-${imageId}" class="result-section" style="display: none;"></div>
-            <div class="action-buttons">
-                <button class="btn-sm btn-primary" id="analyze-btn-${imageId}" ${analyzeDisabled} onclick="analyzeVehicle('${imageId}')">
+                <span class="badge rounded-pill bg-${badgeClass}" id="status-${imageId}">${statusText}</span>
+            </h6>
+            <div id="detection-list-${imageId}" class="list-group list-group-flush my-2"></div>
+            <div id="result-${imageId}" class="card bg-body-secondary p-3 mt-2" style="display: none;"></div>
+            <div class="d-flex gap-2 mt-3 flex-wrap">
+                <button class="btn btn-sm btn-primary" id="analyze-btn-${imageId}" ${analyzeDisabled} onclick="analyzeVehicle('${imageId}')">
                     ${analyzeLabel}
                 </button>
-                <button class="btn-sm btn-success" id="edit-btn-${imageId}" style="display:${editDisplay};" onclick="openAnalysisEditModal('${imageId}')">
+                <button class="btn btn-sm btn-success" id="edit-btn-${imageId}" style="display:${editDisplay};" onclick="openAnalysisEditModal('${imageId}')">
                     분석결과 수정
                 </button>
-                <button class="btn-sm btn-primary" id="save-btn-${imageId}" style="display:${saveDisplay};" onclick="saveImageToVectorDB('${imageId}')">
+                <button class="btn btn-sm btn-primary" id="save-btn-${imageId}" style="display:${saveDisplay};" onclick="saveImageToVectorDB('${imageId}')">
                     저장
                 </button>
-                <button class="btn-sm btn-danger" onclick="removeImage('${imageId}')">
+                <button class="btn btn-sm btn-danger" onclick="removeImage('${imageId}')">
                     삭제
                 </button>
             </div>
-            <div class="progress-bar" style="display: none;" id="progress-${imageId}">
-                <div class="progress-fill" style="width: 0%;"></div>
+            <div class="progress mt-3" style="display: none; height: 4px;" id="progress-${imageId}">
+                <div class="progress-bar" role="progressbar" style="width: 0%; background: linear-gradient(90deg, #667eea, #764ba2);"></div>
             </div>
+        </div>
         </div>
     `;
 
@@ -1834,6 +1979,19 @@ function createImageCardFromRecord(record) {
         if (result) {
             displayResult(imageId, result);
         }
+
+        // 탭 전환 시 canvas 재초기화 (숨김 상태에서 로드되면 clientWidth=0)
+        const resizeObserver = new ResizeObserver(() => {
+            const cur = state.images.get(imageId);
+            if (!cur) { resizeObserver.disconnect(); return; }
+            if (img.clientWidth > 0) {
+                canvas.width = img.clientWidth;
+                canvas.height = img.clientHeight;
+                if (cur.detections?.length > 0) drawAllBboxes(imageId, cur.detections);
+                if (cur.selectedBbox) createBboxOverlay(imageId, cur.selectedBbox);
+            }
+        });
+        resizeObserver.observe(img);
     };
 
     if (record.original_image_path) {
@@ -1902,20 +2060,25 @@ function startAnalyzeFeed() {
     }
 }
 
-async function startVectorBatchDelete(source) {
-    const allEntries = Array.from(state.images.entries());
-    const failedStatuses = ['no_vehicle', 'detection_error', 'analysis_error'];
-    const entries = source === 'folder'
-        ? allEntries.filter(([, img]) => img.source === 'folder' && failedStatuses.includes(img.status))
-        : allEntries.filter(([, img]) => img.source !== 'folder');
-    const total = entries.length;
+async function startVectorBatchDelete(source = 'file') {
+    const tabLabel = source === 'folder' ? '폴더 감시' : '파일 선택';
 
-    if (total === 0) {
+    // DB 전체 개수 미리 조회
+    let dbTotal = 0;
+    try {
+        const countResp = await fetch(`/api/pending-records?skip=0&limit=1&source=${source}&client_uuid=${CLIENT_UUID}&failure_only=true`);
+        if (countResp.ok) ({ total: dbTotal } = await countResp.json());
+    } catch (e) { /* 조회 실패 시 0 유지 */ }
+
+    const liveCount = Array.from(state.images.values()).filter(img => img.source === source).length;
+    const totalToDelete = Math.max(dbTotal, liveCount);
+
+    if (totalToDelete === 0) {
         showToast('삭제할 이미지가 없습니다.', 'error');
         return;
     }
 
-    if (!confirm(`⚠️ 현재 화면의 이미지 ${total}개를 모두 삭제하시겠습니까?\n\n분석 완료된 항목은 DB 레코드와 파일도 함께 삭제됩니다.\n삭제된 데이터는 복구할 수 없습니다.`)) return;
+    if (!confirm(`⚠️ [${tabLabel}] 탭의 이미지 ${totalToDelete}개를 모두 삭제하시겠습니까?\n\nDB 레코드와 파일(원본 + 크롭)이 함께 삭제됩니다.\n삭제된 데이터는 복구할 수 없습니다.`)) return;
 
     const progressContainer = document.getElementById('vectorDeleteProgressContainer');
     const progressBar = document.getElementById('vectorDeleteProgressBar');
@@ -1925,71 +2088,56 @@ async function startVectorBatchDelete(source) {
     progressBar.textContent = '0%';
     let done = 0;
 
-    for (const [imageId, imageState] of entries) {
-        progressText.textContent = `진행: ${done + 1}/${total}`;
+    const updateProgress = () => {
+        const pct = totalToDelete > 0 ? Math.round((done / totalToDelete) * 100) : 100;
+        progressBar.style.width = `${pct}%`;
+        progressBar.textContent = `${pct}%`;
+        progressText.textContent = `진행: ${done}/${totalToDelete}`;
+    };
 
-        // 수동 드래그 모드 종료
+    // 1단계: DB 레코드 전체 페이지 순회 삭제
+    let skip = 0;
+    const pageSize = 50;
+    while (true) {
+        let items;
+        try {
+            const resp = await fetch(`/api/pending-records?skip=${skip}&limit=${pageSize}&source=${source}&client_uuid=${CLIENT_UUID}&failure_only=true`);
+            if (!resp.ok) break;
+            ({ items } = await resp.json());
+        } catch (e) { break; }
+        if (!items || items.length === 0) break;
+
+        for (const record of items) {
+            try {
+                await fetch(`${API_BASE}/admin/review/${record.id}`, { method: 'DELETE' });
+            } catch (e) {
+                console.warn(`DB 삭제 실패 (id=${record.id}):`, e);
+            }
+            done++;
+            updateProgress();
+        }
+        if (items.length < pageSize) break;
+        skip += pageSize;
+    }
+
+    // 2단계: 라이브 세션 카드 중 DB에 없는 것(analyzedId 없음) 정리
+    for (const [imageId, imageState] of Array.from(state.images.entries())) {
+        if (imageState.source !== source) continue;
         if (manualDrawControllers.has(imageId)) {
             manualDrawControllers.get(imageId).abort();
             manualDrawControllers.delete(imageId);
         }
-
-        // DB 레코드 삭제 (업로드 직후 또는 분석 완료된 경우)
-        const deleteId = imageState.analyzedId || imageState.result?.id;
-        if (deleteId) {
-            try {
-                await fetch(`${API_BASE}/admin/review/${deleteId}`, { method: 'DELETE' });
-            } catch (e) {
-                console.warn(`DB 삭제 실패 (${imageId}):`, e);
-            }
-        }
-
-        // 카드 DOM 제거
         const card = document.getElementById(`image-${imageId}`);
         if (card) card.remove();
-
         state.images.delete(imageId);
-        done++;
-
-        const pct = Math.round((done / total) * 100);
-        progressBar.style.width = `${pct}%`;
-        progressBar.textContent = `${pct}%`;
     }
 
-    progressText.textContent = `✨ 완료! ${done}개 이미지 삭제 완료. 페이지를 새로고침합니다...`;
+    progressText.textContent = `✨ 완료! 페이지를 새로고침합니다...`;
     showToast(`${done}개 이미지 삭제 완료`, 'success');
 
-    setTimeout(() => {
-        window.location.reload();
-    }, 1500);
+    setTimeout(() => window.location.reload(), 1500);
 }
 
-//=============================================================================
-// 업로드 탭 전환
-//=============================================================================
-
-function switchUploadTab(tab) {
-    const isFile = tab === 'file';
-
-    document.getElementById('tabPanelFile').style.display = isFile ? '' : 'none';
-    document.getElementById('tabPanelFolder').style.display = isFile ? 'none' : '';
-
-    const btnFile = document.getElementById('tabBtnFile');
-    const btnFolder = document.getElementById('tabBtnFolder');
-
-    btnFile.style.color = isFile ? '#667eea' : '#999';
-    btnFile.style.borderBottomColor = isFile ? '#667eea' : 'transparent';
-    btnFolder.style.color = isFile ? '#999' : '#667eea';
-    btnFolder.style.borderBottomColor = isFile ? 'transparent' : '#667eea';
-
-    // 탭 상태 localStorage에 저장
-    localStorage.setItem('reeve_active_tab', tab);
-
-    // 파일 탭으로 돌아오면 감시 중지
-    if (isFile && folderWatch.intervalId) {
-        stopFolderWatch();
-    }
-}
 
 //=============================================================================
 // 폴더 자동 감시 (File System Access API — Chrome/Edge 전용)
@@ -2026,7 +2174,7 @@ async function startFolderWatch() {
         localStorage.setItem(`reeve_folder_stats_${CLIENT_UUID}`, JSON.stringify(state.folderStats));
 
         // 폴더 하이드레이션 상태 초기화
-        state.hydrateState.folder = { loading: false, skip: 0, limit: 20, hasMore: true };
+        state.hydrateState.folder = { loading: false, page: 0, pageSize: 9, totalCount: 0 };
 
         renderStats();
 
@@ -2076,11 +2224,12 @@ function stopFolderWatch() {
 function updateFolderWatchStatus() {
     const el = document.getElementById('folderWatchStatus');
     if (!el || !folderWatch.dirHandle) return;
-    const { total, processed, queue, dirHandle } = folderWatch;
+    const { queue, dirHandle } = folderWatch;
+    const uploaded = state.folderStats.uploaded;
     if (queue.length > 0 || folderWatch.isProcessing) {
-        el.textContent = `처리 중: ${processed} / ${total} · 대기 ${queue.length}개`;
+        el.textContent = `처리 중: ${uploaded}장 업로드 · 대기 ${queue.length}개`;
     } else {
-        el.textContent = `감시 중: ${dirHandle.name} · 완료 ${processed} / ${total}`;
+        el.textContent = `감시 중: ${dirHandle.name} · ${uploaded}장 완료`;
     }
 }
 

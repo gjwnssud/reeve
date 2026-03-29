@@ -12,9 +12,13 @@ import json
 import asyncio
 from pathlib import Path
 
+import logging
+
 from studio.models import get_db
 from studio.models.analyzed_vehicle import AnalyzedVehicle
 from studio.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -75,8 +79,9 @@ async def analyze_vehicle_image(
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
 
-    # Phase 1: OpenAI Vision API 분석
-    from studio.services.openai_vision import vision_service
+    # Vision API 분석 (백엔드 설정에 따라 OpenAI 또는 Ollama)
+    from studio.services.vision_backend import get_vision_backend
+    vision_service = get_vision_backend()
     from studio.services.matcher import VehicleMatcher
 
     try:
@@ -285,7 +290,6 @@ async def stream_analysis_progress(
         SSE 형식의 진행 상황 및 결과
     """
     import cv2
-    from studio.services.openai_vision import vision_service
     from studio.services.matcher import VehicleMatcher
 
     try:
@@ -298,8 +302,19 @@ async def stream_analysis_progress(
         if image is None:
             raise ValueError("Failed to load image")
 
-        x1, y1, x2, y2 = bbox
+        h, w = image.shape[:2]
+        x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        # 좌표 정규화: x1<x2, y1<y2 보장
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        # 이미지 범위 클램핑
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 <= x1 or y2 <= y1:
+            raise ValueError(f"유효하지 않은 bbox: [{x1},{y1},{x2},{y2}] (이미지 크기: {w}x{h})")
         cropped = image[y1:y2, x1:x2]
+        if cropped.size == 0:
+            raise ValueError("크롭 결과가 비어있습니다")
 
         # 크롭된 이미지 저장 (날짜별 디렉토리)
         from datetime import datetime
@@ -309,11 +324,71 @@ async def stream_analysis_progress(
         crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
         cv2.imwrite(str(crop_path), cropped)
 
-        yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': 'ChatGPT Vision API 호출 중'})}\n\n"
-        await asyncio.sleep(0.1)
+        # 1.5단계: Qdrant 사전 중복제거 체크
+        vision_result = None
+        dedup_matched = False
 
-        # 2단계: ChatGPT Vision API 분석 (DB 세션 전달)
-        vision_result = await vision_service.analyze_vehicle_image(str(crop_path), db=db)
+        if settings.dedup_enabled:
+            try:
+                from studio.services.embedding import embedding_service
+                from studio.services.vectordb import vectordb_service
+                from studio.models.manufacturer import Manufacturer
+                from studio.models.vehicle_model import VehicleModel
+
+                yield f"data: {json.dumps({'event': 'progress', 'progress': 20, 'message': '학습 데이터 유사도 검색 중'})}\n\n"
+                await asyncio.sleep(0.1)
+
+                # CLIP 임베딩 생성
+                loop = asyncio.get_event_loop()
+                embedding = await loop.run_in_executor(
+                    None, embedding_service.encode_image, str(crop_path)
+                )
+
+                # Qdrant 검색
+                matches = vectordb_service.search_training_images(
+                    embedding, n_results=settings.dedup_top_k
+                )
+
+                if matches and matches[0][1] >= settings.dedup_similarity_threshold:
+                    best_payload, best_score = matches[0]
+
+                    # Qdrant payload에서 제조사/모델 정보 추출
+                    mf_id = best_payload.get("manufacturer_id")
+                    mdl_id = best_payload.get("model_id")
+
+                    if mf_id and mdl_id:
+                        # DB에서 코드 조회
+                        mf = db.query(Manufacturer).filter(Manufacturer.id == mf_id).first()
+                        mdl = db.query(VehicleModel).filter(VehicleModel.id == mdl_id).first()
+
+                        if mf and mdl:
+                            vision_result = {
+                                "manufacturer_code": mf.code.lower(),
+                                "model_code": mdl.code.lower(),
+                                "confidence": round(best_score, 4),
+                                "raw_response": f"dedup match (similarity: {best_score:.4f})",
+                                "dedup_source": "qdrant",
+                                "dedup_similarity": round(best_score, 4),
+                            }
+                            dedup_matched = True
+
+                            yield f"data: {json.dumps({'event': 'dedup_match', 'progress': 50, 'message': f'학습 데이터 일치 (유사도: {best_score:.2f})', 'similarity': round(best_score, 4), 'manufacturer': mf.korean_name, 'model': mdl.korean_name})}\n\n"
+                            await asyncio.sleep(0.1)
+
+                            logger.info(f"Dedup match: {mf.korean_name} {mdl.korean_name} (similarity: {best_score:.4f})")
+
+            except Exception as e:
+                logger.warning(f"Dedup check failed, falling back to Vision API: {e}")
+
+        # 2단계: Vision API 호출 (dedup 매치 없을 때만)
+        if not dedup_matched:
+            api_label = "ChatGPT + Gemini 교차 검증 중" if settings.gemini_api_key else "ChatGPT Vision API 호출 중"
+            yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': api_label})}\n\n"
+            await asyncio.sleep(0.1)
+
+            from studio.services.vision_backend import get_vision_backend
+            vision_service = get_vision_backend()
+            vision_result = await vision_service.analyze_vehicle_image(str(crop_path), db=db)
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)
@@ -607,25 +682,49 @@ async def get_pending_records(
     limit: int = 20,
     source: Optional[str] = None,
     client_uuid: Optional[str] = None,
+    failure_only: bool = False,
     db: Session = Depends(get_db)
 ):
     """
-    미검수 레코드 페이지네이션 조회
+    레코드 페이지네이션 조회
 
     초기 hydration 및 무한 스크롤에 사용
     source, client_uuid로 탭별/사용자별 필터링 가능
+    failure_only=true: 분석실패(analysis_error) + 탐지실패(no_vehicle) 레코드만 반환
     """
-    query = db.query(AnalyzedVehicle).filter(
-        AnalyzedVehicle.is_verified == False,
-        AnalyzedVehicle.processing_stage.in_(['yolo_detected', 'analysis_complete'])
-    )
+    from sqlalchemy import or_, and_, func as sql_func
+
+    if failure_only:
+        query = db.query(AnalyzedVehicle).filter(
+            or_(
+                and_(
+                    AnalyzedVehicle.processing_stage == 'analysis_complete',
+                    or_(
+                        AnalyzedVehicle.manufacturer.is_(None),
+                        AnalyzedVehicle.model.is_(None)
+                    )
+                ),
+                and_(
+                    AnalyzedVehicle.processing_stage == 'yolo_detected',
+                    or_(
+                        AnalyzedVehicle.yolo_detections.is_(None),
+                        sql_func.json_length(AnalyzedVehicle.yolo_detections) == 0
+                    )
+                )
+            )
+        )
+    else:
+        query = db.query(AnalyzedVehicle).filter(
+            AnalyzedVehicle.processing_stage.in_(['uploaded', 'yolo_detected', 'analysis_complete', 'verified'])
+        )
+
     if source:
         query = query.filter(AnalyzedVehicle.source == source)
     if client_uuid:
         query = query.filter(AnalyzedVehicle.client_uuid == client_uuid)
 
-    records = query.order_by(AnalyzedVehicle.created_at.desc()).offset(skip).limit(limit).all()
     total = query.count()
+    records = query.order_by(AnalyzedVehicle.created_at.desc()).offset(skip).limit(limit).all()
 
     return {
         "items": [r.to_dict() for r in records],
