@@ -11,6 +11,7 @@ from datetime import datetime
 import logging
 import json
 import asyncio
+import functools
 
 from studio.models import get_db
 from studio.models.manufacturer import Manufacturer
@@ -316,7 +317,10 @@ async def review_analyzed_vehicle(
 
                 if not existing:
                     # 이미지 임베딩 생성
-                    image_embedding = embedding_service.encode_image(analyzed.image_path)
+                    loop = asyncio.get_running_loop()
+                    image_embedding = await loop.run_in_executor(
+                        None, embedding_service.encode_image, analyzed.image_path
+                    )
 
                     # 학습 데이터셋에 추가
                     training_data = TrainingDataset(
@@ -341,17 +345,21 @@ async def review_analyzed_vehicle(
                     }
 
                     # QdrantDB에 추가
-                    success = vectordb_service.add_training_image(
-                        training_id=training_data.id,
-                        image_path=training_data.image_path,
-                        manufacturer_id=training_data.manufacturer_id,
-                        model_id=training_data.model_id,
-                        embedding=image_embedding,
-                        metadata=qdrant_metadata,
-                        manufacturer_korean=mfr.korean_name if mfr else None,
-                        manufacturer_english=mfr.english_name if mfr else None,
-                        model_korean=mdl.korean_name if mdl else None,
-                        model_english=mdl.english_name if mdl else None,
+                    success = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            vectordb_service.add_training_image,
+                            training_id=training_data.id,
+                            image_path=training_data.image_path,
+                            manufacturer_id=training_data.manufacturer_id,
+                            model_id=training_data.model_id,
+                            embedding=image_embedding,
+                            metadata=qdrant_metadata,
+                            manufacturer_korean=mfr.korean_name if mfr else None,
+                            manufacturer_english=mfr.english_name if mfr else None,
+                            model_korean=mdl.korean_name if mdl else None,
+                            model_english=mdl.english_name if mdl else None,
+                        )
                     )
 
                     if success:
@@ -401,6 +409,8 @@ async def batch_save_all_to_vectordb(
         current = 0
         last_id = None  # desc 순이므로 None부터 시작
 
+        loop = asyncio.get_running_loop()
+
         # 시작 이벤트
         yield f"data: {json.dumps({'type': 'start', 'total': total, 'total_unverified': total_unverified, 'skipped': skipped})}\n\n"
 
@@ -444,27 +454,33 @@ async def batch_save_all_to_vectordb(
                         )
                         if needs_update:
                             if existing.qdrant_id:
-                                vectordb_service.delete_training_image(existing.id)
+                                await loop.run_in_executor(None, vectordb_service.delete_training_image, existing.id)
                             existing.manufacturer_id = analyzed.matched_manufacturer_id
                             existing.model_id = analyzed.matched_model_id
                             db.flush()
-                            image_embedding = embedding_service.encode_image(analyzed.image_path)
+                            image_embedding = await loop.run_in_executor(
+                                None, embedding_service.encode_image, analyzed.image_path
+                            )
                             qdrant_metadata = {
                                 "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
                                 "verified_by": "admin",
                                 "verified_at": datetime.now().isoformat()
                             }
-                            qdrant_success = vectordb_service.add_training_image(
-                                training_id=existing.id,
-                                image_path=existing.image_path,
-                                manufacturer_id=existing.manufacturer_id,
-                                model_id=existing.model_id,
-                                embedding=image_embedding,
-                                metadata=qdrant_metadata,
-                                manufacturer_korean=mfr.korean_name if mfr else None,
-                                manufacturer_english=mfr.english_name if mfr else None,
-                                model_korean=mdl.korean_name if mdl else None,
-                                model_english=mdl.english_name if mdl else None,
+                            qdrant_success = await loop.run_in_executor(
+                                None,
+                                functools.partial(
+                                    vectordb_service.add_training_image,
+                                    training_id=existing.id,
+                                    image_path=existing.image_path,
+                                    manufacturer_id=existing.manufacturer_id,
+                                    model_id=existing.model_id,
+                                    embedding=image_embedding,
+                                    metadata=qdrant_metadata,
+                                    manufacturer_korean=mfr.korean_name if mfr else None,
+                                    manufacturer_english=mfr.english_name if mfr else None,
+                                    model_korean=mdl.korean_name if mdl else None,
+                                    model_english=mdl.english_name if mdl else None,
+                                )
                             )
                             if qdrant_success:
                                 existing.qdrant_id = f"train_{existing.id}"
@@ -472,7 +488,9 @@ async def batch_save_all_to_vectordb(
                         vectordb_ok = True
                     else:
                         # 이미지 임베딩 생성
-                        image_embedding = embedding_service.encode_image(analyzed.image_path)
+                        image_embedding = await loop.run_in_executor(
+                            None, embedding_service.encode_image, analyzed.image_path
+                        )
 
                         # 학습 데이터셋에 추가
                         training_data = TrainingDataset(
@@ -493,17 +511,21 @@ async def batch_save_all_to_vectordb(
                         }
 
                         # QdrantDB에 추가
-                        qdrant_success = vectordb_service.add_training_image(
-                            training_id=training_data.id,
-                            image_path=training_data.image_path,
-                            manufacturer_id=training_data.manufacturer_id,
-                            model_id=training_data.model_id,
-                            embedding=image_embedding,
-                            metadata=qdrant_metadata,
-                            manufacturer_korean=mfr.korean_name if mfr else None,
-                            manufacturer_english=mfr.english_name if mfr else None,
-                            model_korean=mdl.korean_name if mdl else None,
-                            model_english=mdl.english_name if mdl else None,
+                        qdrant_success = await loop.run_in_executor(
+                            None,
+                            functools.partial(
+                                vectordb_service.add_training_image,
+                                training_id=training_data.id,
+                                image_path=training_data.image_path,
+                                manufacturer_id=training_data.manufacturer_id,
+                                model_id=training_data.model_id,
+                                embedding=image_embedding,
+                                metadata=qdrant_metadata,
+                                manufacturer_korean=mfr.korean_name if mfr else None,
+                                manufacturer_english=mfr.english_name if mfr else None,
+                                model_korean=mdl.korean_name if mdl else None,
+                                model_english=mdl.english_name if mdl else None,
+                            )
                         )
 
                         if qdrant_success:
@@ -603,31 +625,38 @@ async def save_to_vectordb(
                 or existing.model_id != analyzed.matched_model_id
             )
             if needs_qdrant_update:
+                loop = asyncio.get_running_loop()
                 # 기존 Qdrant 항목 삭제 후 재등록
                 if existing.qdrant_id:
-                    vectordb_service.delete_training_image(existing.id)
+                    await loop.run_in_executor(None, vectordb_service.delete_training_image, existing.id)
 
                 existing.manufacturer_id = analyzed.matched_manufacturer_id
                 existing.model_id = analyzed.matched_model_id
                 db.flush()
 
-                image_embedding = embedding_service.encode_image(analyzed.image_path)
+                image_embedding = await loop.run_in_executor(
+                    None, embedding_service.encode_image, analyzed.image_path
+                )
                 qdrant_metadata = {
                     "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
                     "verified_by": "admin",
                     "verified_at": datetime.now().isoformat()
                 }
-                qdrant_success = vectordb_service.add_training_image(
-                    training_id=existing.id,
-                    image_path=existing.image_path,
-                    manufacturer_id=existing.manufacturer_id,
-                    model_id=existing.model_id,
-                    embedding=image_embedding,
-                    metadata=qdrant_metadata,
-                    manufacturer_korean=mfr.korean_name if mfr else None,
-                    manufacturer_english=mfr.english_name if mfr else None,
-                    model_korean=mdl.korean_name if mdl else None,
-                    model_english=mdl.english_name if mdl else None,
+                qdrant_success = await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        vectordb_service.add_training_image,
+                        training_id=existing.id,
+                        image_path=existing.image_path,
+                        manufacturer_id=existing.manufacturer_id,
+                        model_id=existing.model_id,
+                        embedding=image_embedding,
+                        metadata=qdrant_metadata,
+                        manufacturer_korean=mfr.korean_name if mfr else None,
+                        manufacturer_english=mfr.english_name if mfr else None,
+                        model_korean=mdl.korean_name if mdl else None,
+                        model_english=mdl.english_name if mdl else None,
+                    )
                 )
                 if not qdrant_success:
                     raise RuntimeError(f"Qdrant 저장 실패 (training_id={existing.id})")
@@ -638,7 +667,10 @@ async def save_to_vectordb(
             vectordb_ok = True
         else:
             # 이미지 임베딩 생성
-            image_embedding = embedding_service.encode_image(analyzed.image_path)
+            loop = asyncio.get_running_loop()
+            image_embedding = await loop.run_in_executor(
+                None, embedding_service.encode_image, analyzed.image_path
+            )
 
             # 학습 데이터셋에 추가
             training_data = TrainingDataset(
@@ -659,17 +691,21 @@ async def save_to_vectordb(
             }
 
             # QdrantDB에 추가
-            qdrant_success = vectordb_service.add_training_image(
-                training_id=training_data.id,
-                image_path=training_data.image_path,
-                manufacturer_id=training_data.manufacturer_id,
-                model_id=training_data.model_id,
-                embedding=image_embedding,
-                metadata=qdrant_metadata,
-                manufacturer_korean=mfr.korean_name if mfr else None,
-                manufacturer_english=mfr.english_name if mfr else None,
-                model_korean=mdl.korean_name if mdl else None,
-                model_english=mdl.english_name if mdl else None,
+            qdrant_success = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    vectordb_service.add_training_image,
+                    training_id=training_data.id,
+                    image_path=training_data.image_path,
+                    manufacturer_id=training_data.manufacturer_id,
+                    model_id=training_data.model_id,
+                    embedding=image_embedding,
+                    metadata=qdrant_metadata,
+                    manufacturer_korean=mfr.korean_name if mfr else None,
+                    manufacturer_english=mfr.english_name if mfr else None,
+                    model_korean=mdl.korean_name if mdl else None,
+                    model_english=mdl.english_name if mdl else None,
+                )
             )
 
             if not qdrant_success:
@@ -1036,6 +1072,7 @@ async def sync_vector_database(
         return results
 
     # 커서 기반 페이지네이션 + JOIN 최적화
+    loop = asyncio.get_running_loop()
     last_id = 0
     while True:
         batch = db.query(TrainingDataset).options(
@@ -1052,24 +1089,30 @@ async def sync_vector_database(
         for data in batch:
             try:
                 # 이미지 임베딩 생성
-                embedding = embedding_service.encode_image(data.image_path)
+                embedding = await loop.run_in_executor(
+                    None, embedding_service.encode_image, data.image_path
+                )
 
                 # 제조사/모델 이름 (이미 joinedload로 로드됨, 추가 쿼리 없음)
                 mfr = data.manufacturer
                 mdl = data.model
 
                 # Qdrant에 추가
-                success = vectordb_service.add_training_image(
-                    training_id=data.id,
-                    image_path=data.image_path,
-                    manufacturer_id=data.manufacturer_id,
-                    model_id=data.model_id,
-                    embedding=embedding,
-                    metadata=None,
-                    manufacturer_korean=mfr.korean_name if mfr else None,
-                    manufacturer_english=mfr.english_name if mfr else None,
-                    model_korean=mdl.korean_name if mdl else None,
-                    model_english=mdl.english_name if mdl else None,
+                success = await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        vectordb_service.add_training_image,
+                        training_id=data.id,
+                        image_path=data.image_path,
+                        manufacturer_id=data.manufacturer_id,
+                        model_id=data.model_id,
+                        embedding=embedding,
+                        metadata=None,
+                        manufacturer_korean=mfr.korean_name if mfr else None,
+                        manufacturer_english=mfr.english_name if mfr else None,
+                        model_korean=mdl.korean_name if mdl else None,
+                        model_english=mdl.english_name if mdl else None,
+                    )
                 )
 
                 if success:

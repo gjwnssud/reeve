@@ -182,7 +182,7 @@ class OpenAIVisionService:
             for attempt in range(max_retries):
                 try:
                     response = self.client.chat.completions.create(
-                        model="gpt-5.2",
+                        model=settings.openai_model,
                         messages=[
                             {
                                 "role": "system",
