@@ -192,11 +192,13 @@ proc.wait()
         is_running = rc == 0 and stdout.strip() != ""
 
         # 가장 최근 trainer_log.jsonl 찾기
-        rc, stdout, stderr = await self._exec(
-            f"find {self.output_base} -name '{_JSONL_LOG_FILENAME}' -type f | sort -r | head -1",
-            timeout=10,
-        )
-        log_path = stdout.strip()
+        log_path = ""
+        if Path(self.output_base).exists():
+            rc, stdout, stderr = await self._exec(
+                f"find {self.output_base} -name '{_JSONL_LOG_FILENAME}' -type f | sort -r | head -1",
+                timeout=10,
+            )
+            log_path = stdout.strip()
 
         status = {
             "is_running": is_running,

@@ -104,8 +104,8 @@ services:
     ports:
       - "8002:8002"
     volumes:
-      - ../data/finetune:/app/data        # Studio에서 export한 학습 데이터
-      - ../output:/app/output             # 체크포인트 저장
+      - ../data/finetune:/app/data/finetune  # Studio에서 export한 학습 데이터
+      - ../output:/app/output                # 체크포인트 저장
       - ../data/hf-cache:/root/.cache/huggingface # HuggingFace 모델 캐시
     environment:
       - TRAINER_BACKEND=llamafactory

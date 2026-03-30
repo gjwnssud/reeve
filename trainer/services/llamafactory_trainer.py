@@ -150,11 +150,13 @@ class LlamaFactoryTrainer:
         )
         is_running = rc == 0 and stdout.strip() != ""
 
-        rc, stdout, stderr = await self._exec(
-            f"find {self.output_base} -name 'trainer_log.jsonl' -type f | sort -r | head -1",
-            timeout=10,
-        )
-        log_path = stdout.strip()
+        log_path = ""
+        if Path(self.output_base).exists():
+            rc, stdout, stderr = await self._exec(
+                f"find {self.output_base} -name 'trainer_log.jsonl' -type f | sort -r | head -1",
+                timeout=10,
+            )
+            log_path = stdout.strip()
 
         status = {
             "is_running": is_running,

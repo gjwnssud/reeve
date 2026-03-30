@@ -88,6 +88,6 @@ services:
   trainer:
     volumes:
       - ../trainer:/app/trainer
-      - ../data/finetune:/app/data
+      - ../data/finetune:/app/data/finetune
       - ../output:/app/output
     restart: no
