@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # OpenAI API
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    openai_model: Optional[str] = Field(default="gpt-5-mini", alias="OPENAI_MODEL")
 
     # Gemini API
     gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
