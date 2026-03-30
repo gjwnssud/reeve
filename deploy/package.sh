@@ -8,6 +8,7 @@
 # target:
 #   dev-linux     개발사 납품 — Linux 개발 환경 (GPU)
 #   dev-windows   개발사 납품 — Windows 개발 환경 (GPU)
+#   dev-mac       개발사 납품 — Mac 개발 환경 (Apple Silicon, 네이티브 MLX)
 #   prod-linux    고객사 납품 — Linux 운영 환경
 #   prod-windows  고객사 납품 — Windows 운영 환경
 #   all           전체 패키지 생성
@@ -63,12 +64,14 @@ package_dev() {
     cp "$DOCKER_DIR/docker-compose.gpu.yml" "$dest/docker-compose.gpu.yml"
     cp "$DOCKER_DIR/Dockerfile"            "$dest/"
     cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
+    cp "$DOCKER_DIR/Dockerfile.trainer"    "$dest/"
     cp "$DOCKER_DIR/.env.example"          "$dest/"
 
     # 소스 코드 복사
     info "소스 코드 복사 중..."
     rsync -a "${RSYNC_EXCLUDES[@]}" "$ROOT/studio/"     "$dest/studio/"
     rsync -a "${RSYNC_EXCLUDES[@]}" "$ROOT/identifier/" "$dest/identifier/"
+    rsync -a "${RSYNC_EXCLUDES[@]}" "$ROOT/trainer/"    "$dest/trainer/"
     rsync -a "$ROOT/sql/"                               "$dest/sql/"
     cp "$ROOT/requirements.txt"            "$dest/"
     cp "$ROOT/requirements-identifier.txt" "$dest/"
@@ -97,7 +100,7 @@ _write_dev_linux_scripts() {
 set -e
 cd "$(dirname "$0")"
 
-echo "[Reeve Studio] Linux 초기 설정 (GPU)"
+echo "[Reeve] Linux 초기 설정 (GPU)"
 echo "======================================"
 
 echo "[1/4] Docker 확인 중..."
@@ -150,14 +153,14 @@ EOF
 set -e
 cd "$(dirname "$0")"
 
-echo "[Reeve Studio] Linux 서비스 시작 (GPU)"
+echo "[Reeve] Linux 서비스 시작 (GPU)"
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 echo ""
 echo "서비스가 시작되었습니다:"
 echo "  Studio        : http://localhost:8000"
 echo "  Identifier    : http://localhost:8001"
-echo "  LLaMA-Factory : http://localhost:7860"
+echo "  Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)"
 echo "  Qdrant        : http://localhost:6333/dashboard"
 echo "  Ollama        : http://localhost:11434  (NVIDIA GPU)"
 EOF
@@ -166,7 +169,7 @@ EOF
 #!/bin/bash
 cd "$(dirname "$0")"
 
-echo "[Reeve Studio] 서비스 중지 중..."
+echo "[Reeve] 서비스 중지 중..."
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down
 
 echo "완료."
@@ -248,7 +251,7 @@ EOF
 @echo off
 cd /d "%~dp0"
 
-echo [Reeve Studio] Windows 서비스 시작 (GPU)...
+echo [Reeve] Windows 서비스 시작 (GPU)...
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 if errorlevel 1 (
@@ -262,7 +265,7 @@ echo.
 echo 서비스가 시작되었습니다:
 echo   Studio        : http://localhost:8000
 echo   Identifier    : http://localhost:8001
-echo   LLaMA-Factory : http://localhost:7860
+echo   Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)
 echo   Qdrant        : http://localhost:6333/dashboard
 EOF
 
@@ -530,7 +533,7 @@ IDENTIFIER_MODE=visual_rag
 
 # VLM (Ollama)
 OLLAMA_BASE_URL=http://ollama:11434
-VLM_MODEL_NAME=reeve-vlm-v1
+VLM_MODEL_NAME=vehicle-vlm-v1
 VLM_TIMEOUT=30
 VLM_MAX_CANDIDATES=5
 VLM_FALLBACK_TO_CLIP=true
@@ -926,6 +929,183 @@ EOF
 }
 
 # ══════════════════════════════════════════════════════════
+# Dev Mac 패키지 (Apple Silicon, 네이티브 MLX)
+# ══════════════════════════════════════════════════════════
+package_dev_mac() {
+    local dest="$SCRIPT_DIR/dev/mac"
+
+    info "===== Dev mac 패키지 생성 시작 ====="
+
+    rm -rf "$dest"
+    mkdir -p "$dest"
+
+    # docker 파일 복사 (base + dev + mac 오버라이드, 경로 패치 적용)
+    patch_compose "$DOCKER_DIR/docker-compose.yml"     > "$dest/docker-compose.yml"
+    patch_compose "$DOCKER_DIR/docker-compose.dev.yml" > "$dest/docker-compose.dev.yml"
+    cp "$DOCKER_DIR/docker-compose.mac.yml" "$dest/docker-compose.mac.yml"
+    cp "$DOCKER_DIR/Dockerfile"            "$dest/"
+    cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
+    # Dockerfile.trainer은 Mac에서 네이티브 실행이므로 미포함
+    cp "$DOCKER_DIR/.env.example"          "$dest/"
+
+    # 소스 코드 복사 (trainer 포함 — 네이티브 실행용)
+    info "소스 코드 복사 중..."
+    rsync -a "${RSYNC_EXCLUDES[@]}" "$ROOT/studio/"     "$dest/studio/"
+    rsync -a "${RSYNC_EXCLUDES[@]}" "$ROOT/identifier/" "$dest/identifier/"
+    rsync -a "${RSYNC_EXCLUDES[@]}" "$ROOT/trainer/"    "$dest/trainer/"
+    rsync -a "$ROOT/sql/"                               "$dest/sql/"
+    cp "$ROOT/requirements.txt"            "$dest/"
+    cp "$ROOT/requirements-identifier.txt" "$dest/"
+
+    # 빈 디렉토리 생성
+    mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
+             "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
+             "$dest/data/finetune" "$dest/logs/studio" "$dest/logs/identifier" \
+             "$dest/output"
+
+    _write_dev_mac_scripts "$dest"
+
+    info "Dev mac 패키지 완료: $dest"
+    echo ""
+}
+
+_write_dev_mac_scripts() {
+    local dest="$1"
+
+    cat > "$dest/setup.sh" << 'EOF'
+#!/bin/bash
+set -e
+cd "$(dirname "$0")"
+
+echo "[Reeve] Mac 초기 설정 (Apple Silicon)"
+echo "======================================"
+
+echo "[1/5] Docker 확인 중..."
+if ! docker info > /dev/null 2>&1; then
+    echo "[오류] Docker Desktop이 실행되지 않았습니다."
+    exit 1
+fi
+echo "      OK"
+
+echo "[2/5] Homebrew / Python 확인 중..."
+if ! command -v python3 > /dev/null 2>&1; then
+    echo "[오류] Python3이 설치되지 않았습니다. brew install python을 실행하세요."
+    exit 1
+fi
+echo "      Python: $(python3 --version)"
+
+echo "[3/5] 가상환경 및 Trainer(MLX) 의존성 설치 중..."
+if [ ! -d ".venv" ]; then
+    python3 -m venv .venv
+    echo "      .venv 가상환경 생성 완료"
+fi
+.venv/bin/pip install --quiet --upgrade pip
+.venv/bin/pip install --quiet mlx-lm mlx-vlm fastapi "uvicorn[standard]" pydantic-settings pyyaml psutil httpx
+echo "      mlx-lm, mlx-vlm, fastapi 설치 완료 (.venv)"
+
+echo "[4/5] 환경변수 파일 확인 중..."
+if [ ! -f ".env" ]; then
+    cp ".env.example" ".env"
+    echo "      .env 파일이 생성되었습니다."
+    echo ""
+    echo " ★ 필수 수정 항목:"
+    echo "   - OPENAI_API_KEY"
+    echo "   - MYSQL_ROOT_PASSWORD"
+    echo "   - MYSQL_PASSWORD"
+    echo ""
+    echo "   .env 파일을 편집한 후 start.sh를 실행하세요."
+    exit 0
+else
+    echo "      .env 파일 존재 확인"
+fi
+
+echo "[5/5] Docker 이미지 준비 중..."
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml pull --ignore-buildable
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml build
+
+echo ""
+echo "======================================"
+echo "초기 설정 완료. ./start.sh 로 서비스를 시작하세요."
+echo "======================================"
+EOF
+
+    cat > "$dest/start.sh" << 'EOF'
+#!/bin/bash
+set -e
+cd "$(dirname "$0")"
+
+echo "[Reeve] Mac 서비스 시작 (Apple Silicon)"
+echo ""
+
+# 1. .env 로드 (TRAINER_BACKEND 등)
+if [ -f ".env" ]; then
+    set -o allexport; source .env; set +o allexport
+fi
+
+# 2. Ollama 네이티브 시작 (이미 실행 중이면 스킵)
+if ! pgrep -x "ollama" > /dev/null 2>&1; then
+    echo "[1/3] Ollama 시작 중..."
+    ollama serve > logs/ollama.log 2>&1 &
+    OLLAMA_PID=$!
+    echo "      PID: $OLLAMA_PID (logs/ollama.log)"
+    sleep 2
+else
+    echo "[1/3] Ollama 이미 실행 중"
+fi
+
+# 3. Trainer (MLX) 네이티브 시작 (이미 실행 중이면 스킵)
+if ! pgrep -f "trainer.main:app" > /dev/null 2>&1; then
+    echo "[2/3] Trainer (MLX) 시작 중..."
+    TRAINER_BACKEND=mlx TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
+        .venv/bin/uvicorn trainer.main:app --host 0.0.0.0 --port 8002 \
+        > logs/trainer.log 2>&1 &
+    TRAINER_PID=$!
+    echo "      PID: $TRAINER_PID (logs/trainer.log)"
+    sleep 2
+else
+    echo "[2/3] Trainer 이미 실행 중"
+fi
+
+# 4. Docker 서비스 시작 (studio, identifier, celery, mysql, qdrant, redis)
+echo "[3/3] Docker 서비스 시작 중..."
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
+
+echo ""
+echo "서비스가 시작되었습니다:"
+echo "  Studio        : http://localhost:8000"
+echo "  Identifier    : http://localhost:8001"
+echo "  Trainer (MLX) : http://localhost:8002  (네이티브 Apple Silicon)"
+echo "  Qdrant        : http://localhost:6333/dashboard"
+echo "  Ollama        : http://localhost:11434  (네이티브 Apple Silicon)"
+echo ""
+echo "로그 확인:"
+echo "  Ollama  : tail -f logs/ollama.log"
+echo "  Trainer : tail -f logs/trainer.log"
+EOF
+
+    cat > "$dest/stop.sh" << 'EOF'
+#!/bin/bash
+cd "$(dirname "$0")"
+
+echo "[Reeve] Mac 서비스 중지 중..."
+
+echo "[1/3] Docker 서비스 중지..."
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml down
+
+echo "[2/3] Trainer 중지..."
+pkill -f "trainer.main:app" 2>/dev/null && echo "      Trainer 중지됨" || echo "      Trainer 실행 중 아님"
+
+echo "[3/3] Ollama 중지..."
+pkill -x "ollama" 2>/dev/null && echo "      Ollama 중지됨" || echo "      Ollama 실행 중 아님"
+
+echo "완료."
+EOF
+
+    chmod +x "$dest/setup.sh" "$dest/start.sh" "$dest/stop.sh"
+    mkdir -p "$dest/logs"
+}
+
+# ══════════════════════════════════════════════════════════
 # 메인
 # ══════════════════════════════════════════════════════════
 TARGET="${1:-}"
@@ -935,6 +1115,7 @@ if [ -z "$TARGET" ]; then
     echo ""
     echo "  dev-linux     개발사 납품 — Linux 개발 환경 (GPU)"
     echo "  dev-windows   개발사 납품 — Windows 개발 환경 (GPU)"
+    echo "  dev-mac       개발사 납품 — Mac 개발 환경 (Apple Silicon, 네이티브 MLX)"
     echo "  prod-linux    고객사 납품 — Linux 운영 환경"
     echo "  prod-windows  고객사 납품 — Windows 운영 환경"
     echo "  all           전체 패키지 생성"
@@ -944,11 +1125,13 @@ fi
 case "$TARGET" in
     dev-linux)    package_dev linux ;;
     dev-windows)  package_dev windows ;;
+    dev-mac)      package_dev_mac ;;
     prod-linux)   package_prod linux ;;
     prod-windows) package_prod windows ;;
     all)
         package_dev linux
         package_dev windows
+        package_dev_mac
         package_prod linux
         package_prod windows
         ;;

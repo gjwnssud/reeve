@@ -82,11 +82,11 @@ class Settings(BaseSettings):
         description="중복제거 검색 시 조회할 상위 결과 수"
     )
 
-    # LLaMA-Factory 설정
-    llamafactory_container: str = Field(
-        default="reeve-llamafactory",
-        alias="LLAMAFACTORY_CONTAINER",
-        description="LLaMA-Factory Docker 컨테이너 이름"
+    # Trainer 서비스 URL (파인튜닝 API)
+    trainer_url: str = Field(
+        default="http://localhost:8002",
+        alias="TRAINER_URL",
+        description="Trainer 서비스 URL (LlamaFactory 또는 MLX 백엔드)"
     )
 
     identifier_url: str = Field(

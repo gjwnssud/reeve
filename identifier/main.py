@@ -17,7 +17,7 @@ from identifier.config import settings
 os.environ["OMP_NUM_THREADS"] = str(settings.torch_threads)
 os.environ["MKL_NUM_THREADS"] = str(settings.torch_threads)
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -824,6 +824,41 @@ async def get_task_result(
             task_id=task_id,
             status=task.state,
         )
+
+
+# ──────────────────────────────────────────────
+# 관리 API
+# ──────────────────────────────────────────────
+
+class ReloadVLMRequest(BaseModel):
+    model_name: str = PydanticField(..., description="교체할 Ollama 모델명 (예: vehicle-vlm-v1)")
+
+
+@app.post(
+    "/admin/reload-vlm",
+    tags=["Admin"],
+    summary="VLM 모델 핫리로드",
+    description=(
+        "Ollama에 새 모델이 등록된 후 호출. 서비스 재시작 없이 VLM 모델을 교체한다. "
+        "Trainer의 POST /deploy/ollama가 자동으로 호출하거나 수동으로 호출 가능."
+    ),
+)
+async def reload_vlm(req: ReloadVLMRequest, request: Request):
+    identifier: VehicleIdentifier = request.app.state.identifier
+    vlm = identifier.vlm_service
+    if vlm is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"VLM 서비스가 비활성 상태입니다 (IDENTIFIER_MODE={settings.identifier_mode}). "
+                "visual_rag 또는 vlm_only 모드에서만 사용 가능합니다."
+            ),
+        )
+    try:
+        vlm.reload(req.model_name)
+        return {"status": "ok", "model_name": req.model_name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ──────────────────────────────────────────────

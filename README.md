@@ -10,7 +10,7 @@ CCTV·카메라 영상에서 차량을 감지하고, CLIP 임베딩 + 벡터 검
 |--------|------|------|
 | **Studio** | 8000 | 데이터 관리, 분석, 학습 데이터 추출, 파인튜닝 오케스트레이션 |
 | **Identifier** | 8001 | 프로덕션 차량 식별 API (동기 + 비동기 배치) |
-| **LLaMA-Factory** | 7860 | VLM 파인튜닝 WebUI |
+| **Trainer** | 8002 | VLM 파인튜닝 API (LlamaFactory / MLX 백엔드 전환) |
 
 ---
 
@@ -67,7 +67,7 @@ Identifier 서비스 (벡터 검색 + 투표 + VLM 재판정)
 | API 프레임워크 | FastAPI + Uvicorn |
 | AI / Vision | OpenAI API, Gemini API, CLIP, YOLO26, Ollama (Qwen3-VL) |
 | 임베딩 | CLIP-ViT-B/32 (512d), sentence-transformers |
-| 파인튜닝 | LLaMA-Factory (QLoRA 4bit → LoRA merge → GGUF → Ollama) |
+| 파인튜닝 | Trainer 서비스 — LlamaFactory (Linux/Windows NVIDIA) / mlx-lm (Mac Apple Silicon) |
 | 관계형 DB | MySQL 8.0 (SQLAlchemy + aiomysql) |
 | 벡터 DB | Qdrant |
 | 비동기 처리 | Celery 5 + Redis 7 |
@@ -93,13 +93,14 @@ EMBEDDING_DEVICE=cuda   # Mac은 cpu
 ### 개발 환경 시작
 
 ```bash
-# Linux / Windows (NVIDIA GPU)
+# Linux / Windows (NVIDIA GPU) — 전체 Docker
 cd docker
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
-# macOS (CPU 모드)
-cd docker
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
+# macOS (Apple Silicon) — ollama + trainer 네이티브, 나머지 Docker
+ollama serve &
+TRAINER_BACKEND=mlx uvicorn trainer.main:app --port 8002 &
+cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
 ```
 
 ### 프로덕션 시작
@@ -114,6 +115,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```bash
 uvicorn studio.main:app --reload --port 8000
 uvicorn identifier.main:app --reload --port 8001
+TRAINER_BACKEND=mlx uvicorn trainer.main:app --reload --port 8002
 celery -A identifier.celery_app worker --loglevel=info
 ```
 
@@ -195,16 +197,34 @@ manufacturers (제조사)
 ## 파인튜닝 파이프라인
 
 1. Studio `/finetune-ui`에서 학습 데이터 Export
-   - `data/finetune/vehicle_train.json`, `vehicle_val.json` 생성 (LLaMA-Factory sharegpt 형식)
-2. LLaMA-Factory WebUI (port 7860)에서 QLoRA 4bit 학습
+   - `data/finetune/vehicle_train.json`, `vehicle_val.json` 생성 (ShareGPT 형식)
+2. Trainer API (port 8002)에서 학습 시작
+   - **Linux/Windows NVIDIA**: `TRAINER_BACKEND=llamafactory` — QLoRA 4bit
+   - **Mac Apple Silicon**: `TRAINER_BACKEND=mlx` — mlx-lm LoRA (네이티브 Metal GPU)
 3. LoRA merge → GGUF 변환 → Ollama 배포
 4. `VLM_MODEL_NAME`을 배포된 모델명으로 업데이트
+
+### 배포 패키지 생성
+
+```bash
+# 개발 패키지 (각 OS별)
+./deploy/package.sh dev-linux    # Linux GPU
+./deploy/package.sh dev-windows  # Windows GPU
+./deploy/package.sh dev-mac      # Mac Apple Silicon (MLX)
+./deploy/package.sh all          # 전체
+
+# 운영 패키지 (Identifier 단독)
+./deploy/package.sh prod-linux
+./deploy/package.sh prod-windows
+```
 
 ---
 
 ## 개발 참고
 
 - **Identifier는 MySQL 불필요.** 제조사/모델 이름은 Qdrant payload에서 직접 조회.
+- **Trainer 서비스 분리**: Studio의 `/finetune/train/*` 호출을 Trainer(port 8002)가 수신. `TRAINER_BACKEND` 환경변수로 백엔드 전환.
+- **Mac 파인튜닝**: `TRAINER_BACKEND=mlx`로 mlx-lm 사용. Docker 불필요, 네이티브 Metal GPU 최적화.
 - **워커 수 자동 계산**: `IDENTIFIER_TORCH_THREADS`만 설정하면 `start.sh`가 `workers = cpu_count // IDENTIFIER_TORCH_THREADS`로 계산.
 - **날짜별 파일 저장**: `data/uploads/YYYY-MM-DD/`, `data/crops/YYYY-MM-DD/`
 - **Vision 백엔드 추상화**: `studio/services/vision_backend.py`에서 OpenAI / Gemini / Ollama 통합 관리.

@@ -50,6 +50,7 @@ class VLMService:
 
     def __init__(self):
         self._client: Optional[httpx.Client] = None
+        self.model_name: str = settings.vlm_model_name  # 런타임 변경 가능
 
     def initialize(self):
         """HTTP 클라이언트 초기화 + Ollama 연결 확인"""
@@ -64,6 +65,16 @@ class VLMService:
         )
         self._check_model_available()
 
+    def reload(self, model_name: str) -> None:
+        """
+        VLM 모델 핫리로드 — Ollama 재시작 없이 모델명 교체.
+        파인튜닝 완료 후 새 모델을 Ollama에 등록한 뒤 호출.
+        """
+        old = self.model_name
+        self.model_name = model_name
+        self._check_model_available()
+        logger.info(f"VLM model reloaded: {old} → {model_name}")
+
     def _check_model_available(self):
         """Ollama에 모델이 로드되어 있는지 확인 (non-fatal)"""
         try:
@@ -71,12 +82,12 @@ class VLMService:
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 names = [m.get("name", "") for m in models]
-                if any(settings.vlm_model_name in n for n in names):
-                    logger.info(f"VLM model '{settings.vlm_model_name}' available in Ollama")
+                if any(self.model_name in n for n in names):
+                    logger.info(f"VLM model '{self.model_name}' available in Ollama")
                 else:
                     logger.warning(
-                        f"VLM model '{settings.vlm_model_name}' not found in Ollama. "
-                        f"Available: {names}. Run: ollama pull {settings.vlm_model_name}"
+                        f"VLM model '{self.model_name}' not found in Ollama. "
+                        f"Available: {names}. Run: ollama pull {self.model_name}"
                     )
         except Exception as e:
             logger.warning(f"Cannot reach Ollama at {settings.ollama_base_url}: {e}")
@@ -119,18 +130,18 @@ class VLMService:
             resp = self._client.get("/api/tags")
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
-                available = any(settings.vlm_model_name in m.get("name", "") for m in models)
+                available = any(self.model_name in m.get("name", "") for m in models)
                 return {
                     "ollama": "connected",
                     "vlm_model": "available" if available else "not_found",
-                    "vlm_model_name": settings.vlm_model_name,
+                    "vlm_model_name": self.model_name,
                 }
-        except Exception as e:
+        except Exception:
             pass
         return {
-            "ollama": f"disconnected",
+            "ollama": "disconnected",
             "vlm_model": "unknown",
-            "vlm_model_name": settings.vlm_model_name,
+            "vlm_model_name": self.model_name,
         }
 
     # ──────────────────────────────────────────────
@@ -194,7 +205,7 @@ class VLMService:
         img_b64 = self._image_to_base64(image)
 
         payload = {
-            "model": settings.vlm_model_name,
+            "model": self.model_name,
             "messages": [
                 {
                     "role": "user",

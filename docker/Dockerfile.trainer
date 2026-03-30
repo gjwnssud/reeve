@@ -1,0 +1,15 @@
+# Trainer 서비스 — LlamaFactory 기반 (Linux/Windows NVIDIA GPU)
+# Mac 환경에서는 네이티브 Python(MLX)으로 실행 (docker-compose.mac.yml에서 비활성화)
+FROM hiyouga/llamafactory:latest
+
+WORKDIR /app
+
+# FastAPI + 런타임 의존성
+RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic-settings pyyaml psutil httpx
+
+# trainer 소스 복사
+COPY trainer/ ./trainer/
+
+EXPOSE 8002
+
+CMD ["uvicorn", "trainer.main:app", "--host", "0.0.0.0", "--port", "8002"]

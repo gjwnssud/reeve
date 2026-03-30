@@ -90,6 +90,7 @@ copy "%DOCKER_DIR%\docker-compose.gpu.yml" "%DEST%\docker-compose.gpu.yml" > nul
 
 copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
+copy "%DOCKER_DIR%\Dockerfile.trainer"    "%DEST%\" > nul
 copy "%DOCKER_DIR%\.env.example"          "%DEST%\" > nul
 
 :: Copy source code
@@ -97,6 +98,8 @@ robocopy "%ROOT%\studio"     "%DEST%\studio"     /e /xd __pycache__ .pytest_cach
 if errorlevel 2 echo [WARN] robocopy error: studio
 robocopy "%ROOT%\identifier" "%DEST%\identifier" /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
 if errorlevel 2 echo [WARN] robocopy error: identifier
+robocopy "%ROOT%\trainer"    "%DEST%\trainer"    /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
+if errorlevel 2 echo [WARN] robocopy error: trainer
 robocopy "%ROOT%\sql"        "%DEST%\sql"        /e > nul
 if errorlevel 2 echo [WARN] robocopy error: sql
 copy "%ROOT%\requirements.txt"            "%DEST%\" > nul
@@ -292,14 +295,14 @@ powershell -NoProfile -Command ^
   "'set -e'," ^
   "'cd \"\$(dirname \"\$0\")\"'," ^
   "''," ^
-  "'echo \"[Reeve Studio] Linux 서비스 시작 (GPU)\"'," ^
+  "'echo \"[Reeve] Linux 서비스 시작 (GPU)\"'," ^
   "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d'," ^
   "''," ^
   "'echo \"\"'," ^
   "'echo \"서비스가 시작되었습니다:\"'," ^
   "'echo \"  Studio        : http://localhost:8000\"'," ^
   "'echo \"  Identifier    : http://localhost:8001\"'," ^
-  "'echo \"  LLaMA-Factory : http://localhost:7860\"'," ^
+  "'echo \"  Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)\"'," ^
   "'echo \"  Qdrant        : http://localhost:6333/dashboard\"'," ^
   "'echo \"  Ollama        : http://localhost:11434  (NVIDIA GPU)\"'" ^
   "); [IO.File]::WriteAllText('%DEST%\start.sh', ($c -join [char]10) + [char]10)"
@@ -395,7 +398,7 @@ echo @echo off
 echo chcp 65001 ^> nul
 echo cd /d "%%~dp0"
 echo.
-echo echo [Reeve Studio] Windows 서비스 시작 ^(GPU^)...
+echo echo [Reeve] Windows 서비스 시작 ^(GPU^)...
 echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 echo.
 echo if errorlevel 1 ^(
@@ -409,7 +412,7 @@ echo echo.
 echo echo 서비스가 시작되었습니다:
 echo echo   Studio        : http://localhost:8000
 echo echo   Identifier    : http://localhost:8001
-echo echo   LLaMA-Factory : http://localhost:7860
+echo echo   Trainer       : http://localhost:8002  ^(LlamaFactory, NVIDIA GPU^)
 echo echo   Qdrant        : http://localhost:6333/dashboard
 ) > "%DEST%\start.bat"
 

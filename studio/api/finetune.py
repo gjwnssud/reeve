@@ -1,10 +1,11 @@
 """
 파인튜닝 API 라우터
-학습 데이터 Export + Ollama 배포 준비
-(학습은 LLaMA-Factory WebUI에서 진행)
+- 학습 데이터 Export (DB → ShareGPT JSON)
+- Trainer 서비스 프록시 (학습 시작/상태/중지/로그, 하드웨어 프리셋, 배포 커맨드)
+- Before/After 평가 (Identifier 서비스 연동)
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func as sql_func
 from typing import Optional
@@ -24,6 +25,26 @@ from studio.models.vehicle_model import VehicleModel
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _proxy_get(path: str, params: dict = None) -> dict:
+    """Trainer 서비스 GET 프록시"""
+    from studio.config import settings
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(f"{settings.trainer_url}{path}", params=params)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
+
+
+async def _proxy_post(path: str, body: dict = None) -> dict:
+    """Trainer 서비스 POST 프록시"""
+    from studio.config import settings
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(f"{settings.trainer_url}{path}", json=body or {})
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
 
 
 class ExportParams(BaseModel):
@@ -58,119 +79,8 @@ def _apply_filters(query, manufacturer_id=None, date_from=None, date_to=None):
 
 @router.get("/hw-profile")
 async def get_hw_profile():
-    """하드웨어 감지 → 파인튜닝 최적 파라미터 프리셋 반환"""
-    import platform
-    from studio.services.llamafactory import llamafactory_service
-
-    # Native 모드 + arm64 → Apple Silicon (Docker 안에서는 MPS 불가)
-    if llamafactory_service.native and platform.machine() in ("arm64", "aarch64"):
-        try:
-            import psutil
-            ram_gb = psutil.virtual_memory().total / 1024 ** 3
-        except Exception:
-            ram_gb = 0
-        return {
-            "hw": "apple_silicon",
-            "label": f"Apple Silicon MPS ({ram_gb:.0f} GB unified) [native]",
-            "preset": {
-                "batch_size": 1, "gradient_accumulation": 8,
-                "lora_rank": 16, "quantization_bit": None,
-                "learning_rate": "1e-4", "num_epochs": 3.0,
-                "flash_attn": None, "use_mps": True, "fp16": False,
-                "cutoff_len": 1024,
-            },
-        }
-
-    try:
-        import torch
-    except ImportError:
-        return {"hw": "cpu", "label": "CPU Only", "preset": _cpu_preset()}
-
-    if torch.cuda.is_available():
-        gpu = torch.cuda.get_device_properties(0)
-        vram_gb = gpu.total_memory / 1024 ** 3
-        cc_major, cc_minor = torch.cuda.get_device_capability(0)
-
-        # Blackwell GB10 (sm_12x) or ≥100 GB → DGX Spark
-        # - flash_attn fa2: sm_121 공식 미지원, PyTorch SDPA 사용 (2% 더 빠름)
-        # - quantization: bitsandbytes aarch64+sm_121 공식 빌드 지원 → 4-bit NF4 사용
-        # - bf16: 지원
-        # ref: https://github.com/natolambert/dgx-spark-setup
-        if cc_major >= 12 or vram_gb >= 100:
-            hw, label = "dgx_spark", f"NVIDIA {gpu.name} ({vram_gb:.0f} GB, sm_{cc_major}{cc_minor})"
-            preset = {
-                "batch_size": 1, "gradient_accumulation": 4,
-                "lora_rank": 64, "quantization_bit": 4,
-                "learning_rate": "1e-5", "num_epochs": 3.0,
-                "flash_attn": None,   # sm_121 미지원 — SDPA 사용
-                "use_mps": False, "fp16": False,
-                "cutoff_len": 2048,
-            }
-        elif vram_gb >= 40:   # A100-80G / H100-80G (sm_80/90)
-            hw, label = "high_end_gpu", f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
-            preset = {
-                "batch_size": 4, "gradient_accumulation": 4,
-                "lora_rank": 32, "quantization_bit": None,
-                "learning_rate": "1e-4", "num_epochs": 3.0,
-                "flash_attn": "fa2", "use_mps": False, "fp16": False,
-                "cutoff_len": 2048,
-            }
-        elif vram_gb >= 20:   # 3090 / A6000 / 4090 (≥20 GB)
-            hw, label = "mid_gpu", f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
-            preset = {
-                "batch_size": 2, "gradient_accumulation": 8,
-                "lora_rank": 16, "quantization_bit": 4,
-                "learning_rate": "1e-4", "num_epochs": 3.0,
-                "flash_attn": "fa2", "use_mps": False, "fp16": False,
-                "cutoff_len": 2048,
-            }
-        else:                 # ≤16 GB
-            hw, label = "low_gpu", f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
-            preset = {
-                "batch_size": 1, "gradient_accumulation": 16,
-                "lora_rank": 8, "quantization_bit": 4,
-                "learning_rate": "1e-4", "num_epochs": 3.0,
-                "flash_attn": None, "use_mps": False, "fp16": False,
-                "cutoff_len": 1024,
-            }
-
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        # Apple Silicon MPS
-        # - bitsandbytes GPU 가속 quantization 미지원 (PR#1853 미병합, 2026-03 기준)
-        #   CPU fallback만 가능 → 매우 느림 → quantization 생략
-        # - BF16 미지원 (PyTorch MPS) → fp16 사용
-        # - flash_attn: 해당 없음
-        # - 64GB 통합메모리 → fp16 LoRA로 8B 모델 충분히 적재 가능
-        # ref: https://github.com/hiyouga/LLaMA-Factory/issues/7534
-        try:
-            import psutil
-            ram_gb = psutil.virtual_memory().total / 1024 ** 3
-        except Exception:
-            ram_gb = 0
-        hw = "apple_silicon"
-        label = f"Apple Silicon MPS ({ram_gb:.0f} GB unified)"
-        preset = {
-            "batch_size": 1, "gradient_accumulation": 8,
-            "lora_rank": 16, "quantization_bit": None,   # bitsandbytes MPS GPU 미지원
-            "learning_rate": "1e-4", "num_epochs": 3.0,
-            "flash_attn": None, "use_mps": True, "fp16": True,   # bf16 MPS 에러
-            "cutoff_len": 1024,
-        }
-    else:
-        hw, label = "cpu", "CPU Only"
-        preset = _cpu_preset()
-
-    return {"hw": hw, "label": label, "preset": preset}
-
-
-def _cpu_preset() -> dict:
-    return {
-        "batch_size": 1, "gradient_accumulation": 16,
-        "lora_rank": 8, "quantization_bit": 4,
-        "learning_rate": "1e-4", "num_epochs": 1.0,
-        "flash_attn": None, "use_mps": False, "fp16": False,
-        "cutoff_len": 512,
-    }
+    """하드웨어 감지 → 파인튜닝 최적 파라미터 프리셋 반환 (Trainer 서비스 프록시)"""
+    return await _proxy_get("/hw-profile")
 
 
 @router.get("/stats")
@@ -370,71 +280,12 @@ async def deploy_cmd(
     checkpoint_path: str = Query(..., description="학습된 체크포인트 경로"),
     model_name: str = Query("vehicle-vlm-v1", description="Ollama 등록 모델명"),
 ):
-    """체크포인트 경로 입력 → Ollama 배포 커맨드 목록 반환"""
-    gguf_filename = "model.gguf"
-    gguf_path = f"{checkpoint_path}/{gguf_filename}"
-
-    modelfile_content = (
-        f"FROM ./{gguf_filename}\n"
-        f'SYSTEM "당신은 차량 식별 전문가입니다. '
-        f'차량 이미지를 보고 제조사와 모델을 정확하게 식별합니다."\n'
-    )
-
-    merged_dir = f"{checkpoint_path}/merged"
-
-    steps = [
-        {
-            "title": "1. LoRA 어댑터 병합 (LLaMA-Factory)",
-            "cmd": (
-                f"llamafactory-cli export "
-                f"--model_name_or_path Qwen/Qwen3-VL-8B-Instruct "
-                f"--adapter_name_or_path {checkpoint_path} "
-                f"--export_dir {merged_dir} "
-                f"--export_size 2 "
-                f"--export_legacy_format false"
-            ),
-            "type": "cmd",
-        },
-        {
-            "title": "2. GGUF 변환 (llama.cpp 필요)",
-            "cmd": (
-                f"python convert_hf_to_gguf.py {merged_dir} "
-                f"--outtype f16 --outfile {gguf_path}"
-            ),
-            "type": "cmd",
-        },
-        {
-            "title": "3. Modelfile 생성",
-            "content": modelfile_content,
-            "filename": "Modelfile",
-            "type": "file",
-        },
-        {
-            "title": "4. Ollama 모델 등록",
-            "cmd": f"ollama create {model_name} -f Modelfile",
-            "type": "cmd",
-        },
-        {
-            "title": "5. Identifier .env 수정",
-            "content": f"VLM_MODEL_NAME={model_name}",
-            "type": "env",
-        },
-        {
-            "title": "6. 동작 확인",
-            "cmd": f'ollama run {model_name} "이 차량은 무엇인가요?"',
-            "type": "cmd",
-        },
-    ]
-
-    return {
-        "checkpoint_path": checkpoint_path,
-        "model_name": model_name,
-        "steps": steps,
-    }
+    """체크포인트 경로 → Ollama 배포 커맨드 목록 반환 (Trainer 서비스 프록시)"""
+    return await _proxy_get("/deploy/cmd", params={"checkpoint_path": checkpoint_path, "model_name": model_name})
 
 
 # =============================================================================
-# LLaMA-Factory 학습 자동화 엔드포인트
+# Trainer 서비스 프록시 엔드포인트 (학습 자동화)
 # =============================================================================
 
 class TrainingConfig(BaseModel):
@@ -445,127 +296,55 @@ class TrainingConfig(BaseModel):
     batch_size: int = 2
     gradient_accumulation: int = 4
     lora_rank: int = 8
-    quantization_bit: Optional[int] = 4   # None = 양자화 없음 (Full LoRA)
+    quantization_bit: Optional[int] = 4
     cutoff_len: int = 1024
     output_dir: str = "vehicle-vlm"
-    flash_attn: Optional[str] = None      # "fa2" | None
-    use_mps: bool = False                  # Apple Silicon MPS
-    fp16: bool = False                     # MPS 전용 (bf16 불가)
+    flash_attn: Optional[str] = None
+    use_mps: bool = False
+    fp16: bool = False
 
 
 class ExportModelRequest(BaseModel):
     """LoRA 병합 요청"""
     checkpoint_path: str
-    output_dir: str = "/app/output/merged"
+    output_dir: str = "output/merged"
     model_name: str = "Qwen/Qwen3-VL-8B-Instruct"
 
 
 @router.post("/train/start")
 async def start_training(config: TrainingConfig):
-    """LLaMA-Factory 학습 시작"""
-    from studio.services.llamafactory import llamafactory_service
-
-    try:
-        # YAML 설정 파일 생성
-        config_path = llamafactory_service.generate_train_yaml(
-            model_name=config.model_name,
-            learning_rate=config.learning_rate,
-            num_epochs=config.num_epochs,
-            batch_size=config.batch_size,
-            gradient_accumulation=config.gradient_accumulation,
-            lora_rank=config.lora_rank,
-            quantization_bit=config.quantization_bit,
-            cutoff_len=config.cutoff_len,
-            output_dir=config.output_dir,
-            flash_attn=config.flash_attn,
-            use_mps=config.use_mps,
-            fp16=config.fp16,
-        )
-
-        # 학습 시작 (native 모드: 로컬 경로 / Docker 모드: 컨테이너 내 경로 자동 사용)
-        result = await llamafactory_service.start_training()
-
-        if "error" in result:
-            raise HTTPException(status_code=409, detail=result["error"])
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to start training: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """학습 시작 (Trainer 서비스 프록시)"""
+    return await _proxy_post("/train/start", config.model_dump())
 
 
 @router.get("/train/status")
 async def get_training_status():
-    """학습 진행 상태 조회"""
-    from studio.services.llamafactory import llamafactory_service
-
-    try:
-        return await llamafactory_service.get_status()
-    except Exception as e:
-        logger.error(f"Failed to get training status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """학습 진행 상태 조회 (Trainer 서비스 프록시)"""
+    return await _proxy_get("/train/status")
 
 
 @router.post("/train/stop")
 async def stop_training():
-    """학습 중지"""
-    from studio.services.llamafactory import llamafactory_service
-
-    try:
-        return await llamafactory_service.stop_training()
-    except Exception as e:
-        logger.error(f"Failed to stop training: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """학습 중지 (Trainer 서비스 프록시)"""
+    return await _proxy_post("/train/stop")
 
 
 @router.get("/train/logs")
 async def get_training_logs(tail: int = Query(default=50, ge=1, le=500)):
-    """학습 로그 조회"""
-    from studio.services.llamafactory import llamafactory_service
-
-    try:
-        logs = await llamafactory_service.get_logs(tail=tail)
-        return {"logs": logs, "count": len(logs)}
-    except Exception as e:
-        logger.error(f"Failed to get training logs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """학습 로그 조회 (Trainer 서비스 프록시)"""
+    return await _proxy_get("/train/logs", params={"tail": tail})
 
 
 @router.get("/train/raw-log")
 async def get_raw_training_log(tail: int = Query(default=100, ge=1, le=1000)):
-    """nohup train.log 원문 반환 (학습 시작 실패·에러 확인용)"""
-    from studio.services.llamafactory import llamafactory_service
-
-    try:
-        content = await llamafactory_service.get_raw_log(tail=tail)
-        return {"content": content}
-    except Exception as e:
-        logger.error(f"Failed to get raw training log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """원시 학습 로그 반환 (Trainer 서비스 프록시)"""
+    return await _proxy_get("/train/raw-log", params={"tail": tail})
 
 
 @router.post("/train/export")
 async def export_model(req: ExportModelRequest):
-    """LoRA 어댑터 병합 (Export)"""
-    from studio.services.llamafactory import llamafactory_service
-
-    try:
-        result = await llamafactory_service.export_model(
-            checkpoint_path=req.checkpoint_path,
-            output_dir=req.output_dir,
-            model_name=req.model_name,
-        )
-        if "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to export model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """LoRA 어댑터 병합 (Trainer 서비스 프록시)"""
+    return await _proxy_post("/train/export", req.model_dump())
 
 
 @router.get("/evaluate")

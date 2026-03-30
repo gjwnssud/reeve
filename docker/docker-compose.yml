@@ -60,6 +60,7 @@ services:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - OLLAMA_BASE_URL=http://ollama:11434
+      - TRAINER_URL=http://trainer:8002
     depends_on:
       qdrant:
         condition: service_started
@@ -94,28 +95,30 @@ services:
           cpus: '4.0'
           memory: 8G
 
-  # LLaMA-Factory (VLM 파인튜닝 WebUI)
-  llamafactory:
-    image: hiyouga/llamafactory:latest
-    container_name: reeve-llamafactory
+  # Trainer (파인튜닝 API 서비스 - LlamaFactory 기반, Linux/Windows)
+  trainer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.trainer
+    container_name: reeve-trainer
     ports:
-      - "7860:7860"
+      - "8002:8002"
     volumes:
       - ../data/finetune:/app/data        # Studio에서 export한 학습 데이터
       - ../output:/app/output             # 체크포인트 저장
       - ../data/hf-cache:/root/.cache/huggingface # HuggingFace 모델 캐시
     environment:
-      - GRADIO_SERVER_NAME=0.0.0.0
-      - GRADIO_SERVER_PORT=7860
-    command: llamafactory-cli webui
+      - TRAINER_BACKEND=llamafactory
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - IDENTIFIER_URL=http://identifier:8001
     networks:
       - reeve-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 8G
+          cpus: '4.0'
+          memory: 12G
 
   # Celery Worker (배치 처리)
   celery-worker:
@@ -133,6 +136,7 @@ services:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - OLLAMA_BASE_URL=http://ollama:11434
+      - TRAINER_URL=http://trainer:8002
     depends_on:
       redis:
         condition: service_started

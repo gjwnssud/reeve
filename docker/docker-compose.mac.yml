@@ -4,27 +4,31 @@
 # 실행: docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
 # ──────────────────────────────────────────
 # GPU 설정은 docker-compose.gpu.yml에 분리되어 있으므로 Mac에서는 포함하지 않음.
-# Apple Silicon (arm64): llamafactory, ollama, studio를 비활성화하고 네이티브로 실행.
-# Studio 네이티브 실행: uvicorn studio.main:app --reload --port 8000
-#   (MySQL/Qdrant/Redis는 Docker에서 localhost 포트로 접근)
+# Apple Silicon (arm64): ollama, trainer를 비활성화하고 네이티브로 실행.
+# trainer 네이티브 실행: TRAINER_BACKEND=mlx uvicorn trainer.main:app --port 8002
+# ollama 네이티브 실행: ollama serve
 
 services:
-  llamafactory:
-    profiles: ["disable"]
-
   ollama:
     profiles: ["disable"]
 
-  studio:
+  # trainer가 네이티브 실행이므로 host.docker.internal:8002로 URL 교체
+  trainer:
     profiles: ["disable"]
 
-  # ollama가 네이티브 실행이므로 host.docker.internal:11434로 URL 교체
+  # ollama, trainer가 네이티브 실행이므로 host.docker.internal로 URL 교체
   identifier:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - TRAINER_URL=http://host.docker.internal:8002
       - EMBEDDING_DEVICE=cpu
       - IDENTIFIER_ENABLE_TORCH_COMPILE=false  # ARM torch.compile 불안정
 
   celery-worker:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - TRAINER_URL=http://host.docker.internal:8002
+
+  studio:
+    environment:
+      - TRAINER_URL=http://host.docker.internal:8002

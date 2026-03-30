@@ -53,6 +53,7 @@ services:
       - MYSQL_HOST=mysql
       - QDRANT_HOST=qdrant
       - OLLAMA_BASE_URL=http://ollama:11434
+      - TRAINER_URL=http://trainer:8002
     depends_on:
       mysql:
         condition: service_healthy
@@ -82,4 +83,11 @@ services:
   celery-worker:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+    restart: no
+
+  trainer:
+    volumes:
+      - ../trainer:/app/trainer
+      - ../data/finetune:/app/data
+      - ../output:/app/output
     restart: no
