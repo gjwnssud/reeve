@@ -2,7 +2,6 @@
 데이터 라이프사이클 관리 작업
 검수 완료된 analyzed_vehicles를 자동으로 정리
 """
-import os
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
@@ -20,12 +19,13 @@ async def cleanup_old_analyzed_vehicles():
     오래된 미검수 analyzed_vehicles 자동 삭제
 
     - 삭제 대상: is_verified=false AND created_at < (현재 - RETENTION_DAYS)
-    - 미검수 상태로 오래 방치된 데이터 정리
-    - 이미지 파일도 함께 삭제 (옵션)
+    - 크롭 이미지 + 원본 이미지 + training_dataset + Qdrant + DB 레코드 모두 삭제
     """
     if not settings.cleanup_enabled:
         logger.info("Cleanup is disabled in settings")
         return
+
+    from studio.api.admin import _delete_analyzed_vehicle
 
     cutoff_date = datetime.now() - timedelta(days=settings.analyzed_vehicles_retention_days)
 
@@ -50,18 +50,9 @@ async def cleanup_old_analyzed_vehicles():
         failed_image_count = 0
 
         for record in old_records:
-            # 이미지 파일 삭제 시도
-            if record.image_path and os.path.exists(record.image_path):
-                try:
-                    os.remove(record.image_path)
-                    deleted_image_count += 1
-                    logger.debug(f"Deleted image: {record.image_path}")
-                except Exception as e:
-                    failed_image_count += 1
-                    logger.warning(f"Failed to delete image {record.image_path}: {e}")
-
-            # DB 레코드 삭제
-            db.delete(record)
+            result = _delete_analyzed_vehicle(record, db)
+            deleted_image_count += result["deleted_files"]
+            failed_image_count += result["failed_files"]
             deleted_count += 1
 
         db.commit()
@@ -69,8 +60,8 @@ async def cleanup_old_analyzed_vehicles():
         logger.info(
             f"Cleanup completed: "
             f"deleted {deleted_count} records, "
-            f"{deleted_image_count} images, "
-            f"{failed_image_count} image deletion failures "
+            f"{deleted_image_count} files deleted, "
+            f"{failed_image_count} file deletion failures "
             f"(retention: {settings.analyzed_vehicles_retention_days} days, cutoff: {cutoff_date})"
         )
 

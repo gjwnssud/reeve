@@ -710,14 +710,79 @@ async def save_to_vectordb(
         )
 
 
+def _delete_analyzed_vehicle(analyzed: AnalyzedVehicle, db: Session) -> dict:
+    """analyzed_vehicle 레코드 하나를 완전 삭제.
+
+    삭제 대상:
+    - 크롭 이미지 파일
+    - 원본 업로드 이미지 파일 (raw_result["original_image"] + original_image_path 둘 다)
+    - training_dataset 레코드 (존재할 경우)
+    - Qdrant 벡터 (qdrant_id 존재할 경우)
+    - analyzed_vehicles DB 레코드 (호출자가 commit 해야 함)
+
+    반환: {"deleted_files": int, "failed_files": int}
+    """
+    import os
+    from studio.models.training_dataset import TrainingDataset
+    from studio.services.vectordb import vectordb_service
+
+    deleted_files = 0
+    failed_files = 0
+
+    # 1. 크롭 이미지 삭제
+    if analyzed.image_path and os.path.exists(analyzed.image_path):
+        try:
+            os.remove(analyzed.image_path)
+            deleted_files += 1
+        except Exception as e:
+            logger.warning(f"Failed to delete crop file {analyzed.image_path}: {e}")
+            failed_files += 1
+
+    # 2. 원본 업로드 이미지 삭제 (두 경로 모두 확인)
+    original_paths = set()
+    if analyzed.raw_result and isinstance(analyzed.raw_result, dict):
+        p = analyzed.raw_result.get("original_image")
+        if p:
+            original_paths.add(p)
+    if analyzed.original_image_path:
+        original_paths.add(analyzed.original_image_path)
+
+    for original_path in original_paths:
+        if original_path != analyzed.image_path and os.path.exists(original_path):
+            try:
+                os.remove(original_path)
+                deleted_files += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete original file {original_path}: {e}")
+                failed_files += 1
+
+    # 3. training_dataset + Qdrant (존재할 경우 무조건 삭제)
+    try:
+        training = db.query(TrainingDataset).filter(
+            TrainingDataset.image_path == analyzed.image_path
+        ).first()
+        if training:
+            if training.qdrant_id:
+                try:
+                    vectordb_service.delete_training_image(training.id)
+                except Exception as e:
+                    logger.warning(f"Failed to delete from Qdrant: {e}")
+            db.delete(training)
+            db.flush()
+    except Exception as e:
+        logger.warning(f"Failed to cleanup training_dataset for analyzed_id={analyzed.id}: {e}")
+
+    # 4. analyzed_vehicles 레코드 삭제
+    db.delete(analyzed)
+
+    return {"deleted_files": deleted_files, "failed_files": failed_files}
+
+
 @router.delete("/review-delete-all")
 async def batch_delete_all_analyzed_vehicles(
     db: Session = Depends(get_db)
 ):
-    """미검수 분석 결과 전체 삭제 (DB 레벨 일괄 삭제 + 이미지 파일 삭제)"""
-    import os
-
-    # 전체 미검수 레코드 조회 (파일 경로 추출용)
+    """미검수 분석 결과 전체 삭제 (이미지 파일 + training_dataset + Qdrant + DB 레코드)"""
     all_unverified = db.query(AnalyzedVehicle).filter(
         AnalyzedVehicle.is_verified == False
     ).all()
@@ -727,30 +792,10 @@ async def batch_delete_all_analyzed_vehicles(
     failed_files = 0
 
     for analyzed in all_unverified:
-        # 크롭 이미지 삭제
-        try:
-            if analyzed.image_path and os.path.exists(analyzed.image_path):
-                os.remove(analyzed.image_path)
-                deleted_files += 1
-        except Exception as e:
-            logger.warning(f"Failed to delete crop file {analyzed.image_path}: {e}")
-            failed_files += 1
+        result = _delete_analyzed_vehicle(analyzed, db)
+        deleted_files += result["deleted_files"]
+        failed_files += result["failed_files"]
 
-        # 원본 업로드 이미지 삭제 (raw_result에 original_image 경로가 있는 경우)
-        try:
-            if analyzed.raw_result and isinstance(analyzed.raw_result, dict):
-                original_path = analyzed.raw_result.get("original_image")
-                if original_path and os.path.exists(original_path):
-                    os.remove(original_path)
-                    deleted_files += 1
-        except Exception as e:
-            logger.warning(f"Failed to delete original file: {e}")
-            failed_files += 1
-
-    # DB 전체 삭제 (단일 쿼리 - 개별 삭제 대신)
-    db.query(AnalyzedVehicle).filter(
-        AnalyzedVehicle.is_verified == False
-    ).delete(synchronize_session=False)
     db.commit()
 
     logger.info(f"Batch deleted {total} unverified records, {deleted_files} files deleted, {failed_files} file errors")
@@ -767,58 +812,12 @@ async def delete_analyzed_vehicle(
     analyzed_id: int,
     db: Session = Depends(get_db)
 ):
-    """분석 결과 삭제 (크롭 이미지 + 원본 업로드 파일 + MySQL 레코드)"""
+    """분석 결과 삭제 (크롭 이미지 + 원본 업로드 파일 + training_dataset + Qdrant + MySQL 레코드)"""
     analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
     if not analyzed:
         raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
 
-    # 크롭 이미지 파일 삭제
-    try:
-        import os
-        if analyzed.image_path and os.path.exists(analyzed.image_path):
-            os.remove(analyzed.image_path)
-            logger.info(f"Deleted crop file: {analyzed.image_path}")
-    except Exception as e:
-        logger.warning(f"Failed to delete crop file: {e}")
-
-    # 원본 업로드 이미지 파일 삭제 (raw_result 또는 original_image_path 컬럼 사용)
-    try:
-        import os
-        original_path = None
-        if analyzed.raw_result and isinstance(analyzed.raw_result, dict):
-            original_path = analyzed.raw_result.get("original_image")
-        if not original_path:
-            original_path = analyzed.original_image_path
-        # image_path와 동일하면(크롭 없음) 이미 위에서 삭제됨
-        if original_path and original_path != analyzed.image_path and os.path.exists(original_path):
-            os.remove(original_path)
-            logger.info(f"Deleted original file: {original_path}")
-    except Exception as e:
-        logger.warning(f"Failed to delete original file: {e}")
-
-    # 검증 완료 레코드인 경우 training_dataset + Qdrant 벡터도 함께 삭제
-    if analyzed.is_verified:
-        try:
-            from studio.models.training_dataset import TrainingDataset
-            from studio.services.vectordb import vectordb_service
-
-            training = db.query(TrainingDataset).filter(
-                TrainingDataset.image_path == analyzed.image_path
-            ).first()
-
-            if training:
-                if training.qdrant_id:
-                    try:
-                        vectordb_service.delete_training_image(training.id)
-                    except Exception as e:
-                        logger.warning(f"Failed to delete from Qdrant: {e}")
-                db.delete(training)
-                db.flush()
-        except Exception as e:
-            logger.warning(f"Failed to cleanup training_dataset for analyzed_id={analyzed_id}: {e}")
-
-    # DB에서 삭제
-    db.delete(analyzed)
+    _delete_analyzed_vehicle(analyzed, db)
     db.commit()
 
     return {"message": "Deleted successfully"}

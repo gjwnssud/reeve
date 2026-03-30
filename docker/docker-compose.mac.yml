@@ -32,3 +32,5 @@ services:
   studio:
     environment:
       - TRAINER_URL=http://host.docker.internal:8002
+      - EMBEDDING_DEVICE=cpu
+      - IDENTIFIER_ENABLE_TORCH_COMPILE=false  # ARM torch.compile 불안정
