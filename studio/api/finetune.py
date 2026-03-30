@@ -278,7 +278,7 @@ async def export_data(params: ExportParams, db: Session = Depends(get_db)):
 @router.get("/deploy/cmd")
 async def deploy_cmd(
     checkpoint_path: str = Query(..., description="학습된 체크포인트 경로"),
-    model_name: str = Query("vehicle-vlm-v1", description="Ollama 등록 모델명"),
+    model_name: str = Query("reeve-vlm-v1", description="Ollama 등록 모델명"),
 ):
     """체크포인트 경로 → Ollama 배포 커맨드 목록 반환 (Trainer 서비스 프록시)"""
     return await _proxy_get("/deploy/cmd", params={"checkpoint_path": checkpoint_path, "model_name": model_name})

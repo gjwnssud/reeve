@@ -241,7 +241,7 @@ async def export_model(req: ExportModelRequest):
 @router.get("/deploy/cmd")
 async def deploy_cmd(
     checkpoint_path: str = Query(..., description="학습된 체크포인트 경로"),
-    model_name: str = Query("vehicle-vlm-v1", description="Ollama 등록 모델명"),
+    model_name: str = Query("reeve-vlm-v1", description="Ollama 등록 모델명"),
 ):
     """체크포인트 경로 → Ollama 배포 커맨드 목록 반환"""
     from trainer.config import settings
@@ -325,7 +325,7 @@ async def deploy_cmd(
 
 class OllamaDeployRequest(BaseModel):
     merged_model_dir: str
-    model_name: str = "vehicle-vlm-v1"
+    model_name: str = "reeve-vlm-v1"
     notify_identifier: bool = True
 
 

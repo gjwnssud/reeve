@@ -597,7 +597,7 @@ echo IDENTIFIER_MODE=visual_rag
 echo.
 echo # VLM ^(Ollama^)
 echo OLLAMA_BASE_URL=http://ollama:11434
-echo VLM_MODEL_NAME=vehicle-vlm-v1
+echo VLM_MODEL_NAME=reeve-vlm-v1
 echo VLM_TIMEOUT=30
 echo VLM_MAX_CANDIDATES=5
 echo VLM_FALLBACK_TO_CLIP=true
@@ -744,7 +744,7 @@ powershell -NoProfile -Command ^
   "'done'," ^
   "''," ^
   "'MODEL_NAME=\$(grep VLM_MODEL_NAME .env ^| cut -d= -f2 ^| tr -d '' '')'," ^
-  "'MODEL_NAME=\"\${MODEL_NAME:-vehicle-vlm-v1}\"'," ^
+  "'MODEL_NAME=\"\${MODEL_NAME:-reeve-vlm-v1}\"'," ^
   "''," ^
   "'if docker exec reeve-ollama ollama list ^| grep -q \"\$MODEL_NAME\"; then'," ^
   "'    echo \"Ollama 모델 '\''\$MODEL_NAME'\'' 이미 존재합니다.\"'," ^
@@ -759,7 +759,7 @@ powershell -NoProfile -Command ^
   "'        echo \"모델 등록 완료: \$MODEL_NAME\"'," ^
   "'    else'," ^
   "'        echo \"[정보] models/ 폴더에 .gguf 파일 또는 Modelfile이 없습니다.\"'," ^
-  "'        echo \"       (models/vehicle-vlm-v1.gguf + models/Modelfile)\"'," ^
+  "'        echo \"       (models/reeve-vlm-v1.gguf + models/Modelfile)\"'," ^
   "'    fi'," ^
   "'fi'," ^
   "''," ^
@@ -927,7 +927,7 @@ echo timeout /t 2 /nobreak ^> nul
 echo docker exec reeve-ollama ollama list ^> nul 2^>^&1
 echo if errorlevel 1 goto OLLAMA_WAIT
 echo.
-echo set MODEL_NAME=vehicle-vlm-v1
+echo set MODEL_NAME=reeve-vlm-v1
 echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^VLM_MODEL_NAME=" .env 2^>nul'^) do set MODEL_NAME=%%%%a
 echo.
 echo docker exec reeve-ollama ollama list ^| findstr /i "%%MODEL_NAME%%" ^> nul 2^>^&1
@@ -952,7 +952,7 @@ echo             echo [정보] models\Modelfile이 없습니다.
 echo         ^)
 echo     ^) else ^(
 echo         echo [정보] models\ 폴더에 .gguf 파일이 없습니다.
-echo         echo        ^(models\vehicle-vlm-v1.gguf + models\Modelfile^)
+echo         echo        ^(models\reeve-vlm-v1.gguf + models\Modelfile^)
 echo     ^)
 echo ^)
 echo.

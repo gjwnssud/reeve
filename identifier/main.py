@@ -831,7 +831,7 @@ async def get_task_result(
 # ──────────────────────────────────────────────
 
 class ReloadVLMRequest(BaseModel):
-    model_name: str = PydanticField(..., description="교체할 Ollama 모델명 (예: vehicle-vlm-v1)")
+    model_name: str = PydanticField(..., description="교체할 Ollama 모델명 (예: reeve-vlm-v1)")
 
 
 @app.post(

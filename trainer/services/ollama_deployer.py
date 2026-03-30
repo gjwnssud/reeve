@@ -44,7 +44,7 @@ class OllamaDeployer:
 
         Args:
             merged_model_dir: export_model()로 생성된 병합 모델 디렉토리
-            model_name: Ollama에 등록할 모델명 (예: vehicle-vlm-v1)
+            model_name: Ollama에 등록할 모델명 (예: reeve-vlm-v1)
             notify_identifier: True이면 완료 후 Identifier 서비스에 핫리로드 요청
 
         Returns:
