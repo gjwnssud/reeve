@@ -51,11 +51,11 @@
   <text x="118" y="227" text-anchor="middle" font-size="11" font-weight="bold" fill="#1D4ED8">관리자 검수</text>
   <text x="118" y="240" text-anchor="middle" font-size="10" fill="#3B82F6">Admin UI</text>
 
-  <!-- CLIP (studio) -->
+  <!-- EfficientNet-B3 (studio) -->
   <line x1="118" y1="248" x2="118" y2="268" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
   <rect x="58" y="268" width="120" height="36" fill="#BFDBFE" stroke="#2563EB" stroke-width="1.2" rx="6"/>
-  <text x="118" y="283" text-anchor="middle" font-size="11" font-weight="bold" fill="#1E40AF">CLIP-ViT-B/32</text>
-  <text x="118" y="296" text-anchor="middle" font-size="10" fill="#1E40AF">임베딩 생성 (512d)</text>
+  <text x="118" y="283" text-anchor="middle" font-size="11" font-weight="bold" fill="#1E40AF">EfficientNet-B3</text>
+  <text x="118" y="296" text-anchor="middle" font-size="10" fill="#1E40AF">임베딩 생성 (1536d)</text>
 
   <!-- Qdrant (studio) -->
   <line x1="178" y1="286" x2="228" y2="286" stroke="#3B82F6" stroke-width="1.5" marker-end="url(#ab)"/>
@@ -91,9 +91,9 @@
 
   <line x1="622" y1="192" x2="622" y2="210" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
 
-  <!-- CLIP (identifier) -->
+  <!-- EfficientNet-B3 (identifier) -->
   <rect x="562" y="210" width="120" height="36" fill="#BBF7D0" stroke="#16A34A" stroke-width="1.2" rx="6"/>
-  <text x="622" y="225" text-anchor="middle" font-size="11" font-weight="bold" fill="#14532D">CLIP-ViT-B/32  ②</text>
+  <text x="622" y="225" text-anchor="middle" font-size="11" font-weight="bold" fill="#14532D">EfficientNet-B3  ②</text>
   <text x="622" y="238" text-anchor="middle" font-size="10" fill="#15803D">512d 임베딩 추출</text>
 
   <line x1="622" y1="246" x2="622" y2="264" stroke="#22C55E" stroke-width="1.5" marker-end="url(#ag)"/>
@@ -170,11 +170,11 @@
   <rect x="50" y="526" width="12" height="12" fill="#BBF7D0" stroke="#16A34A" stroke-width="1" rx="2"/>
   <text x="68" y="537" font-size="10" fill="#475569">YOLO26 (Ultralytics) — 차량 BBox 탐지</text>
   <rect x="50" y="544" width="12" height="12" fill="#BBF7D0" stroke="#16A34A" stroke-width="1" rx="2"/>
-  <text x="68" y="555" font-size="10" fill="#475569">CLIP-ViT-B/32 (OpenAI) — 512d 이미지 임베딩</text>
+  <text x="68" y="555" font-size="10" fill="#475569">EfficientNet-B3 (timm) — 1536d 이미지 임베딩</text>
 
   <text x="50" y="578" font-size="11" font-weight="bold" fill="#334155">visual_rag 판별 흐름</text>
-  <text x="50" y="594" font-size="10" fill="#475569">① YOLO 탐지  →  ② CLIP 임베딩  →  ③ Qdrant Top-K 후보 추출  →  ④ Qwen3-VL 최종 판정</text>
-  <text x="50" y="610" font-size="10" fill="#6B7280">  ※ VLM 실패 시 VLM_FALLBACK_TO_CLIP=true이면 Voting Layer 결과로 자동 폴백</text>
+  <text x="50" y="594" font-size="10" fill="#475569">① YOLO 탐지  →  ② EfficientNet-B3 임베딩  →  ③ Qdrant Top-K 후보 추출  →  ④ Qwen3-VL 최종 판정</text>
+  <text x="50" y="610" font-size="10" fill="#6B7280">  ※ VLM 실패 시 VLM_FALLBACK_TO_EMBEDDING=true이면 Voting Layer 결과로 자동 폴백</text>
   <text x="50" y="626" font-size="10" fill="#6B7280">  ※ YOLO 미탐지 시 identified → uncertain 자동 하향 (오탐 방지)</text>
 
   <!-- col 2 -->

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Reeve는 AI 기반 차량 제조사/모델 자동 식별 시스템으로, 세 개의 독립적인 FastAPI 서비스로 구성됩니다.
 
 - **Studio (port 8000)** — 개발/관리 서비스. OpenAI Vision / Gemini Vision으로 차량 분석, MySQL로 구조화 데이터 저장, Qdrant에 학습 데이터 동기화.
-- **Identifier (port 8001)** — 프로덕션 식별 서비스. MySQL 없음. CLIP 임베딩 + Qdrant 벡터 검색 + Qwen3-VL로 차량 식별. 동기/비동기(Celery) 지원.
+- **Identifier (port 8001)** — 프로덕션 식별 서비스. MySQL 없음. EfficientNet-B3 임베딩 + Qdrant 벡터 검색 + Qwen3-VL로 차량 식별. 동기/비동기(Celery) 지원.
 - **Trainer (port 8002)** — 파인튜닝 서비스. `TRAINER_BACKEND=llamafactory` (Linux/Windows NVIDIA) 또는 `TRAINER_BACKEND=mlx` (Mac Apple Silicon 네이티브). Studio의 `/finetune/train/*` 호출을 수신.
 
 ## Commands
@@ -54,25 +54,25 @@ pytest --asyncio-mode=auto
 ```
 이미지 업로드 → YOLO 차량 감지 → BBox 선택 → Vision API 분석 (OpenAI/Gemini)
 → RapidFuzz 매칭 (manufacturers/vehicle_models DB) → 관리자 검토/승인
-→ CLIP 임베딩 생성 → Qdrant 저장 → Identifier 서비스가 벡터 검색으로 차량 식별
+→ EfficientNet-B3 임베딩 생성 → Qdrant 저장 → Identifier 서비스가 벡터 검색으로 차량 식별
 ```
 
 ### 식별 알고리즘 (`identifier/identifier.py`)
 
 1. YOLO26으로 차량 감지 및 크롭
-2. CLIP-ViT-B/32로 512d 임베딩 생성
+2. EfficientNet-B3로 1536d 임베딩 생성
 3. Qdrant top-K 검색 + (manufacturer_id, model_id) 쌍으로 투표 집계
 4. 신뢰도 판정: `identified` / `uncertain` / `unidentified`
 5. `visual_rag` 모드: Qwen3-VL로 최종 재판정
 
-**3가지 동작 모드** (`IDENTIFIER_MODE`): `clip_only` (기본) / `visual_rag` / `vlm_only`
+**3가지 동작 모드** (`IDENTIFIER_MODE`): `embedding_only` (기본) / `visual_rag` / `vlm_only`
 
 **안전장치**: vote_concentration (승자 득표율 ≥ 30%), YOLO 미감지 시 `uncertain` 강제 하향
 
 ### 주요 설계 결정
 
 - **Identifier는 MySQL-free.** 제조사/모델 이름은 Qdrant payload에 비정규화 저장 (`manufacturer_korean`, `manufacturer_english`, `model_korean`, `model_english`).
-- **단일 Qdrant 컬렉션** (`training_images`, 512d). 추가 컬렉션 없음.
+- **단일 Qdrant 컬렉션** (`training_images`, 1536d). 추가 컬렉션 없음.
 - **DB-First 업로드**: `POST /api/upload` → DB 레코드 생성 (stage: `uploaded`) → `POST /api/detect-vehicle` → `POST /api/analyze-vehicle-stream` (SSE). 파일 수신과 분석을 분리.
 - **워커 자동 계산**: `workers = cpu_count // IDENTIFIER_TORCH_THREADS`. `.env`에 `IDENTIFIER_TORCH_THREADS`만 설정하면 `start.sh`가 계산.
 - **파일 삭제 정책**: 레코드 삭제 시 crop 이미지 + 원본 업로드 파일 함께 삭제.
@@ -122,7 +122,7 @@ FastAPI → Redis 큐 → Celery Worker → 결과 Redis 저장 (24h TTL)
 
 | 변수 | 서비스 | 설명 |
 |------|--------|------|
-| `IDENTIFIER_MODE` | identifier | `clip_only` / `visual_rag` / `vlm_only` |
+| `IDENTIFIER_MODE` | identifier | `embedding_only` / `visual_rag` / `vlm_only` |
 | `IDENTIFIER_TOP_K` | identifier | Qdrant 검색 결과 수 (default 10) |
 | `IDENTIFIER_VOTE_THRESHOLD` | identifier | 최소 득표 수 (default 3) |
 | `IDENTIFIER_CONFIDENCE_THRESHOLD` | identifier | 최소 신뢰도 (default 0.80) |

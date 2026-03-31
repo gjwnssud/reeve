@@ -528,7 +528,7 @@ QDRANT_PORT=6333
 # Embedding
 EMBEDDING_DEVICE=cuda
 
-# 판별 모드: clip_only | visual_rag | vlm_only
+# 판별 모드: embedding_only | visual_rag | vlm_only
 IDENTIFIER_MODE=visual_rag
 
 # VLM (Ollama)
@@ -536,7 +536,7 @@ OLLAMA_BASE_URL=http://ollama:11434
 VLM_MODEL_NAME=reeve-vlm-v1
 VLM_TIMEOUT=30
 VLM_MAX_CANDIDATES=5
-VLM_FALLBACK_TO_CLIP=true
+VLM_FALLBACK_TO_EMBEDDING=true
 VLM_BATCH_CONCURRENCY=2
 
 # 판별 파라미터

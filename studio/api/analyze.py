@@ -338,7 +338,7 @@ async def stream_analysis_progress(
                 yield f"data: {json.dumps({'event': 'progress', 'progress': 20, 'message': '학습 데이터 유사도 검색 중'})}\n\n"
                 await asyncio.sleep(0.1)
 
-                # CLIP 임베딩 생성
+                # EfficientNet 임베딩 생성
                 loop = asyncio.get_event_loop()
                 embedding = await loop.run_in_executor(
                     None, embedding_service.encode_image, str(crop_path)

@@ -50,7 +50,7 @@ class IdentifierSettings(BaseSettings):
     torch_threads: int = Field(default=8, alias="IDENTIFIER_TORCH_THREADS")
     enable_torch_compile: bool = Field(default=True, alias="IDENTIFIER_ENABLE_TORCH_COMPILE")
 
-    # 판별 모드: "clip_only", "visual_rag" (기본), "vlm_only"
+    # 판별 모드: "embedding_only", "visual_rag" (기본), "vlm_only"
     identifier_mode: str = Field(default="visual_rag", alias="IDENTIFIER_MODE")
 
     # VLM (Ollama) 설정
@@ -58,7 +58,7 @@ class IdentifierSettings(BaseSettings):
     vlm_model_name: str = Field(default="qwen3-vl:8b", alias="VLM_MODEL_NAME")
     vlm_timeout: float = Field(default=30.0, alias="VLM_TIMEOUT")
     vlm_max_candidates: int = Field(default=5, alias="VLM_MAX_CANDIDATES")
-    vlm_fallback_to_clip: bool = Field(default=True, alias="VLM_FALLBACK_TO_CLIP")
+    vlm_fallback_to_embedding: bool = Field(default=True, alias="VLM_FALLBACK_TO_EMBEDDING")
     vlm_batch_concurrency: int = Field(default=2, alias="VLM_BATCH_CONCURRENCY")
 
     # Celery

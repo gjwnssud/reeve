@@ -83,7 +83,7 @@ class LlamaFactoryTrainer:
             "lora_target": "all",
             "dataset": "vehicle_train",
             "dataset_dir": str(self.data_dir.resolve()),
-            "template": "qwen3_vl_nothink",
+            "template": "qwen3_vl",
             "cutoff_len": cutoff_len,
             "overwrite_cache": True,
             "preprocessing_num_workers": 4,

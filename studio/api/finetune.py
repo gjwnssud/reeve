@@ -185,7 +185,7 @@ async def export_data(params: ExportParams, db: Session = Depends(get_db)):
 
     HUMAN_PROMPT = (
         "이 차량 이미지에서 제조사와 모델을 식별하세요.\n\n"
-        "반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:\n"
+        "차량의 외관 특징(그릴, 헤드라이트, 로고, 차체 형태 등)을 분석한 뒤 아래 JSON 형식으로 응답하세요:\n"
         '{"manufacturer_korean": "<제조사 한글>", "manufacturer_english": "<제조사 영문>", '
         '"model_korean": "<모델 한글>", "model_english": "<모델 영문>", '
         '"confidence": <0.0~1.0>}\n\n'
@@ -197,7 +197,12 @@ async def export_data(params: ExportParams, db: Session = Depends(get_db)):
         mfr_en = record.manufacturer.english_name if record.manufacturer else "Unknown"
         mdl_ko = record.model.korean_name if record.model else "Unknown"
         mdl_en = record.model.english_name if record.model else "Unknown"
-        gpt_response = json.dumps(
+        think_chain = (
+            f"이미지를 분석합니다. "
+            f"차량의 외관 특징을 살펴보면 {mfr_ko} {mdl_ko}의 디자인 요소가 확인됩니다. "
+            f"그릴 형태, 헤드라이트 디자인, 차체 비율 등이 {mfr_ko} {mdl_ko}({mfr_en} {mdl_en})의 특징과 일치합니다."
+        )
+        answer = json.dumps(
             {
                 "manufacturer_korean": mfr_ko,
                 "manufacturer_english": mfr_en,
@@ -207,6 +212,7 @@ async def export_data(params: ExportParams, db: Session = Depends(get_db)):
             },
             ensure_ascii=False,
         )
+        gpt_response = f"<think>\n{think_chain}\n</think>\n{answer}"
         return {
             "id": f"reeve_{record.id}",
             "conversations": [

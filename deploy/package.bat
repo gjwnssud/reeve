@@ -592,7 +592,7 @@ echo.
 echo # Embedding
 echo EMBEDDING_DEVICE=cuda
 echo.
-echo # 판별 모드: clip_only ^| visual_rag ^| vlm_only
+echo # 판별 모드: embedding_only ^| visual_rag ^| vlm_only
 echo IDENTIFIER_MODE=visual_rag
 echo.
 echo # VLM ^(Ollama^)
@@ -600,7 +600,7 @@ echo OLLAMA_BASE_URL=http://ollama:11434
 echo VLM_MODEL_NAME=reeve-vlm-v1
 echo VLM_TIMEOUT=30
 echo VLM_MAX_CANDIDATES=5
-echo VLM_FALLBACK_TO_CLIP=true
+echo VLM_FALLBACK_TO_EMBEDDING=true
 echo VLM_BATCH_CONCURRENCY=2
 echo.
 echo # 판별 파라미터

@@ -1,6 +1,6 @@
 # Reeve — AI 기반 차량 제조사/모델 자동 식별 시스템
 
-CCTV·카메라 영상에서 차량을 감지하고, CLIP 임베딩 + 벡터 검색 + VLM 재판정으로 제조사와 모델을 자동 식별합니다.
+CCTV·카메라 영상에서 차량을 감지하고, EfficientNet-B3 임베딩 + 벡터 검색 + VLM 재판정으로 제조사와 모델을 자동 식별합니다.
 
 ---
 
@@ -34,7 +34,7 @@ RapidFuzz 매칭 → manufacturers / vehicle_models (MySQL)
 관리자 검토 & 승인
     │
     ▼
-CLIP-ViT-B/32 임베딩 (512d) → Qdrant 저장
+EfficientNet-B3 임베딩 (1536d) → Qdrant 저장
     │
     ▼
 Identifier 서비스 (벡터 검색 + 투표 + VLM 재판정)
@@ -43,14 +43,14 @@ Identifier 서비스 (벡터 검색 + 투표 + VLM 재판정)
 ### 식별 알고리즘
 
 1. **YOLO26** — 차량 감지 및 크롭
-2. **CLIP** — 512d 벡터 임베딩 생성
+2. **EfficientNet-B3** — 1536d 벡터 임베딩 생성
 3. **Qdrant top-K 검색** — (manufacturer_id, model_id) 쌍으로 투표 집계
 4. **신뢰도 판정** — `identified` / `uncertain` / `unidentified`
 5. **VLM 재판정** (visual_rag 모드) — Qwen3-VL:8b 최종 판정
 
 **동작 모드** (`IDENTIFIER_MODE`):
-- `clip_only` — CLIP + 투표만 사용 (기본)
-- `visual_rag` — CLIP 후보 → Qwen3-VL 재판정
+- `embedding_only` — EfficientNet-B3 + 투표만 사용 (기본)
+- `visual_rag` — EfficientNet-B3 후보 → Qwen3-VL 재판정
 - `vlm_only` — VLM 단독 판정
 
 **안전장치**:
@@ -65,8 +65,8 @@ Identifier 서비스 (벡터 검색 + 투표 + VLM 재판정)
 |------|------|
 | 언어 | Python 3.12 |
 | API 프레임워크 | FastAPI + Uvicorn |
-| AI / Vision | OpenAI API, Gemini API, CLIP, YOLO26, Ollama (Qwen3-VL) |
-| 임베딩 | CLIP-ViT-B/32 (512d), sentence-transformers |
+| AI / Vision | OpenAI API, Gemini API, EfficientNet-B3, YOLO26, Ollama (Qwen3-VL) |
+| 임베딩 | EfficientNet-B3 (1536d) |
 | 파인튜닝 | Trainer 서비스 — LlamaFactory (Linux/Windows NVIDIA) / mlx-lm (Mac Apple Silicon) |
 | 관계형 DB | MySQL 8.0 (SQLAlchemy + aiomysql) |
 | 벡터 DB | Qdrant |
@@ -181,7 +181,7 @@ manufacturers (제조사)
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `IDENTIFIER_MODE` | `clip_only` | 식별 모드 |
+| `IDENTIFIER_MODE` | `embedding_only` | 식별 모드 |
 | `IDENTIFIER_TOP_K` | `10` | Qdrant 검색 결과 수 |
 | `IDENTIFIER_VOTE_THRESHOLD` | `3` | 최소 득표 수 |
 | `IDENTIFIER_CONFIDENCE_THRESHOLD` | `0.80` | 최소 신뢰도 점수 |

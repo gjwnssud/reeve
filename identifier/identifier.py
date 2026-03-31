@@ -3,9 +3,9 @@
 이미지 → YOLO26 차량 감지 → 크롭 → EfficientNet-B3 임베딩 → Qdrant 벡터 검색 → 가중 투표 → payload에서 이름 조회
 
 판별 모드 (IDENTIFIER_MODE):
-  clip_only  : EfficientNet-B3+Qdrant 투표 (기본값)
-  visual_rag : EfficientNet-B3+Qdrant 후보 → VLM 최종 판별
-  vlm_only   : VLM만으로 판별 (Qdrant 미사용)
+  embedding_only : EfficientNet-B3+Qdrant 투표 (기본값)
+  visual_rag     : EfficientNet-B3+Qdrant 후보 → VLM 최종 판별
+  vlm_only       : VLM만으로 판별 (Qdrant 미사용)
 """
 import logging
 import time
@@ -145,14 +145,14 @@ class VehicleIdentifier:
 
     def __init__(self):
         """임베딩 모델, Qdrant 클라이언트, YOLO 모델 초기화"""
-        self.clip_model = None
+        self.embedding_model = None
         self.qdrant: Optional[QdrantClient] = None
         self.yolo_model = None
         self.vlm_service = None  # VLMService (visual_rag / vlm_only 모드)
 
     def initialize(self):
         """서비스 시작 시 호출 — 무거운 리소스 로드"""
-        self._load_clip_model()
+        self._load_embedding_model()
         self._connect_qdrant()
         self._load_yolo_model()
 
@@ -164,19 +164,19 @@ class VehicleIdentifier:
     # 초기화
     # ──────────────────────────────────────────
 
-    def _load_clip_model(self):
-        """EfficientNet-B3 이미지 임베딩 모델 로드 (최적화 적용)"""
+    def _load_embedding_model(self):
+        """EfficientNet-B3 임베딩 모델 로드 (최적화 적용)"""
         try:
             # CPU 최적화 (MKL, OpenMP)
             if hasattr(torch.backends, "opt_einsum"):
                 torch.backends.opt_einsum.enabled = True
             torch.set_num_threads(settings.torch_threads)
 
-            self.clip_model = timm.create_model(
+            self.embedding_model = timm.create_model(
                 self.EMBEDDING_MODEL_NAME, pretrained=True, num_classes=0
             )
-            self.clip_model.eval()
-            self.clip_model.to(settings.embedding_device)
+            self.embedding_model.eval()
+            self.embedding_model.to(settings.embedding_device)
 
             self._transform = T.Compose([
                 T.Resize((300, 300)),
@@ -189,8 +189,8 @@ class VehicleIdentifier:
             if hasattr(torch, "compile") and settings.enable_torch_compile:
                 try:
                     logger.info("Attempting torch.compile() optimization...")
-                    self.clip_model = torch.compile(
-                        self.clip_model,
+                    self.embedding_model = torch.compile(
+                        self.embedding_model,
                         mode="reduce-overhead",
                         fullgraph=False,
                     )
@@ -212,7 +212,7 @@ class VehicleIdentifier:
         tensors = [self._transform(img.convert("RGB")) for img in images]
         batch = torch.stack(tensors).to(settings.embedding_device)
         with torch.no_grad():
-            vecs = self.clip_model(batch)
+            vecs = self.embedding_model(batch)
         return F.normalize(vecs, dim=-1).cpu().numpy()
 
     def _connect_qdrant(self):
@@ -237,7 +237,7 @@ class VehicleIdentifier:
             raise
 
     def _init_vlm_service(self):
-        """VLM 서비스 초기화 (vlm_fallback_to_clip=true이면 실패해도 계속 진행)"""
+        """VLM 서비스 초기화 (vlm_fallback_to_embedding=true이면 실패해도 계속 진행)"""
         try:
             from identifier.vlm_service import VLMService
             self.vlm_service = VLMService()
@@ -245,9 +245,9 @@ class VehicleIdentifier:
             logger.info(f"VLM service initialized (mode={settings.identifier_mode})")
         except Exception as e:
             logger.error(f"Failed to initialize VLM service: {e}")
-            if not settings.vlm_fallback_to_clip:
+            if not settings.vlm_fallback_to_embedding:
                 raise
-            logger.warning("VLM unavailable — will use CLIP-only as fallback")
+            logger.warning("VLM unavailable — will use embedding-only as fallback")
             self.vlm_service = None
 
     def _load_yolo_model(self):
@@ -273,7 +273,7 @@ class VehicleIdentifier:
         result = {
             "status": "healthy",
             "identifier_mode": settings.identifier_mode,
-            "clip_model": "loaded" if self.clip_model else "not_loaded",
+            "embedding_model": "loaded" if self.embedding_model else "not_loaded",
             "yolo_model": "loaded" if self.yolo_model else ("disabled" if not settings.vehicle_detection else "not_loaded"),
             "qdrant": "disconnected",
             "training_images_count": 0,
@@ -288,7 +288,7 @@ class VehicleIdentifier:
             result["qdrant"] = f"error: {e}"
             result["status"] = "degraded"
 
-        if not self.clip_model:
+        if not self.embedding_model:
             result["status"] = "unhealthy"
 
         if self.vlm_service:
@@ -407,7 +407,7 @@ class VehicleIdentifier:
         elif mode == "vlm_only" and self.vlm_service is not None:
             return self._identify_vlm_only(image_path, bbox)
         else:
-            # clip_only 또는 VLM 미초기화 시 기존 경로
+            # embedding_only 또는 VLM 미초기화 시 기존 경로
             embedding, detection, img_w, img_h = self._encode_image(image_path, bbox)
             search_results = self._search_qdrant(embedding)
             return self._build_identification_result(search_results, detection, img_w, img_h)
@@ -417,10 +417,10 @@ class VehicleIdentifier:
         image_path: str,
         bbox: Optional[List[int]] = None,
     ) -> IdentificationResult:
-        """Visual RAG: CLIP+Qdrant 후보 → VLM 최종 판별"""
+        """Visual RAG: EfficientNet+Qdrant 후보 → VLM 최종 판별"""
         from identifier.vlm_service import VLMCandidate
 
-        # 1. YOLO 크롭 + CLIP 임베딩
+        # 1. YOLO 크롭 + EfficientNet 임베딩
         embedding, detection, img_w, img_h = self._encode_image(image_path, bbox)
         search_results = self._search_qdrant(embedding)
 
@@ -471,8 +471,8 @@ class VehicleIdentifier:
             return self._build_vlm_result(vlm_result, detection, img_w, img_h, search_results)
         except Exception as e:
             logger.error(f"VLM failed in visual_rag mode: {e}")
-            if settings.vlm_fallback_to_clip:
-                logger.warning("Falling back to CLIP result")
+            if settings.vlm_fallback_to_embedding:
+                logger.warning("Falling back to embedding result")
                 return self._build_identification_result(search_results, detection, img_w, img_h)
             raise
 
@@ -505,9 +505,9 @@ class VehicleIdentifier:
             return self._build_vlm_result(vlm_result, detection, img_w, img_h, [])
         except Exception as e:
             logger.error(f"VLM failed in vlm_only mode: {e}")
-            if settings.vlm_fallback_to_clip:
-                logger.warning("VLM failed, falling back to CLIP+Qdrant")
-                optimized = self._optimize_image_for_clip(crop_image)
+            if settings.vlm_fallback_to_embedding:
+                logger.warning("VLM failed, falling back to EfficientNet+Qdrant")
+                optimized = self._optimize_image_for_embedding(crop_image)
                 embedding = self._encode_images([optimized])[0]
                 search_results = self._search_qdrant(embedding.tolist())
                 return self._build_identification_result(search_results, detection, img_w, img_h)
@@ -555,13 +555,13 @@ class VehicleIdentifier:
     # 내부 메서드
     # ──────────────────────────────────────────
 
-    def _optimize_image_for_clip(self, image: Image.Image) -> Image.Image:
+    def _optimize_image_for_embedding(self, image: Image.Image) -> Image.Image:
         """
-        CLIP 입력을 위한 이미지 최적화
+        EfficientNet-B3 입력을 위한 이미지 최적화
         - 최대 크기 제한 (불필요한 고해상도 연산 방지)
         - 종횡비 유지하며 리사이즈
         """
-        max_size = 800  # CLIP ViT-B/32는 내부적으로 224×224로 변환하므로 이 이상 불필요
+        max_size = 800  # EfficientNet-B3는 내부적으로 300×300으로 변환하므로 이 이상 불필요
 
         w, h = image.size
         if w <= max_size and h <= max_size:
@@ -652,7 +652,7 @@ class VehicleIdentifier:
         bbox: Optional[List[int]] = None
     ) -> Tuple[List[float], Optional[VehicleDetection], int, int]:
         """
-        이미지를 CLIP 임베딩 벡터로 변환
+        이미지를 EfficientNet-B3 임베딩 벡터로 변환
 
         Args:
             image_path: 이미지 파일 경로
@@ -691,7 +691,7 @@ class VehicleIdentifier:
             cropped_image, detection = self._detect_and_crop(image)
 
         # 이미지 최적화 (고해상도 불필요 연산 제거)
-        optimized_image = self._optimize_image_for_clip(cropped_image)
+        optimized_image = self._optimize_image_for_embedding(cropped_image)
 
         embedding = self._encode_images([optimized_image])[0]
         return embedding.tolist(), detection, w, h
@@ -885,7 +885,7 @@ class VehicleIdentifier:
     ) -> BatchIdentificationResult:
         """
         여러 이미지를 배치로 처리하여 성능 극대화.
-        YOLO, CLIP, Qdrant 각 단계를 배치로 실행.
+        YOLO, EfficientNet-B3, Qdrant 각 단계를 배치로 실행.
 
         Args:
             image_paths: 이미지 파일 경로 리스트
@@ -920,7 +920,7 @@ class VehicleIdentifier:
         """
         한 배치(N장)를 파이프라인으로 처리.
 
-        Pipeline: 이미지 로드 → YOLO 배치 감지 → CLIP 배치 임베딩 → Qdrant 배치 검색 → 투표
+        Pipeline: 이미지 로드 → YOLO 배치 감지 → EfficientNet 배치 임베딩 → Qdrant 배치 검색 → 투표
         """
         n = len(image_paths)
 
@@ -978,21 +978,21 @@ class VehicleIdentifier:
             for idx in valid_indices:
                 cropped_images[idx] = images[idx]
 
-        # ── 3. CLIP 배치 임베딩 ──
-        clip_indices = [
+        # ── 3. EfficientNet 배치 임베딩 ──
+        embedding_indices = [
             i for i in valid_indices
             if cropped_images[i] is not None and errors[i] is None
         ]
         embeddings_map: Dict[int, List[float]] = {}
 
-        if clip_indices:
+        if embedding_indices:
             # 이미지 최적화 (고해상도 불필요 연산 제거)
-            clip_inputs = [
-                self._optimize_image_for_clip(cropped_images[i])
-                for i in clip_indices
+            embedding_inputs = [
+                self._optimize_image_for_embedding(cropped_images[i])
+                for i in embedding_indices
             ]
-            batch_embeddings = self._encode_images(clip_inputs)
-            for batch_idx, orig_idx in enumerate(clip_indices):
+            batch_embeddings = self._encode_images(embedding_inputs)
+            for batch_idx, orig_idx in enumerate(embedding_indices):
                 embeddings_map[orig_idx] = batch_embeddings[batch_idx].tolist()
 
         # ── 4. Qdrant 배치 검색 ──
@@ -1059,7 +1059,7 @@ class VehicleIdentifier:
                     logger.warning(f"VLM failed for batch index {idx}: {e}")
                     return idx, None
 
-            vlm_indices = [i for i in clip_indices if not errors[i]]
+            vlm_indices = [i for i in embedding_indices if not errors[i]]
             with ThreadPoolExecutor(max_workers=settings.vlm_batch_concurrency) as executor:
                 futures = {executor.submit(_run_vlm, idx): idx for idx in vlm_indices}
                 for future in futures:
