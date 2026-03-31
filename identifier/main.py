@@ -861,6 +861,42 @@ async def reload_vlm(req: ReloadVLMRequest, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ReloadEfficientNetRequest(BaseModel):
+    model_path: str = PydanticField(..., description="파인튜닝된 .pth 파일 경로")
+    class_mapping_path: str = PydanticField(..., description="class_mapping.json 파일 경로")
+
+
+@app.post(
+    "/admin/reload-efficientnet",
+    tags=["Admin"],
+    summary="EfficientNetV2-M 분류기 핫리로드",
+    description=(
+        "파인튜닝 완료 후 호출. 서비스 재시작 없이 분류기를 교체한다. "
+        "Trainer의 EfficientNetTrainer가 자동으로 호출하거나 수동으로 호출 가능."
+    ),
+)
+async def reload_efficientnet(req: ReloadEfficientNetRequest, request: Request):
+    identifier: VehicleIdentifier = request.app.state.identifier
+    if identifier.classifier is None:
+        raise HTTPException(status_code=400, detail="EfficientNet 분류기가 초기화되지 않았습니다.")
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            identifier.classifier.reload,
+            req.model_path,
+            req.class_mapping_path,
+        )
+        return {
+            "status": "reloaded",
+            "model_path": req.model_path,
+            "has_classification_head": identifier.classifier.has_classification_head,
+            "num_classes": identifier.classifier.num_classes,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ──────────────────────────────────────────────
 # 전역 예외 핸들러
 # ──────────────────────────────────────────────

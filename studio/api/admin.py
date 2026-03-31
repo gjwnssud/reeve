@@ -1136,11 +1136,65 @@ async def sync_vector_database(
 # 벡터 DB 초기화 (마이그레이션용 — 완료 후 제거)
 @router.delete("/vectordb-reset")
 async def reset_vector_database():
-    """Qdrant 컬렉션 초기화: 1536d(EfficientNet-B3) 스키마로 재생성.
+    """Qdrant 컬렉션 초기화: 1280d(EfficientNetV2-M) 스키마로 재생성.
     마이그레이션 완료 후 이 엔드포인트를 제거할 것."""
     from studio.services.vectordb import vectordb_service
     vectordb_service.clear_all_collections()
-    return {"status": "reset complete, collection recreated at 1536d"}
+    return {"status": "reset complete, collection recreated at 1280d"}
+
+
+@router.post("/recreate-collection")
+async def recreate_qdrant_collection(db: Session = Depends(get_db)):
+    """
+    training_images Qdrant 컬렉션을 삭제하고 EfficientNetV2-M(1280d)으로 재생성.
+    training_dataset의 모든 레코드를 새 모델로 재임베딩하여 저장.
+
+    주의: 이 작업은 파괴적 연산이므로 운영자가 수동으로 실행해야 합니다.
+    작업 완료까지 수 분이 소요될 수 있습니다.
+    """
+    from sqlalchemy.orm import joinedload
+    from studio.models.training_dataset import TrainingDataset
+    from studio.services.vectordb import vectordb_service
+    from studio.services.embedding import embedding_service
+
+    records = (
+        db.query(TrainingDataset)
+        .options(
+            joinedload(TrainingDataset.manufacturer),
+            joinedload(TrainingDataset.model),
+        )
+        .all()
+    )
+
+    record_dicts = [
+        {
+            "id": r.id,
+            "image_path": r.image_path,
+            "manufacturer_id": r.manufacturer_id,
+            "model_id": r.model_id,
+            "manufacturer_korean": r.manufacturer.korean_name if r.manufacturer else None,
+            "manufacturer_english": r.manufacturer.english_name if r.manufacturer else None,
+            "model_korean": r.model.korean_name if r.model else None,
+            "model_english": r.model.english_name if r.model else None,
+        }
+        for r in records
+    ]
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None,
+        functools.partial(
+            vectordb_service.recreate_collection_with_reembedding,
+            embedding_fn=embedding_service.encode_batch_images,
+            records=record_dicts,
+        ),
+    )
+
+    logger.info(f"Qdrant 재임베딩 완료: {result}")
+    return {
+        "message": "Qdrant 컬렉션 재생성 및 재임베딩 완료",
+        **result,
+    }
 
 
 # 벡터 DB 통계 조회

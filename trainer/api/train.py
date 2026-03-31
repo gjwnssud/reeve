@@ -19,6 +19,9 @@ def _get_trainer():
     if settings.trainer_backend == "mlx":
         from trainer.services.mlx_trainer import MLXTrainer
         return MLXTrainer()
+    if settings.trainer_backend == "efficientnet":
+        from trainer.services.efficientnet_trainer import EfficientNetTrainer
+        return EfficientNetTrainer()
     from trainer.services.llamafactory_trainer import LlamaFactoryTrainer
     return LlamaFactoryTrainer()
 
@@ -37,6 +40,44 @@ def _cpu_preset() -> dict:
 async def get_hw_profile():
     """하드웨어 감지 → 파인튜닝 최적 파라미터 프리셋 반환"""
     from trainer.config import settings
+
+    # EfficientNet 백엔드 — PyTorch 이미지 분류기 (MPS/CUDA/CPU 자동 감지)
+    if settings.trainer_backend == "efficientnet":
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                hw = "apple_silicon"
+                label = "Apple Silicon MPS (EfficientNetV2-M)"
+                batch_size = 16
+            elif torch.cuda.is_available():
+                gpu = torch.cuda.get_device_properties(0)
+                vram_gb = gpu.total_memory / 1024 ** 3
+                hw = "cuda_gpu"
+                label = f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
+                batch_size = 32 if vram_gb >= 20 else 16
+            else:
+                hw = "cpu"
+                label = "CPU Only"
+                batch_size = 8
+        except ImportError:
+            hw, label, batch_size = "cpu", "CPU Only", 8
+
+        return {
+            "hw": hw,
+            "backend": "efficientnet",
+            "label": label,
+            "preset": {
+                "batch_size": batch_size,
+                "learning_rate": "1e-4",
+                "num_epochs": 10,
+                "freeze_epochs": 1,
+                "gradient_accumulation": 1,
+                "lora_rank": None,
+                "quantization_bit": None,
+                "cutoff_len": None,
+                "flash_attn": None,
+            },
+        }
 
     # MLX 백엔드 = Apple Silicon 확정
     if settings.trainer_backend == "mlx":
@@ -122,13 +163,16 @@ class TrainingConfig(BaseModel):
     num_epochs: float = 3.0
     batch_size: int = 2
     gradient_accumulation: int = 4
-    lora_rank: int = 8
+    lora_rank: Optional[int] = 8
     quantization_bit: Optional[int] = 4
-    cutoff_len: int = 1024
+    cutoff_len: Optional[int] = 1024
     output_dir: str = "vehicle-vlm"
     flash_attn: Optional[str] = None
     use_mps: bool = False
     fp16: bool = False
+    # EfficientNet 전용 필드
+    freeze_epochs: int = 1
+    studio_url: Optional[str] = None
 
 
 class ExportModelRequest(BaseModel):
@@ -144,7 +188,16 @@ async def start_training(config: TrainingConfig):
     try:
         from trainer.config import settings
 
-        if settings.trainer_backend == "llamafactory":
+        if settings.trainer_backend == "efficientnet":
+            result = await trainer.start_training(
+                learning_rate=config.learning_rate,
+                num_epochs=int(config.num_epochs),
+                batch_size=config.batch_size,
+                freeze_epochs=config.freeze_epochs,
+                output_dir=config.output_dir,
+                studio_url=config.studio_url or settings.studio_url,
+            )
+        elif settings.trainer_backend == "llamafactory":
             config_path = trainer.generate_train_yaml(
                 model_name=config.model_name,
                 learning_rate=config.learning_rate,

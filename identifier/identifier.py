@@ -1,21 +1,19 @@
 """
 차량 판별 핵심 로직
-이미지 → YOLO26 차량 감지 → 크롭 → EfficientNet-B3 임베딩 → Qdrant 벡터 검색 → 가중 투표 → payload에서 이름 조회
+이미지 → YOLO26 차량 감지 → 크롭 → EfficientNetV2-M 분류 또는 Qdrant 벡터 검색 → 결과 반환
 
 판별 모드 (IDENTIFIER_MODE):
-  embedding_only : EfficientNet-B3+Qdrant 투표 (기본값)
-  visual_rag     : EfficientNet-B3+Qdrant 후보 → VLM 최종 판별
+  efficientnet   : EfficientNetV2-M 분류기 (기본값)
+                   confidence ≥ 0.9 → 직접 반환, < 0.9 → qwen3-vl 폴백
+  visual_rag     : EfficientNetV2-M+Qdrant 후보 → VLM 최종 판별
   vlm_only       : VLM만으로 판별 (Qdrant 미사용)
+  embedding_only : EfficientNetV2-M 임베딩+Qdrant 투표 (레거시)
 """
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 
-import timm
-import torch
-import torch.nn.functional as F
-import torchvision.transforms as T
 import numpy as np
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -131,89 +129,62 @@ class VehicleIdentifier:
     """
     차량 이미지 판별기
 
-    EfficientNet-B3 모델로 이미지 임베딩을 생성하고,
-    Qdrant training_images 컬렉션에서 유사 이미지를 검색한 뒤,
-    가중 투표로 제조사/모델을 결정한다.
+    EfficientNetV2-M 분류기로 차량을 직접 판별한다.
+    신뢰도 < classifier_confidence_threshold 시 qwen3-vl로 폴백.
     """
 
     COLLECTION_NAME = "training_images"
-    EMBEDDING_MODEL_NAME = "efficientnet_b3"
-    VECTOR_DIM = 1536
+    VECTOR_DIM = 1280  # EfficientNetV2-M 특징 차원
 
     # COCO 데이터셋의 차량 관련 클래스
     VEHICLE_CLASSES = {2, 3, 5, 7}  # car, motorcycle, bus, truck
 
     def __init__(self):
-        """임베딩 모델, Qdrant 클라이언트, YOLO 모델 초기화"""
-        self.embedding_model = None
+        """분류기, Qdrant 클라이언트, YOLO 모델 초기화"""
+        self.classifier = None  # EfficientNetClassifier
         self.qdrant: Optional[QdrantClient] = None
         self.yolo_model = None
-        self.vlm_service = None  # VLMService (visual_rag / vlm_only 모드)
+        self.vlm_service = None  # VLMService (visual_rag / vlm_only / 폴백)
 
     def initialize(self):
         """서비스 시작 시 호출 — 무거운 리소스 로드"""
-        self._load_embedding_model()
+        self._load_efficientnet()
         self._connect_qdrant()
         self._load_yolo_model()
 
-        # VLM 서비스: visual_rag 또는 vlm_only 모드일 때만 초기화
-        if settings.identifier_mode in ("visual_rag", "vlm_only"):
+        # VLM 서비스: efficientnet 모드에서도 폴백용으로 초기화
+        if settings.identifier_mode in ("visual_rag", "vlm_only", "efficientnet"):
             self._init_vlm_service()
 
     # ──────────────────────────────────────────
     # 초기화
     # ──────────────────────────────────────────
 
-    def _load_embedding_model(self):
-        """EfficientNet-B3 임베딩 모델 로드 (최적화 적용)"""
-        try:
-            # CPU 최적화 (MKL, OpenMP)
-            if hasattr(torch.backends, "opt_einsum"):
-                torch.backends.opt_einsum.enabled = True
-            torch.set_num_threads(settings.torch_threads)
+    def _load_efficientnet(self):
+        """EfficientNetV2-M 분류기 로드 (파인튜닝 모델 없으면 부트스트랩 모드)"""
+        import torch
+        from identifier.efficientnet_classifier import EfficientNetClassifier
 
-            self.embedding_model = timm.create_model(
-                self.EMBEDDING_MODEL_NAME, pretrained=True, num_classes=0
-            )
-            self.embedding_model.eval()
-            self.embedding_model.to(settings.embedding_device)
+        # CPU 스레드 최적화
+        if hasattr(torch.backends, "opt_einsum"):
+            torch.backends.opt_einsum.enabled = True
+        torch.set_num_threads(settings.torch_threads)
 
-            self._transform = T.Compose([
-                T.Resize((300, 300)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225]),
-            ])
-
-            # PyTorch 2.0+ compile 시도
-            if hasattr(torch, "compile") and settings.enable_torch_compile:
-                try:
-                    logger.info("Attempting torch.compile() optimization...")
-                    self.embedding_model = torch.compile(
-                        self.embedding_model,
-                        mode="reduce-overhead",
-                        fullgraph=False,
-                    )
-                    logger.info("torch.compile() applied")
-                except Exception as e:
-                    logger.warning(f"torch.compile() not available: {e}")
-
-            logger.info(
-                f"Embedding model loaded: {self.EMBEDDING_MODEL_NAME} "
-                f"(device={settings.embedding_device}, "
-                f"threads={settings.torch_threads})"
-            )
-        except Exception as e:
-            logger.error(f"Failed to load embedding model: {e}")
-            raise
+        self.classifier = EfficientNetClassifier(
+            model_path=settings.efficientnet_model_path,
+            class_mapping_path=settings.efficientnet_class_mapping_path,
+            device=settings.embedding_device if settings.embedding_device != "cpu" else None,
+        )
+        logger.info(
+            f"EfficientNetV2-M 로드 완료: "
+            f"has_head={self.classifier.has_classification_head}, "
+            f"classes={self.classifier.num_classes}"
+        )
 
     def _encode_images(self, images: list) -> np.ndarray:
-        """이미지 리스트를 L2-정규화된 EfficientNet-B3 임베딩 배열로 변환"""
-        tensors = [self._transform(img.convert("RGB")) for img in images]
-        batch = torch.stack(tensors).to(settings.embedding_device)
-        with torch.no_grad():
-            vecs = self.embedding_model(batch)
-        return F.normalize(vecs, dim=-1).cpu().numpy()
+        """이미지 리스트를 L2-정규화된 1280d 특징 벡터 배열로 변환 (Qdrant 검색용)"""
+        rgb_images = [img.convert("RGB") for img in images]
+        return self.classifier.extract_features(rgb_images)
 
     def _connect_qdrant(self):
         """Qdrant 클라이언트 연결"""
@@ -270,10 +241,11 @@ class VehicleIdentifier:
 
     def health_check(self) -> dict:
         """서비스 상태 확인"""
+        classifier_info = self.classifier.health_check() if self.classifier else {"model": "not_loaded"}
         result = {
             "status": "healthy",
             "identifier_mode": settings.identifier_mode,
-            "embedding_model": "loaded" if self.embedding_model else "not_loaded",
+            "efficientnet_classifier": classifier_info,
             "yolo_model": "loaded" if self.yolo_model else ("disabled" if not settings.vehicle_detection else "not_loaded"),
             "qdrant": "disconnected",
             "training_images_count": 0,
@@ -288,7 +260,7 @@ class VehicleIdentifier:
             result["qdrant"] = f"error: {e}"
             result["status"] = "degraded"
 
-        if not self.embedding_model:
+        if self.classifier is None:
             result["status"] = "unhealthy"
 
         if self.vlm_service:
@@ -402,7 +374,9 @@ class VehicleIdentifier:
         """
         mode = settings.identifier_mode
 
-        if mode == "visual_rag" and self.vlm_service is not None:
+        if mode == "efficientnet":
+            return self._identify_efficientnet(image_path, bbox)
+        elif mode == "visual_rag" and self.vlm_service is not None:
             return self._identify_visual_rag(image_path, bbox)
         elif mode == "vlm_only" and self.vlm_service is not None:
             return self._identify_vlm_only(image_path, bbox)
@@ -411,6 +385,87 @@ class VehicleIdentifier:
             embedding, detection, img_w, img_h = self._encode_image(image_path, bbox)
             search_results = self._search_qdrant(embedding)
             return self._build_identification_result(search_results, detection, img_w, img_h)
+
+    def _identify_efficientnet(
+        self,
+        image_path: str,
+        bbox: Optional[List[int]] = None,
+    ) -> IdentificationResult:
+        """EfficientNetV2-M 분류기로 판별.
+        confidence ≥ classifier_confidence_threshold → identified 반환.
+        미만이면 qwen3-vl 폴백, VLM도 없으면 Qdrant 검색 폴백.
+        """
+        image = Image.open(image_path).convert("RGB")
+        img_w, img_h = image.size
+
+        if bbox:
+            x1, y1, x2, y2 = bbox
+            crop = image.crop((x1, y1, x2, y2))
+            detection = VehicleDetection(
+                index=0,
+                bbox=bbox,
+                confidence=1.0,
+                class_name="selected",
+                area=(x2 - x1) * (y2 - y1),
+            )
+        else:
+            crop, detection = self._detect_and_crop(image)
+
+        # 1. EfficientNetV2-M 분류기 시도
+        if self.classifier and self.classifier.has_classification_head:
+            try:
+                results = self.classifier.classify([crop])
+                class_idx, confidence = results[0]
+                if confidence >= settings.classifier_confidence_threshold:
+                    entry = self.classifier.class_mapping["classes"][str(class_idx)]
+                    result_status = "identified"
+                    # YOLO 미감지 시 신뢰도 하향
+                    if detection is None:
+                        result_status = "uncertain"
+                        message = "차량 자동 감지 실패 - 분류기 결과이지만 신뢰도를 낮춥니다."
+                    else:
+                        message = "EfficientNetV2-M이 차량을 판별하였습니다."
+                    return IdentificationResult(
+                        status=result_status,
+                        manufacturer_korean=entry.get("manufacturer_korean"),
+                        manufacturer_english=entry.get("manufacturer_english"),
+                        model_korean=entry.get("model_korean"),
+                        model_english=entry.get("model_english"),
+                        confidence=round(confidence, 4),
+                        message=message,
+                        detection=detection,
+                        image_width=img_w,
+                        image_height=img_h,
+                    )
+                # 신뢰도 낮음 → VLM 폴백
+                logger.debug(f"분류기 신뢰도 낮음 ({confidence:.3f}), VLM 폴백")
+            except Exception as e:
+                logger.warning(f"EfficientNet 분류 실패, VLM 폴백: {e}")
+
+        # 2. VLM 폴백
+        if self.vlm_service is not None:
+            try:
+                vlm_result = self.vlm_service.identify_freeform(crop)
+                return self._build_vlm_result(vlm_result, detection, img_w, img_h, [])
+            except Exception as e:
+                logger.error(f"VLM 폴백 실패: {e}")
+
+        # 3. Qdrant 검색 최후 폴백 (부트스트랩 단계에서 VLM 없을 때)
+        try:
+            feats = self.classifier.extract_features([crop])
+            embedding = feats[0].tolist()
+            search_results = self._search_qdrant(embedding)
+            return self._build_identification_result(search_results, detection, img_w, img_h)
+        except Exception as e:
+            logger.error(f"Qdrant 폴백도 실패: {e}")
+            return IdentificationResult(
+                status="uncertain",
+                confidence=0.0,
+                message="판별에 실패했습니다.",
+                detection=detection,
+                image_width=img_w,
+                image_height=img_h,
+            )
 
     def _identify_visual_rag(
         self,

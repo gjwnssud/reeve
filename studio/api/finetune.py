@@ -281,6 +281,122 @@ async def export_data(params: ExportParams, db: Session = Depends(get_db)):
     })
 
 
+class EfficientNetExportParams(BaseModel):
+    manufacturer_id: Optional[int] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    split: float = 0.9
+
+
+@router.post("/export-efficientnet")
+async def export_efficientnet_data(params: EfficientNetExportParams, db: Session = Depends(get_db)):
+    """EfficientNetV2-M 분류기 학습용 데이터 내보내기
+
+    생성 파일:
+    - data/finetune/efficientnet_train.csv (image_path,class_idx)
+    - data/finetune/efficientnet_val.csv
+    - data/finetune/class_mapping.json
+    """
+    import csv
+
+    if not (0.0 < params.split <= 1.0):
+        raise HTTPException(status_code=400, detail="split은 0 초과 1 이하 값이어야 합니다.")
+
+    query = (
+        db.query(TrainingDataset)
+        .options(
+            joinedload(TrainingDataset.manufacturer),
+            joinedload(TrainingDataset.model),
+        )
+    )
+    query = _apply_filters(query, params.manufacturer_id, params.date_from, params.date_to)
+    records = query.order_by(TrainingDataset.id).all()
+
+    if not records:
+        raise HTTPException(status_code=404, detail="해당 조건의 학습 데이터가 없습니다.")
+
+    # 고유 (manufacturer_id, model_id) 쌍 정렬 → 결정론적 클래스 인덱스
+    pairs = sorted({(r.manufacturer_id, r.model_id) for r in records if r.manufacturer_id and r.model_id})
+    if not pairs:
+        raise HTTPException(status_code=400, detail="제조사/모델 정보가 없는 레코드만 존재합니다.")
+
+    pair_to_idx = {pair: idx for idx, pair in enumerate(pairs)}
+
+    # class_mapping.json
+    classes = {}
+    for idx, (mid, vid) in enumerate(pairs):
+        # 해당 쌍의 첫 번째 레코드에서 이름 추출
+        sample = next((r for r in records if r.manufacturer_id == mid and r.model_id == vid), None)
+        classes[str(idx)] = {
+            "manufacturer_id": mid,
+            "model_id": vid,
+            "manufacturer_korean": sample.manufacturer.korean_name if sample and sample.manufacturer else None,
+            "manufacturer_english": sample.manufacturer.english_name if sample and sample.manufacturer else None,
+            "model_korean": sample.model.korean_name if sample and sample.model else None,
+            "model_english": sample.model.english_name if sample and sample.model else None,
+        }
+
+    class_mapping = {"num_classes": len(pairs), "classes": classes}
+
+    # 유효 레코드만 필터 (manufacturer_id, model_id 있는 것)
+    valid_records = [r for r in records if r.manufacturer_id and r.model_id]
+    random.shuffle(valid_records)
+
+    if params.split >= 1.0:
+        train_records = valid_records
+        val_records = []
+    else:
+        split_idx = int(len(valid_records) * params.split)
+        train_records = valid_records[:split_idx]
+        val_records = valid_records[split_idx:]
+
+    export_dir = Path("./data/finetune")
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    class_mapping_path = export_dir / "class_mapping.json"
+    class_mapping_path.write_text(json.dumps(class_mapping, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def write_csv(path: Path, recs) -> None:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["image_path", "class_idx"])
+            for r in recs:
+                class_idx = pair_to_idx.get((r.manufacturer_id, r.model_id))
+                if class_idx is not None:
+                    writer.writerow([str(Path(r.image_path).resolve()), class_idx])
+
+    train_path = export_dir / "efficientnet_train.csv"
+    write_csv(train_path, train_records)
+
+    val_path = None
+    if val_records:
+        val_path = export_dir / "efficientnet_val.csv"
+        write_csv(val_path, val_records)
+
+    logger.info(
+        f"EfficientNet export 완료: train={len(train_records)}건, val={len(val_records)}건, "
+        f"classes={len(pairs)} → {export_dir}"
+    )
+
+    return JSONResponse({
+        "message": "EfficientNet 학습 데이터 내보내기 완료",
+        "export_dir": str(export_dir),
+        "num_classes": len(pairs),
+        "class_mapping_path": str(class_mapping_path),
+        "files": {
+            "train_csv": str(train_path),
+            "val_csv": str(val_path) if val_path else None,
+            "class_mapping": str(class_mapping_path),
+        },
+        "counts": {
+            "total_records": len(valid_records),
+            "train_count": len(train_records),
+            "val_count": len(val_records),
+            "split_ratio": params.split,
+        },
+    })
+
+
 @router.get("/deploy/cmd")
 async def deploy_cmd(
     checkpoint_path: str = Query(..., description="학습된 체크포인트 경로"),

@@ -1,6 +1,6 @@
 """
 임베딩 생성 서비스
-EfficientNet-B3 모델을 사용한 이미지 벡터화
+EfficientNetV2-M 모델을 사용한 이미지 벡터화
 """
 import logging
 from typing import List
@@ -15,29 +15,29 @@ from studio.config import settings
 
 logger = logging.getLogger(__name__)
 
-EFFICIENTNET_DIM = 1536
+EFFICIENTNET_DIM = 1280
 
 
 class EmbeddingService:
-    """이미지 임베딩 생성 서비스 (EfficientNet-B3)"""
+    """이미지 임베딩 생성 서비스 (EfficientNetV2-M)"""
 
     def __init__(self):
         """임베딩 모델 초기화"""
         try:
             self.model = timm.create_model(
-                'efficientnet_b3', pretrained=True, num_classes=0
+                'efficientnetv2_m', pretrained=True, num_classes=0
             )
             self.model.eval()
             self.model.to(settings.embedding_device)
 
             self.transform = T.Compose([
-                T.Resize((300, 300)),
+                T.Resize((480, 480)),
                 T.ToTensor(),
                 T.Normalize(mean=[0.485, 0.456, 0.406],
                             std=[0.229, 0.224, 0.225]),
             ])
 
-            logger.info(f"Image embedding model loaded: efficientnet_b3 (device={settings.embedding_device})")
+            logger.info(f"Image embedding model loaded: efficientnetv2_m (device={settings.embedding_device})")
 
         except Exception as e:
             logger.error(f"Failed to initialize embedding model: {e}")
@@ -117,7 +117,7 @@ class EmbeddingService:
     def get_model_info(self) -> dict:
         """임베딩 모델 정보"""
         return {
-            "image_model": "efficientnet_b3",
+            "image_model": "efficientnetv2_m",
             "embedding_dimension": EFFICIENTNET_DIM,
             "device": settings.embedding_device
         }

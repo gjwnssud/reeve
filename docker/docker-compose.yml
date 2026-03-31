@@ -56,11 +56,15 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared  # 비동기 작업용 공유 스토리지
+      - efficientnet-models:/app/models/efficientnet  # Trainer와 공유하는 파인튜닝 모델
     environment:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - OLLAMA_BASE_URL=http://ollama:11434
       - TRAINER_URL=http://trainer:8002
+      - IDENTIFIER_MODE=efficientnet
+      - EFFICIENTNET_MODEL_PATH=/app/models/efficientnet/efficientnetv2_m_finetuned.pth
+      - EFFICIENTNET_CLASS_MAPPING_PATH=/app/models/efficientnet/class_mapping.json
     depends_on:
       qdrant:
         condition: service_started
@@ -95,7 +99,7 @@ services:
           cpus: '4.0'
           memory: 8G
 
-  # Trainer (파인튜닝 API 서비스 - LlamaFactory 기반, Linux/Windows)
+  # Trainer (파인튜닝 API 서비스 - LlamaFactory 또는 EfficientNet)
   trainer:
     build:
       context: ..
@@ -107,10 +111,13 @@ services:
       - ../data/finetune:/app/data/finetune  # Studio에서 export한 학습 데이터
       - ../output:/app/output                # 체크포인트 저장
       - ../data/hf-cache:/root/.cache/huggingface # HuggingFace 모델 캐시
+      - efficientnet-models:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
     environment:
       - TRAINER_BACKEND=llamafactory
       - OLLAMA_BASE_URL=http://ollama:11434
       - IDENTIFIER_URL=http://identifier:8001
+      - STUDIO_URL=http://studio:8000
+      - EFFICIENTNET_MODEL_DIR=/app/models/efficientnet
     networks:
       - reeve-network
     restart: unless-stopped
@@ -132,11 +139,15 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared
+      - efficientnet-models:/app/models/efficientnet  # Identifier와 동일한 모델 공유
     environment:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - OLLAMA_BASE_URL=http://ollama:11434
       - TRAINER_URL=http://trainer:8002
+      - IDENTIFIER_MODE=efficientnet
+      - EFFICIENTNET_MODEL_PATH=/app/models/efficientnet/efficientnetv2_m_finetuned.pth
+      - EFFICIENTNET_CLASS_MAPPING_PATH=/app/models/efficientnet/class_mapping.json
     depends_on:
       redis:
         condition: service_started
@@ -157,3 +168,6 @@ services:
 networks:
   reeve-network:
     driver: bridge
+
+volumes:
+  efficientnet-models:  # Trainer(쓰기)와 Identifier/Celery(읽기)가 공유하는 파인튜닝 모델 저장소

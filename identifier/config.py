@@ -2,6 +2,8 @@
 차량 판별 서비스 설정
 Studio와 독립적으로 동작하며, 공유 .env 파일에서 필요한 설정만 읽음
 """
+from typing import Optional
+
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -50,8 +52,22 @@ class IdentifierSettings(BaseSettings):
     torch_threads: int = Field(default=8, alias="IDENTIFIER_TORCH_THREADS")
     enable_torch_compile: bool = Field(default=True, alias="IDENTIFIER_ENABLE_TORCH_COMPILE")
 
-    # 판별 모드: "embedding_only", "visual_rag" (기본), "vlm_only"
-    identifier_mode: str = Field(default="visual_rag", alias="IDENTIFIER_MODE")
+    # 판별 모드: "efficientnet" (기본), "embedding_only", "visual_rag", "vlm_only"
+    identifier_mode: str = Field(default="efficientnet", alias="IDENTIFIER_MODE")
+
+    # EfficientNetV2-M 분류기
+    efficientnet_model_path: Optional[str] = Field(
+        default=None, alias="EFFICIENTNET_MODEL_PATH",
+        description="파인튜닝된 EfficientNetV2-M .pth 파일 경로. 없으면 부트스트랩 모드(특징 추출만)"
+    )
+    efficientnet_class_mapping_path: Optional[str] = Field(
+        default=None, alias="EFFICIENTNET_CLASS_MAPPING_PATH",
+        description="class_mapping.json 파일 경로"
+    )
+    classifier_confidence_threshold: float = Field(
+        default=0.90, alias="CLASSIFIER_CONFIDENCE_THRESHOLD",
+        description="EfficientNetV2-M 직접 분류 최소 신뢰도 (미만이면 VLM 폴백)"
+    )
 
     # VLM (Ollama) 설정
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")

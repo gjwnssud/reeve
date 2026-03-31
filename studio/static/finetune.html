@@ -248,73 +248,129 @@
                         </div>
                         <div id="hw-profile-badge" class="alert alert-info py-2 small mb-3" style="display:none;"></div>
 
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-8">
-                                <label class="form-label">모델</label>
-                                <input type="text" class="form-control" id="train-model" value="Qwen/Qwen3-VL-8B-Instruct">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Output 디렉토리명</label>
-                                <input type="text" class="form-control" id="train-output-dir" value="vehicle-vlm">
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-3">
-                                <label class="form-label">Epochs</label>
-                                <input type="number" class="form-control" id="train-epochs" value="3.0" step="0.5" min="0.5" max="50">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Learning Rate</label>
-                                <input type="text" class="form-control" id="train-lr" value="1e-4">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Batch Size</label>
-                                <select class="form-select" id="train-batch-size">
-                                    <option value="1">1</option>
-                                    <option value="2" selected>2</option>
-                                    <option value="4">4</option>
-                                    <option value="8">8</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Gradient Accumulation</label>
-                                <select class="form-select" id="train-grad-accum">
-                                    <option value="2">2</option>
-                                    <option value="4" selected>4</option>
-                                    <option value="8">8</option>
-                                    <option value="16">16</option>
-                                </select>
+                        <!-- 학습 방식 선택 -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">학습 방식</label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="train-mode" id="mode-efficientnet" value="efficientnet" checked>
+                                    <label class="form-check-label" for="mode-efficientnet">
+                                        <i class="bi bi-image"></i> <strong>EfficientNetV2-M</strong> (이미지 분류기)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="train-mode" id="mode-vlm" value="vlm">
+                                    <label class="form-check-label" for="mode-vlm">
+                                        <i class="bi bi-chat-dots"></i> <strong>VLM</strong> (Qwen3-VL-8B)
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-3">
-                                <label class="form-label">LoRA Rank</label>
-                                <select class="form-select" id="train-lora-rank">
-                                    <option value="4">4</option>
-                                    <option value="8" selected>8</option>
-                                    <option value="16">16</option>
-                                    <option value="32">32</option>
-                                    <option value="64">64</option>
-                                </select>
+                        <!-- EfficientNet 전용 필드 -->
+                        <div id="efficientnet-fields">
+                            <div class="alert alert-info py-2 small mb-3">
+                                <i class="bi bi-info-circle"></i>
+                                EfficientNetV2-M 분류기를 파인튜닝합니다. 학습 데이터는 자동으로 Studio에서 가져옵니다.
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Quantization Bit</label>
-                                <select class="form-select" id="train-quant-bit">
-                                    <option value="">없음 (Full LoRA)</option>
-                                    <option value="4" selected>4 (QLoRA)</option>
-                                    <option value="8">8</option>
-                                </select>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Epochs</label>
+                                    <input type="number" class="form-control" id="eff-epochs" value="10" step="1" min="1" max="100">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Learning Rate</label>
+                                    <input type="text" class="form-control" id="eff-lr" value="1e-4">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Batch Size</label>
+                                    <select class="form-select" id="eff-batch-size">
+                                        <option value="8">8</option>
+                                        <option value="16" selected>16</option>
+                                        <option value="32">32</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Cutoff Length</label>
-                                <select class="form-select" id="train-cutoff-len">
-                                    <option value="512">512</option>
-                                    <option value="1024" selected>1024</option>
-                                    <option value="2048">2048</option>
-                                    <option value="4096">4096</option>
-                                </select>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Freeze Epochs <small class="text-muted">(백본 동결 기간)</small></label>
+                                    <input type="number" class="form-control" id="eff-freeze-epochs" value="1" min="0" max="10">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Output 디렉토리명</label>
+                                    <input type="text" class="form-control" id="eff-output-dir" value="efficientnet">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- VLM 전용 필드 -->
+                        <div id="vlm-fields" style="display:none;">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8">
+                                    <label class="form-label">모델</label>
+                                    <input type="text" class="form-control" id="train-model" value="Qwen/Qwen3-VL-8B-Instruct">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Output 디렉토리명</label>
+                                    <input type="text" class="form-control" id="train-output-dir" value="vehicle-vlm">
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Epochs</label>
+                                    <input type="number" class="form-control" id="train-epochs" value="3.0" step="0.5" min="0.5" max="50">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Learning Rate</label>
+                                    <input type="text" class="form-control" id="train-lr" value="1e-4">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Batch Size</label>
+                                    <select class="form-select" id="train-batch-size">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                        <option value="4">4</option>
+                                        <option value="8">8</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Gradient Accumulation</label>
+                                    <select class="form-select" id="train-grad-accum">
+                                        <option value="2">2</option>
+                                        <option value="4" selected>4</option>
+                                        <option value="8">8</option>
+                                        <option value="16">16</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">LoRA Rank</label>
+                                    <select class="form-select" id="train-lora-rank">
+                                        <option value="4">4</option>
+                                        <option value="8" selected>8</option>
+                                        <option value="16">16</option>
+                                        <option value="32">32</option>
+                                        <option value="64">64</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Quantization Bit</label>
+                                    <select class="form-select" id="train-quant-bit">
+                                        <option value="">없음 (Full LoRA)</option>
+                                        <option value="4" selected>4 (QLoRA)</option>
+                                        <option value="8">8</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Cutoff Length</label>
+                                    <select class="form-select" id="train-cutoff-len">
+                                        <option value="512">512</option>
+                                        <option value="1024" selected>1024</option>
+                                        <option value="2048">2048</option>
+                                        <option value="4096">4096</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -462,9 +518,50 @@
 
             <!-- Step 4: 배포 준비 -->
             <div id="panel-deploy" class="step-panel">
+
+                <!-- 4-A. EfficientNetV2-M 배포 -->
                 <div class="card mb-4">
                     <div class="card-body">
-                        <h2 class="h5 mb-3 pb-2 border-bottom">4. Ollama 배포 준비</h2>
+                        <h2 class="h5 mb-3 pb-2 border-bottom">4-A. EfficientNetV2-M 배포</h2>
+                        <div class="alert alert-info py-2 small mb-3">
+                            <i class="bi bi-info-circle"></i>
+                            파인튜닝 완료 후 Identifier 서비스에 새 모델을 핫리로드하고, Qdrant 임베딩을 재생성합니다.<br>
+                            Trainer가 학습 완료 시 자동으로 핫리로드를 수행하지만, 수동으로 트리거할 수도 있습니다.
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Identifier 서비스 URL</label>
+                                <input type="text" class="form-control" id="deploy-identifier-url" value="http://localhost:8001">
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">모델 경로 <small class="text-muted">(Identifier 컨테이너 내부 경로)</small></label>
+                                <input type="text" class="form-control" id="deploy-eff-model-path"
+                                    placeholder="예: /app/models/efficientnet/model.pth">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">클래스 매핑 경로</label>
+                                <input type="text" class="form-control" id="deploy-eff-mapping-path"
+                                    placeholder="예: /app/models/efficientnet/class_mapping.json">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" id="btn-eff-reload" style="background:linear-gradient(135deg, #667eea, #764ba2);border:none;">
+                                <i class="bi bi-arrow-clockwise"></i> EfficientNet 핫리로드
+                            </button>
+                            <button class="btn btn-outline-primary" id="btn-qdrant-reembed">
+                                <i class="bi bi-database-gear"></i> Qdrant 재임베딩
+                            </button>
+                        </div>
+                        <div id="deploy-eff-message" class="alert mt-3" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- 4-B. VLM(Ollama) 배포 -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3 pb-2 border-bottom">4-B. Ollama 배포 준비 (VLM)</h2>
 
                         <div class="alert alert-warning">
                             GGUF 변환은 환경마다 다르므로 커맨드만 생성합니다.
@@ -550,6 +647,20 @@ document.getElementById('split-slider').addEventListener('input', function () {
     }
 });
 
+// === Train Mode Toggle ===
+function getTrainMode() {
+    const checked = document.querySelector('input[name="train-mode"]:checked');
+    return checked ? checked.value : 'efficientnet';
+}
+
+document.querySelectorAll('input[name="train-mode"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        const isEff = getTrainMode() === 'efficientnet';
+        document.getElementById('efficientnet-fields').style.display = isEff ? '' : 'none';
+        document.getElementById('vlm-fields').style.display = isEff ? 'none' : '';
+    });
+});
+
 // === Load Stats ===
 async function loadStats() {
     try {
@@ -620,20 +731,35 @@ document.getElementById('btn-preview').addEventListener('click', async () => {
 // === Export ===
 document.getElementById('btn-export').addEventListener('click', async () => {
     const params = getExportParams();
+    const isEff = getTrainMode() === 'efficientnet';
     try {
-        const res = await fetch('/finetune/export', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || res.statusText);
-
-        showAlert('preview-result', 'success',
-            `Export 완료 -- train: <strong>${data.counts.train_count}건</strong>, ` +
-            `val: <strong>${data.counts.val_count}건</strong><br>` +
-            `<small class="text-muted">저장 위치: ${data.export_dir} (LLaMA-Factory에서 바로 사용 가능)</small>`
-        );
+        if (isEff) {
+            const res = await fetch('/finetune/export-efficientnet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || res.statusText);
+            showAlert('preview-result', 'success',
+                `EfficientNet Export 완료 — train: <strong>${data.train_count}건</strong>, ` +
+                `val: <strong>${data.val_count}건</strong>, 클래스 수: <strong>${data.num_classes}</strong><br>` +
+                `<small class="text-muted">저장 위치: ${data.export_dir}</small>`
+            );
+        } else {
+            const res = await fetch('/finetune/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || res.statusText);
+            showAlert('preview-result', 'success',
+                `Export 완료 — train: <strong>${data.counts.train_count}건</strong>, ` +
+                `val: <strong>${data.counts.val_count}건</strong><br>` +
+                `<small class="text-muted">저장 위치: ${data.export_dir} (LLaMA-Factory에서 바로 사용 가능)</small>`
+            );
+        }
     } catch (e) {
         showAlert('preview-result', 'error', `Export 실패: ${e.message}`);
     }
@@ -693,6 +819,8 @@ async function detectHardware() {
             if (!el) return;
             el.value = String(val ?? '');
         };
+
+        // VLM 필드 자동완성
         selectOrSet('train-batch-size', preset.batch_size);
         selectOrSet('train-grad-accum', preset.gradient_accumulation);
         selectOrSet('train-lora-rank', preset.lora_rank);
@@ -701,8 +829,18 @@ async function detectHardware() {
         document.getElementById('train-lr').value = preset.learning_rate;
         document.getElementById('train-epochs').value = preset.num_epochs;
 
+        // EfficientNet 필드 자동완성 (hw별 배치 크기 권장값)
+        const effBatchByHw = {
+            dgx_spark: 64, high_end_gpu: 32, mid_gpu: 16, low_gpu: 8,
+            apple_silicon: 16, cpu: 4,
+        };
+        const effBatch = effBatchByHw[hw] || 16;
+        selectOrSet('eff-batch-size', effBatch);
+        document.getElementById('eff-lr').value = preset.learning_rate || '1e-4';
+        document.getElementById('eff-epochs').value = preset.num_epochs || 10;
+
         // hw 메타 저장 (학습 시작 시 전달용)
-        window._hwPreset = { flash_attn: preset.flash_attn, use_mps: preset.use_mps, fp16: preset.fp16 };
+        window._hwPreset = { flash_attn: preset.flash_attn, use_mps: preset.use_mps, fp16: preset.fp16, hw };
     } catch (e) {
         alert('하드웨어 감지 실패: ' + e.message);
     } finally {
@@ -712,22 +850,37 @@ async function detectHardware() {
 }
 
 document.getElementById('btn-train-start').addEventListener('click', async () => {
-    const quantRaw = document.getElementById('train-quant-bit').value;
     const hwPreset = window._hwPreset || {};
-    const config = {
-        model_name: document.getElementById('train-model').value,
-        learning_rate: parseFloat(document.getElementById('train-lr').value),
-        num_epochs: parseFloat(document.getElementById('train-epochs').value),
-        batch_size: parseInt(document.getElementById('train-batch-size').value),
-        gradient_accumulation: parseInt(document.getElementById('train-grad-accum').value),
-        lora_rank: parseInt(document.getElementById('train-lora-rank').value),
-        quantization_bit: quantRaw ? parseInt(quantRaw) : null,
-        cutoff_len: parseInt(document.getElementById('train-cutoff-len').value),
-        output_dir: document.getElementById('train-output-dir').value,
-        flash_attn: hwPreset.flash_attn || null,
-        use_mps: hwPreset.use_mps || false,
-        fp16: hwPreset.fp16 || false,
-    };
+    const isEff = getTrainMode() === 'efficientnet';
+    let config;
+
+    if (isEff) {
+        config = {
+            trainer_backend: 'efficientnet',
+            learning_rate: parseFloat(document.getElementById('eff-lr').value),
+            num_epochs: parseInt(document.getElementById('eff-epochs').value),
+            batch_size: parseInt(document.getElementById('eff-batch-size').value),
+            freeze_epochs: parseInt(document.getElementById('eff-freeze-epochs').value),
+            output_dir: document.getElementById('eff-output-dir').value,
+            studio_url: window.location.origin,
+        };
+    } else {
+        const quantRaw = document.getElementById('train-quant-bit').value;
+        config = {
+            model_name: document.getElementById('train-model').value,
+            learning_rate: parseFloat(document.getElementById('train-lr').value),
+            num_epochs: parseFloat(document.getElementById('train-epochs').value),
+            batch_size: parseInt(document.getElementById('train-batch-size').value),
+            gradient_accumulation: parseInt(document.getElementById('train-grad-accum').value),
+            lora_rank: parseInt(document.getElementById('train-lora-rank').value),
+            quantization_bit: quantRaw ? parseInt(quantRaw) : null,
+            cutoff_len: parseInt(document.getElementById('train-cutoff-len').value),
+            output_dir: document.getElementById('train-output-dir').value,
+            flash_attn: hwPreset.flash_attn || null,
+            use_mps: hwPreset.use_mps || false,
+            fp16: hwPreset.fp16 || false,
+        };
+    }
 
     try {
         document.getElementById('btn-train-start').disabled = true;
@@ -1023,6 +1176,64 @@ document.getElementById('btn-evaluate').addEventListener('click', async () => {
     } finally {
         loading.style.display = 'none';
         document.getElementById('btn-evaluate').disabled = false;
+    }
+});
+
+// === EfficientNet Deploy ===
+document.getElementById('btn-eff-reload').addEventListener('click', async () => {
+    const identifierUrl = document.getElementById('deploy-identifier-url').value.trim();
+    const modelPath = document.getElementById('deploy-eff-model-path').value.trim();
+    const mappingPath = document.getElementById('deploy-eff-mapping-path').value.trim();
+
+    if (!modelPath || !mappingPath) {
+        showAlert('deploy-eff-message', 'warning', '모델 경로와 클래스 매핑 경로를 입력하세요.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-eff-reload');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 리로드 중...';
+    try {
+        const res = await fetch(`${identifierUrl}/admin/reload-efficientnet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_path: modelPath, class_mapping_path: mappingPath }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        showAlert('deploy-eff-message', 'success',
+            `핫리로드 완료 — 클래스 수: <strong>${data.num_classes}</strong>, ` +
+            `분류기 헤드: <strong>${data.has_classification_head ? '있음' : '없음'}</strong>`
+        );
+    } catch (e) {
+        showAlert('deploy-eff-message', 'error', `핫리로드 실패: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> EfficientNet 핫리로드';
+    }
+});
+
+document.getElementById('btn-qdrant-reembed').addEventListener('click', async () => {
+    if (!confirm('Qdrant 컬렉션을 삭제하고 전체 데이터를 재임베딩합니다. 시간이 오래 걸릴 수 있습니다. 계속하시겠습니까?')) return;
+
+    const btn = document.getElementById('btn-qdrant-reembed');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 재임베딩 중...';
+    showAlert('deploy-eff-message', 'info', 'Qdrant 재임베딩 중... 학습 데이터 수에 따라 수 분이 소요될 수 있습니다.');
+    try {
+        const res = await fetch('/admin/recreate-collection', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        showAlert('deploy-eff-message', 'success',
+            `Qdrant 재임베딩 완료 — 성공: <strong>${data.migrated}건</strong>, ` +
+            `실패: <strong>${data.failed}건</strong>, ` +
+            `벡터 차원: <strong>${data.new_dimension}d</strong>`
+        );
+    } catch (e) {
+        showAlert('deploy-eff-message', 'error', `재임베딩 실패: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-database-gear"></i> Qdrant 재임베딩';
     }
 });
 

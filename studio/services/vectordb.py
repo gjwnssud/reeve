@@ -3,7 +3,8 @@ Qdrant 벡터 데이터베이스 서비스
 임베딩 저장 및 유사도 검색 (대규모 데이터 대응)
 """
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Callable
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, VectorParams, PointStruct,
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 # 컬렉션별 벡터 차원 정의
 COLLECTION_CONFIGS = {
     "training_images": {
-        "size": 1536,
+        "size": 1280,
         "distance": Distance.COSINE,
         "description": "학습 이미지 벡터 컬렉션"
     }
@@ -218,6 +219,86 @@ class VectorDBService:
         except Exception as e:
             logger.error(f"Failed to delete training image {training_id} from Qdrant: {e}")
             return False
+
+    def recreate_collection_with_reembedding(
+        self,
+        embedding_fn: Callable[[List[str]], List[List[float]]],
+        records: List[Dict],
+        batch_size: int = 32,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> Dict:
+        """
+        training_images 컬렉션을 삭제하고 새 차원(1280d)으로 재생성한 뒤
+        모든 레코드를 재임베딩하여 저장.
+
+        Args:
+            embedding_fn: 이미지 경로 리스트 → 임베딩 리스트 반환 함수
+            records: training_dataset 레코드 딕셔너리 리스트
+                     필수 키: id, image_path, manufacturer_id, model_id
+                     선택 키: manufacturer_korean, manufacturer_english, model_korean, model_english
+            batch_size: 배치 크기
+            progress_callback: (현재 처리 수, 전체 수) 콜백
+
+        Returns:
+            {"migrated": N, "failed": M, "new_dimension": 1280}
+        """
+        client = self._get_client()
+        if not client:
+            raise RuntimeError("Qdrant 클라이언트 연결 실패")
+
+        # 기존 컬렉션 삭제
+        try:
+            client.delete_collection("training_images")
+            logger.info("training_images 컬렉션 삭제 완료")
+        except Exception:
+            pass
+
+        # 새 차원으로 재생성
+        self._ensure_collection("training_images", 1280, Distance.COSINE)
+
+        total = len(records)
+        migrated = 0
+        failed = 0
+
+        for i in range(0, total, batch_size):
+            batch = records[i:i + batch_size]
+            paths = [r["image_path"] for r in batch]
+
+            try:
+                embeddings = embedding_fn(paths)
+            except Exception as e:
+                logger.error(f"배치 임베딩 실패 (index {i}): {e}")
+                failed += len(batch)
+                if progress_callback:
+                    progress_callback(min(i + batch_size, total), total)
+                continue
+
+            points = []
+            for r, emb in zip(batch, embeddings):
+                payload = {
+                    "id": r["id"],
+                    "image_path": r["image_path"],
+                    "manufacturer_id": r["manufacturer_id"],
+                    "model_id": r["model_id"],
+                    "manufacturer_korean": r.get("manufacturer_korean"),
+                    "manufacturer_english": r.get("manufacturer_english"),
+                    "model_korean": r.get("model_korean"),
+                    "model_english": r.get("model_english"),
+                }
+                points.append(PointStruct(id=r["id"], vector=emb, payload=payload))
+
+            try:
+                client.upsert("training_images", points=points)
+                migrated += len(batch)
+            except Exception as e:
+                logger.error(f"Qdrant upsert 실패 (index {i}): {e}")
+                failed += len(batch)
+
+            if progress_callback:
+                progress_callback(min(i + batch_size, total), total)
+
+        logger.info(f"재임베딩 완료: migrated={migrated}, failed={failed}")
+        return {"migrated": migrated, "failed": failed, "new_dimension": 1280}
 
     def clear_all_collections(self) -> bool:
         """모든 컬렉션 초기화 (주의!)"""

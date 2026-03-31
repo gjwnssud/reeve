@@ -4,8 +4,8 @@ FROM hiyouga/llamafactory:latest
 
 WORKDIR /app
 
-# FastAPI + 런타임 의존성
-RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic-settings pyyaml psutil httpx
+# FastAPI + 런타임 의존성 (timm: EfficientNetV2-M 학습 지원)
+RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic-settings pyyaml psutil httpx timm torchvision pillow
 
 # trainer 소스 복사
 COPY trainer/ ./trainer/
