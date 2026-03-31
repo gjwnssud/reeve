@@ -178,7 +178,7 @@ class EfficientNetTrainer:
             log_raw(f"학습 데이터: {{len(train_ds)}}장, 검증: {{len(val_ds) if val_ds else 0}}장")
 
             # 3. 모델 생성: EfficientNetV2-M backbone + classification head
-            backbone = timm.create_model("efficientnetv2_m", pretrained=True, num_classes=0)
+            backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
             feat_dim = backbone(torch.zeros(1, 3, 480, 480)).shape[-1]  # 1280
             model = nn.Sequential(
                 backbone,
@@ -483,7 +483,7 @@ class EfficientNetTrainer:
             log_raw(f"학습: {{len(train_ds)}}장, 검증: {{len(val_ds) if val_ds else 0}}장")
 
             # 모델 생성
-            backbone = timm.create_model("efficientnetv2_m", pretrained=True, num_classes=0)
+            backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
             with torch.no_grad():
                 sample = torch.zeros(1, 3, 480, 480)
                 feat_dim = backbone(sample).shape[-1]

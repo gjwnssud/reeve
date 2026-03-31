@@ -77,7 +77,7 @@ class EfficientNetClassifier:
                     class_mapping = json.load(f)
                 num_classes = class_mapping["num_classes"]
 
-                backbone = timm.create_model("efficientnetv2_m", pretrained=False, num_classes=0)
+                backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=False, num_classes=0)
                 model = nn.Sequential(
                     backbone,
                     nn.Dropout(0.3),
@@ -108,7 +108,7 @@ class EfficientNetClassifier:
 
     def _load_pretrained(self) -> None:
         """사전학습 EfficientNetV2-M (특징 추출기 전용)"""
-        backbone = timm.create_model("efficientnetv2_m", pretrained=True, num_classes=0)
+        backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
         backbone.eval()
         backbone.to(self._device)
         self._model = backbone

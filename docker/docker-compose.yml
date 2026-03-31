@@ -56,7 +56,7 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared  # 비동기 작업용 공유 스토리지
-      - efficientnet-models:/app/models/efficientnet  # Trainer와 공유하는 파인튜닝 모델
+      - ../data/efficientnet-models:/app/models/efficientnet  # Trainer와 공유하는 파인튜닝 모델
     environment:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
@@ -110,8 +110,8 @@ services:
     volumes:
       - ../data/finetune:/app/data/finetune  # Studio에서 export한 학습 데이터
       - ../output:/app/output                # 체크포인트 저장
-      - ../data/hf-cache:/root/.cache/huggingface # HuggingFace 모델 캐시
-      - efficientnet-models:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
+      - ../data/hf-cache:/root/.cache/huggingface  # HuggingFace 모델 캐시
+      - ../data/efficientnet-models:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
     environment:
       - TRAINER_BACKEND=llamafactory
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -139,7 +139,7 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared
-      - efficientnet-models:/app/models/efficientnet  # Identifier와 동일한 모델 공유
+      - ../data/efficientnet-models:/app/models/efficientnet  # Identifier와 동일한 모델 공유
     environment:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
@@ -168,6 +168,3 @@ services:
 networks:
   reeve-network:
     driver: bridge
-
-volumes:
-  efficientnet-models:  # Trainer(쓰기)와 Identifier/Celery(읽기)가 공유하는 파인튜닝 모델 저장소

@@ -597,7 +597,7 @@ echo IDENTIFIER_MODE=visual_rag
 echo.
 echo # VLM ^(Ollama^)
 echo OLLAMA_BASE_URL=http://ollama:11434
-echo VLM_MODEL_NAME=reeve-vlm-v1
+echo VLM_MODEL_NAME=qwen3-vl:8b
 echo VLM_TIMEOUT=30
 echo VLM_MAX_CANDIDATES=5
 echo VLM_FALLBACK_TO_EMBEDDING=true
@@ -744,7 +744,7 @@ powershell -NoProfile -Command ^
   "'done'," ^
   "''," ^
   "'MODEL_NAME=\$(grep VLM_MODEL_NAME .env ^| cut -d= -f2 ^| tr -d '' '')'," ^
-  "'MODEL_NAME=\"\${MODEL_NAME:-reeve-vlm-v1}\"'," ^
+  "'MODEL_NAME=\"\${MODEL_NAME:-qwen3-vl:8b}\"'," ^
   "''," ^
   "'if docker exec reeve-ollama ollama list ^| grep -q \"\$MODEL_NAME\"; then'," ^
   "'    echo \"Ollama 모델 '\''\$MODEL_NAME'\'' 이미 존재합니다.\"'," ^
@@ -758,8 +758,10 @@ powershell -NoProfile -Command ^
   "'        docker exec reeve-ollama ollama create \"\$MODEL_NAME\" -f /root/Modelfile'," ^
   "'        echo \"모델 등록 완료: \$MODEL_NAME\"'," ^
   "'    else'," ^
-  "'        echo \"[정보] models/ 폴더에 .gguf 파일 또는 Modelfile이 없습니다.\"'," ^
-  "'        echo \"       (models/reeve-vlm-v1.gguf + models/Modelfile)\"'," ^
+  "'        echo \"Ollama 기본 모델 다운로드 중: \$MODEL_NAME\"'," ^
+  "'        echo \"(qwen3-vl:8b 기준 약 5GB, 네트워크 환경에 따라 시간이 걸립니다)\"'," ^
+  "'        docker exec reeve-ollama ollama pull \"\$MODEL_NAME\"'," ^
+  "'        echo \"모델 다운로드 완료: \$MODEL_NAME\"'," ^
   "'    fi'," ^
   "'fi'," ^
   "''," ^
@@ -927,7 +929,7 @@ echo timeout /t 2 /nobreak ^> nul
 echo docker exec reeve-ollama ollama list ^> nul 2^>^&1
 echo if errorlevel 1 goto OLLAMA_WAIT
 echo.
-echo set MODEL_NAME=reeve-vlm-v1
+echo set MODEL_NAME=qwen3-vl:8b
 echo for /f "tokens=2 delims==" %%%%a in ^('findstr /i "^VLM_MODEL_NAME=" .env 2^>nul'^) do set MODEL_NAME=%%%%a
 echo.
 echo docker exec reeve-ollama ollama list ^| findstr /i "%%MODEL_NAME%%" ^> nul 2^>^&1

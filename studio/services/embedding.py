@@ -25,7 +25,7 @@ class EmbeddingService:
         """임베딩 모델 초기화"""
         try:
             self.model = timm.create_model(
-                'efficientnetv2_m', pretrained=True, num_classes=0
+                'tf_efficientnetv2_m.in21k_ft_in1k', pretrained=True, num_classes=0
             )
             self.model.eval()
             self.model.to(settings.embedding_device)
@@ -37,7 +37,7 @@ class EmbeddingService:
                             std=[0.229, 0.224, 0.225]),
             ])
 
-            logger.info(f"Image embedding model loaded: efficientnetv2_m (device={settings.embedding_device})")
+            logger.info(f"Image embedding model loaded: tf_efficientnetv2_m.in21k_ft_in1k (device={settings.embedding_device})")
 
         except Exception as e:
             logger.error(f"Failed to initialize embedding model: {e}")
@@ -117,7 +117,7 @@ class EmbeddingService:
     def get_model_info(self) -> dict:
         """임베딩 모델 정보"""
         return {
-            "image_model": "efficientnetv2_m",
+            "image_model": "tf_efficientnetv2_m.in21k_ft_in1k",
             "embedding_dimension": EFFICIENTNET_DIM,
             "device": settings.embedding_device
         }

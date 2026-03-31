@@ -18,10 +18,6 @@ services:
 
   # ollama, trainer가 네이티브 실행이므로 host.docker.internal로 URL 교체
   identifier:
-    volumes:
-      # Mac: efficientnet-models Named Volume 대신 호스트 경로 바인드 마운트
-      # Trainer(네이티브)가 EFFICIENTNET_MODEL_DIR에 저장 → 동일 경로를 컨테이너에 마운트
-      - ../data/efficientnet-models:/app/models/efficientnet
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - TRAINER_URL=http://host.docker.internal:8002
@@ -32,10 +28,8 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - TRAINER_URL=http://host.docker.internal:8002
-
-  celery-worker:
-    volumes:
-      - ../data/efficientnet-models:/app/models/efficientnet
+      - EMBEDDING_DEVICE=cpu
+      - IDENTIFIER_ENABLE_TORCH_COMPILE=false  # ARM torch.compile 불안정
 
   studio:
     environment:

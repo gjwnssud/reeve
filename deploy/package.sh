@@ -80,7 +80,10 @@ package_dev() {
     mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
              "$dest/data/finetune" "$dest/logs/studio" "$dest/logs/identifier" \
-             "$dest/output"
+             "$dest/output" "$dest/models"
+
+    # Ollama Modelfile (파인튜닝 GGUF 배포용)
+    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/models/Modelfile"
 
     if [ "$os" = "linux" ]; then
         _write_dev_linux_scripts "$dest"
@@ -128,7 +131,8 @@ if [ ! -f ".env" ]; then
     echo "      .env 파일이 생성되었습니다."
     echo ""
     echo " ★ 필수 수정 항목:"
-    echo "   - OPENAI_API_KEY"
+    echo "   - OPENAI_API_KEY        (OpenAI Vision API 키)"
+    echo "   - GEMINI_API_KEY        (Google Gemini API 키, 교차검증용)"
     echo "   - MYSQL_ROOT_PASSWORD"
     echo "   - MYSQL_PASSWORD"
     echo ""
@@ -219,7 +223,8 @@ if not exist ".env" (
         echo       .env 파일이 생성되었습니다.
         echo.
         echo  * 필수 수정 항목:
-        echo    - OPENAI_API_KEY
+        echo    - OPENAI_API_KEY        (OpenAI Vision API 키)
+        echo    - GEMINI_API_KEY        (Google Gemini API 키, 교차검증용)
         echo    - MYSQL_ROOT_PASSWORD
         echo    - MYSQL_PASSWORD
         echo.
@@ -303,6 +308,9 @@ package_prod() {
 
     # .env.example (Identifier 전용)
     _write_prod_env_example "$dest"
+
+    # Ollama Modelfile (파인튜닝 GGUF 배포용)
+    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/models/Modelfile"
 
     # OS별 스크립트 생성
     if [ "$os" = "linux" ]; then
@@ -532,8 +540,10 @@ EMBEDDING_DEVICE=cuda
 IDENTIFIER_MODE=visual_rag
 
 # VLM (Ollama)
+# 기본 모델(파인튜닝 없음): qwen3-vl:8b
+# 파인튜닝 GGUF 배포 시: reeve-vlm-v1
 OLLAMA_BASE_URL=http://ollama:11434
-VLM_MODEL_NAME=reeve-vlm-v1
+VLM_MODEL_NAME=qwen3-vl:8b
 VLM_TIMEOUT=30
 VLM_MAX_CANDIDATES=5
 VLM_FALLBACK_TO_EMBEDDING=true
@@ -676,7 +686,7 @@ for i in $(seq 1 30); do
 done
 
 MODEL_NAME=$(grep VLM_MODEL_NAME .env | cut -d= -f2 | tr -d ' ')
-MODEL_NAME="${MODEL_NAME:-reeve-vlm-v1}"
+MODEL_NAME="${MODEL_NAME:-qwen3-vl:8b}"
 
 if docker exec reeve-ollama ollama list | grep -q "$MODEL_NAME"; then
     echo "Ollama 모델 '$MODEL_NAME' 이미 존재합니다."
@@ -684,15 +694,18 @@ else
     GGUF_FILE=$(ls models/*.gguf 2>/dev/null | head -1)
     MODELFILE="models/Modelfile"
     if [ -n "$GGUF_FILE" ] && [ -f "$MODELFILE" ]; then
-        echo "Ollama 모델 등록 중: $MODEL_NAME"
+        # 파인튜닝된 GGUF → reeve-vlm-v1 등록
+        echo "Ollama 모델 등록 중 (GGUF): $MODEL_NAME"
         docker cp "$GGUF_FILE" reeve-ollama:/root/$(basename "$GGUF_FILE")
         docker cp "$MODELFILE" reeve-ollama:/root/Modelfile
         docker exec reeve-ollama ollama create "$MODEL_NAME" -f /root/Modelfile
         echo "모델 등록 완료: $MODEL_NAME"
     else
-        echo "[정보] models/ 폴더에 .gguf 파일 또는 Modelfile이 없습니다."
-        echo "       파인튜닝된 모델 파일을 models/ 폴더에 넣고 setup.sh를 다시 실행하세요."
-        echo "       (models/reeve-vlm-v1.gguf + models/Modelfile)"
+        # 기본 모델 — Ollama 레지스트리에서 직접 pull
+        echo "Ollama 기본 모델 다운로드 중: $MODEL_NAME"
+        echo "(qwen3-vl:8b 기준 약 5GB, 네트워크 환경에 따라 시간이 걸립니다)"
+        docker exec reeve-ollama ollama pull "$MODEL_NAME"
+        echo "모델 다운로드 완료: $MODEL_NAME"
     fi
 fi
 
@@ -856,7 +869,7 @@ timeout /t 2 /nobreak > nul
 docker exec reeve-ollama ollama list > nul 2>&1
 if errorlevel 1 goto OLLAMA_WAIT
 
-set MODEL_NAME=reeve-vlm-v1
+set MODEL_NAME=qwen3-vl:8b
 for /f "tokens=2 delims==" %%a in ('findstr /i "^VLM_MODEL_NAME" .env 2^>nul') do set MODEL_NAME=%%a
 
 docker exec reeve-ollama ollama list | findstr /i "%MODEL_NAME%" > nul 2>&1
@@ -867,7 +880,7 @@ if not errorlevel 1 (
     for %%f in (models\*.gguf) do set GGUF_FILE=%%f
     if defined GGUF_FILE (
         if exist "models\Modelfile" (
-            echo Ollama 모델 등록 중: %MODEL_NAME%
+            echo Ollama 모델 등록 중 (GGUF): %MODEL_NAME%
             for %%f in (!GGUF_FILE!) do docker cp "%%f" reeve-ollama:/root/%%~nxf
             docker cp "models\Modelfile" reeve-ollama:/root/Modelfile
             docker exec reeve-ollama ollama create %MODEL_NAME% -f /root/Modelfile
@@ -880,9 +893,15 @@ if not errorlevel 1 (
             echo [정보] models\Modelfile이 없습니다.
         )
     ) else (
-        echo [정보] models\ 폴더에 .gguf 파일이 없습니다.
-        echo        파인튜닝된 모델 파일을 models\ 폴더에 넣고 setup.bat을 다시 실행하세요.
-        echo        (models\reeve-vlm-v1.gguf + models\Modelfile)
+        echo Ollama 기본 모델 다운로드 중: %MODEL_NAME%
+        echo (qwen3-vl:8b 기준 약 5GB, 네트워크 환경에 따라 시간이 걸립니다)
+        docker exec reeve-ollama ollama pull %MODEL_NAME%
+        if errorlevel 1 (
+            echo [경고] 모델 다운로드 실패. 네트워크를 확인하거나 수동으로 실행하세요:
+            echo        docker exec reeve-ollama ollama pull %MODEL_NAME%
+        ) else (
+            echo 모델 다운로드 완료: %MODEL_NAME%
+        )
     )
 )
 
@@ -961,7 +980,10 @@ package_dev_mac() {
     mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
              "$dest/data/finetune" "$dest/logs/studio" "$dest/logs/identifier" \
-             "$dest/output"
+             "$dest/output" "$dest/models"
+
+    # Ollama Modelfile (파인튜닝 GGUF 배포용)
+    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/models/Modelfile"
 
     _write_dev_mac_scripts "$dest"
 
@@ -1009,7 +1031,8 @@ if [ ! -f ".env" ]; then
     echo "      .env 파일이 생성되었습니다."
     echo ""
     echo " ★ 필수 수정 항목:"
-    echo "   - OPENAI_API_KEY"
+    echo "   - OPENAI_API_KEY        (OpenAI Vision API 키)"
+    echo "   - GEMINI_API_KEY        (Google Gemini API 키, 교차검증용)"
     echo "   - MYSQL_ROOT_PASSWORD"
     echo "   - MYSQL_PASSWORD"
     echo ""

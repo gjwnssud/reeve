@@ -1,0 +1,37 @@
+# Reeve VLM Modelfile (파인튜닝 GGUF 배포용)
+# ──────────────────────────────────────────────────────────────────
+# 사용법:
+#   1. GGUF 파일을 이 Modelfile과 같은 디렉토리에 복사
+#   2. docker cp <gguf> reeve-ollama:/root/<gguf>
+#   3. docker cp Modelfile reeve-ollama:/root/Modelfile
+#   4. docker exec reeve-ollama ollama create reeve-vlm-v1 -f /root/Modelfile
+#
+# 기본 모델(파인튜닝 없이) 사용 시:
+#   docker exec reeve-ollama ollama pull qwen3-vl:8b
+#   .env → VLM_MODEL_NAME=qwen3-vl:8b
+# ──────────────────────────────────────────────────────────────────
+
+FROM ./reeve-vlm-v1.gguf
+
+# ── 추론 파라미터 ──────────────────────────────────────────────────
+# 차량 식별은 결정론적 응답이 중요하므로 temperature를 낮게 설정
+PARAMETER temperature 0.1
+
+# 이미지 1장 + 후보 목록 + JSON 응답에 충분한 컨텍스트
+PARAMETER num_ctx 4096
+
+# JSON 응답 특성상 길지 않으므로 최대 토큰 제한
+PARAMETER num_predict 512
+
+# 반복 억제 (JSON 형식 출력 안정화)
+PARAMETER repeat_penalty 1.1
+
+PARAMETER top_p 0.9
+
+# ── 시스템 프롬프트 ────────────────────────────────────────────────
+# 참고: identifier 서비스의 vlm_service.py가 API 호출 시 자체 시스템 프롬프트를
+#       전달하므로 이 항목은 fallback으로만 동작합니다.
+SYSTEM """당신은 차량 제조사와 모델을 식별하는 전문 AI입니다.
+제공된 차량 이미지를 분석하여 제조사와 모델명을 정확하게 식별하세요.
+후보 목록이 제공된 경우, 목록에서 가장 일치하는 항목을 선택하세요.
+응답은 요청된 JSON 형식으로만 간결하게 제공하세요."""
