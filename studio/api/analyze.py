@@ -324,71 +324,14 @@ async def stream_analysis_progress(
         crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
         cv2.imwrite(str(crop_path), cropped)
 
-        # 1.5단계: Qdrant 사전 중복제거 체크
-        vision_result = None
-        dedup_matched = False
+        # 2단계: Vision API 호출
+        api_label = "ChatGPT + Gemini 교차 검증 중" if settings.gemini_api_key else "ChatGPT Vision API 호출 중"
+        yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': api_label})}\n\n"
+        await asyncio.sleep(0.1)
 
-        if settings.dedup_enabled:
-            try:
-                from studio.services.embedding import embedding_service
-                from studio.services.vectordb import vectordb_service
-                from studio.models.manufacturer import Manufacturer
-                from studio.models.vehicle_model import VehicleModel
-
-                yield f"data: {json.dumps({'event': 'progress', 'progress': 20, 'message': '학습 데이터 유사도 검색 중'})}\n\n"
-                await asyncio.sleep(0.1)
-
-                # EfficientNet 임베딩 생성
-                loop = asyncio.get_event_loop()
-                embedding = await loop.run_in_executor(
-                    None, embedding_service.encode_image, str(crop_path)
-                )
-
-                # Qdrant 검색
-                matches = vectordb_service.search_training_images(
-                    embedding, n_results=settings.dedup_top_k
-                )
-
-                if matches and matches[0][1] >= settings.dedup_similarity_threshold:
-                    best_payload, best_score = matches[0]
-
-                    # Qdrant payload에서 제조사/모델 정보 추출
-                    mf_id = best_payload.get("manufacturer_id")
-                    mdl_id = best_payload.get("model_id")
-
-                    if mf_id and mdl_id:
-                        # DB에서 코드 조회
-                        mf = db.query(Manufacturer).filter(Manufacturer.id == mf_id).first()
-                        mdl = db.query(VehicleModel).filter(VehicleModel.id == mdl_id).first()
-
-                        if mf and mdl:
-                            vision_result = {
-                                "manufacturer_code": mf.code.lower(),
-                                "model_code": mdl.code.lower(),
-                                "confidence": round(best_score, 4),
-                                "raw_response": f"dedup match (similarity: {best_score:.4f})",
-                                "dedup_source": "qdrant",
-                                "dedup_similarity": round(best_score, 4),
-                            }
-                            dedup_matched = True
-
-                            yield f"data: {json.dumps({'event': 'dedup_match', 'progress': 50, 'message': f'학습 데이터 일치 (유사도: {best_score:.2f})', 'similarity': round(best_score, 4), 'manufacturer': mf.korean_name, 'model': mdl.korean_name})}\n\n"
-                            await asyncio.sleep(0.1)
-
-                            logger.info(f"Dedup match: {mf.korean_name} {mdl.korean_name} (similarity: {best_score:.4f})")
-
-            except Exception as e:
-                logger.warning(f"Dedup check failed, falling back to Vision API: {e}")
-
-        # 2단계: Vision API 호출 (dedup 매치 없을 때만)
-        if not dedup_matched:
-            api_label = "ChatGPT + Gemini 교차 검증 중" if settings.gemini_api_key else "ChatGPT Vision API 호출 중"
-            yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': api_label})}\n\n"
-            await asyncio.sleep(0.1)
-
-            from studio.services.vision_backend import get_vision_backend
-            vision_service = get_vision_backend()
-            vision_result = await vision_service.analyze_vehicle_image(str(crop_path), db=db)
+        from studio.services.vision_backend import get_vision_backend
+        vision_service = get_vision_backend()
+        vision_result = await vision_service.analyze_vehicle_image(str(crop_path), db=db)
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)

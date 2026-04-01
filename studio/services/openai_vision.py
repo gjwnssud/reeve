@@ -8,7 +8,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Optional, List
 import logging
-from openai import OpenAI, RateLimitError
+from openai import AsyncOpenAI, RateLimitError
 from sqlalchemy.orm import Session
 
 from studio.config import settings
@@ -24,7 +24,7 @@ class OpenAIVisionService:
             logger.warning("OpenAI API key not configured")
             self.client = None
         else:
-            self.client = OpenAI(api_key=settings.openai_api_key)
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
 
         self.db = db
         self._manufacturer_cache = None
@@ -181,7 +181,7 @@ class OpenAIVisionService:
 
             for attempt in range(max_retries):
                 try:
-                    response = self.client.chat.completions.create(
+                    response = await self.client.chat.completions.create(
                         model=settings.openai_model,
                         messages=[
                             {
@@ -211,6 +211,7 @@ class OpenAIVisionService:
                             }
                         ],
                         max_completion_tokens=500,
+                        reasoning_effort="low",
                     )
                     break  # 성공 시 루프 탈출
 
@@ -222,6 +223,11 @@ class OpenAIVisionService:
                     else:
                         logger.error(f"Rate limit exceeded after {max_retries} attempts")
                         raise
+
+            # 빈 응답 체크 (gpt-5-mini reasoning 토큰 소진 시 content가 빈 문자열)
+            content = response.choices[0].message.content
+            if not content or not content.strip():
+                raise ValueError(f"OpenAI 빈 응답 (finish_reason: {response.choices[0].finish_reason})")
 
             # 응답 파싱
             result = self._parse_response(response)

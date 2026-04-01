@@ -133,7 +133,7 @@ services:
       - ../data/hf-cache:/root/.cache/huggingface  # HuggingFace 모델 캐시
       - ../data/efficientnet-models:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
     environment:
-      - TRAINER_BACKEND=llamafactory
+      - TRAINER_BACKEND=${TRAINER_BACKEND:-llamafactory}
       - OLLAMA_BASE_URL=http://ollama:11434
       - IDENTIFIER_URL=http://identifier:8001
       - STUDIO_URL=http://studio:8000

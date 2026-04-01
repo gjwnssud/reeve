@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 from typing import Optional
@@ -40,249 +41,6 @@ class EfficientNetTrainer:
     def _log_dir(self, output_dir: str) -> Path:
         return Path(self.output_base) / output_dir
 
-    def _write_train_script(self, log_dir: Path, studio_url: str) -> Path:
-        """백그라운드로 실행될 학습 파이썬 스크립트를 생성."""
-        script_path = log_dir / _SCRIPT_FILENAME
-        model_out = str(self.efficientnet_model_dir / _MODEL_FILENAME)
-        class_map_out = str(self.efficientnet_model_dir / _CLASS_MAP_FILENAME)
-        jsonl_log = str(log_dir / _JSONL_LOG_FILENAME)
-        raw_log = str(log_dir / _RAW_LOG_FILENAME)
-
-        script = textwrap.dedent(f"""\
-            import json, csv, sys, os, time, math, random
-            from pathlib import Path
-
-            # 라이브러리 import
-            import torch
-            import torch.nn as nn
-            import torch.optim as optim
-            from torch.utils.data import Dataset, DataLoader
-            import torchvision.transforms as T
-            import timm
-            from PIL import Image
-            import httpx
-
-            # 학습 파라미터 (스크립트 생성 시 주입됨)
-            STUDIO_URL = "{{studio_url}}"
-            LEARNING_RATE = {{learning_rate}}
-            NUM_EPOCHS = {{num_epochs}}
-            BATCH_SIZE = {{batch_size}}
-            FREEZE_EPOCHS = {{freeze_epochs}}
-            MODEL_OUT = "{{model_out}}"
-            CLASS_MAP_OUT = "{{class_map_out}}"
-            JSONL_LOG = "{{jsonl_log}}"
-            RAW_LOG = "{{raw_log}}"
-            DATA_DIR = "{{data_dir}}"
-            IDENTIFIER_URL = "{{identifier_url}}"
-
-            def log_raw(msg):
-                print(msg, flush=True)
-                with open(RAW_LOG, "a", encoding="utf-8") as f:
-                    f.write(msg + "\\n")
-
-            def log_jsonl(step, total_steps, epoch, loss):
-                entry = {{
-                    "current_steps": step,
-                    "total_steps": total_steps,
-                    "epoch": round(epoch, 2),
-                    "loss": round(loss, 4),
-                    "percentage": round(step / total_steps * 100, 1) if total_steps else 0,
-                }}
-                with open(JSONL_LOG, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(entry) + "\\n")
-
-            # 디바이스 선택
-            if torch.backends.mps.is_available():
-                device = torch.device("mps")
-                log_raw(f"디바이스: MPS (Apple Silicon)")
-            elif torch.cuda.is_available():
-                device = torch.device("cuda")
-                log_raw(f"디바이스: CUDA {{torch.cuda.get_device_name(0)}}")
-            else:
-                device = torch.device("cpu")
-                log_raw("디바이스: CPU")
-
-            # 1. Studio에서 학습 데이터 내보내기
-            log_raw("Studio에서 학습 데이터 내보내기 요청...")
-            try:
-                resp = httpx.post(
-                    f"{{STUDIO_URL}}/api/finetune/export-efficientnet",
-                    json={{"split": 0.9}},
-                    timeout=120.0,
-                )
-                resp.raise_for_status()
-                export_info = resp.json()
-                log_raw(f"내보내기 완료: {{export_info['counts']}}")
-            except Exception as e:
-                log_raw(f"학습 데이터 내보내기 실패: {{e}}")
-                sys.exit(1)
-
-            train_csv = export_info["files"]["train_csv"]
-            val_csv = export_info["files"].get("val_csv")
-            class_mapping_path = export_info["files"]["class_mapping"]
-
-            with open(class_mapping_path, encoding="utf-8") as f:
-                class_mapping = json.load(f)
-            num_classes = class_mapping["num_classes"]
-            log_raw(f"클래스 수: {{num_classes}}")
-
-            if num_classes < 2:
-                log_raw("오류: 클래스가 2개 미만입니다. 더 많은 학습 데이터를 추가하세요.")
-                sys.exit(1)
-
-            # 2. Dataset 정의
-            class VehicleDataset(Dataset):
-                def __init__(self, csv_path, transform):
-                    self.items = []
-                    with open(csv_path, encoding="utf-8") as f:
-                        reader = csv.DictReader(f)
-                        for row in reader:
-                            p = row["image_path"]
-                            if os.path.exists(p):
-                                self.items.append((p, int(row["class_idx"])))
-                    self.transform = transform
-
-                def __len__(self):
-                    return len(self.items)
-
-                def __getitem__(self, idx):
-                    path, label = self.items[idx]
-                    img = Image.open(path).convert("RGB")
-                    return self.transform(img), label
-
-            train_transform = T.Compose([
-                T.RandomResizedCrop(480, scale=(0.7, 1.0)),
-                T.RandomHorizontalFlip(),
-                T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
-            val_transform = T.Compose([
-                T.Resize((480, 480)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
-
-            train_ds = VehicleDataset(train_csv, train_transform)
-            val_ds = VehicleDataset(val_csv, val_transform) if val_csv and os.path.exists(val_csv) else None
-
-            if len(train_ds) == 0:
-                log_raw("오류: 유효한 학습 이미지가 없습니다.")
-                sys.exit(1)
-
-            train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,
-                                      num_workers=min(4, os.cpu_count() or 1), pin_memory=(device.type == "cuda"))
-            val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False,
-                                    num_workers=min(4, os.cpu_count() or 1)) if val_ds else None
-
-            log_raw(f"학습 데이터: {{len(train_ds)}}장, 검증: {{len(val_ds) if val_ds else 0}}장")
-
-            # 3. 모델 생성: EfficientNetV2-M backbone + classification head
-            backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
-            feat_dim = backbone(torch.zeros(1, 3, 480, 480)).shape[-1]  # 1280
-            model = nn.Sequential(
-                backbone,
-                nn.Dropout(0.3),
-                nn.Linear(feat_dim, num_classes),
-            ).to(device)
-
-            # 4. 학습 설정
-            steps_per_epoch = math.ceil(len(train_ds) / BATCH_SIZE)
-            total_steps = NUM_EPOCHS * steps_per_epoch
-            criterion = nn.CrossEntropyLoss()
-
-            global_step = 0
-
-            for epoch in range(NUM_EPOCHS):
-                # freeze_epochs 동안 backbone 동결
-                if epoch < FREEZE_EPOCHS:
-                    for p in backbone.parameters():
-                        p.requires_grad = False
-                    optimizer = optim.AdamW(
-                        [p for p in model.parameters() if p.requires_grad],
-                        lr=LEARNING_RATE * 10,
-                    )
-                else:
-                    for p in backbone.parameters():
-                        p.requires_grad = True
-                    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
-
-                scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                    optimizer, T_max=steps_per_epoch
-                )
-
-                model.train()
-                epoch_loss = 0.0
-
-                for batch_idx, (imgs, labels) in enumerate(train_loader):
-                    imgs, labels = imgs.to(device), labels.to(device)
-                    optimizer.zero_grad()
-                    logits = model(imgs)
-                    loss = criterion(logits, labels)
-                    loss.backward()
-                    optimizer.step()
-                    scheduler.step()
-
-                    global_step += 1
-                    epoch_loss += loss.item()
-
-                    if batch_idx % max(1, steps_per_epoch // 10) == 0:
-                        cur_epoch = epoch + (batch_idx + 1) / steps_per_epoch
-                        log_raw(f"Epoch {{epoch+1}}/{{NUM_EPOCHS}} Step {{global_step}}/{{total_steps}} loss={{loss.item():.4f}}")
-                        log_jsonl(global_step, total_steps, cur_epoch, loss.item())
-
-                avg_loss = epoch_loss / len(train_loader)
-                log_raw(f"Epoch {{epoch+1}} 완료 — avg_loss={{avg_loss:.4f}}")
-
-                # 검증
-                if val_loader:
-                    model.eval()
-                    correct = total = 0
-                    with torch.no_grad():
-                        for imgs, labels in val_loader:
-                            imgs, labels = imgs.to(device), labels.to(device)
-                            preds = model(imgs).argmax(dim=1)
-                            correct += (preds == labels).sum().item()
-                            total += len(labels)
-                    val_acc = correct / total * 100 if total else 0
-                    log_raw(f"검증 정확도: {{val_acc:.1f}}% ({{correct}}/{{total}})")
-
-            # 5. 모델 저장
-            Path(MODEL_OUT).parent.mkdir(parents=True, exist_ok=True)
-            torch.save(model.state_dict(), MODEL_OUT)
-            log_raw(f"모델 저장: {{MODEL_OUT}}")
-
-            # class_mapping.json 공유 경로에 복사
-            import shutil
-            shutil.copy(class_mapping_path, CLASS_MAP_OUT)
-            log_raw(f"class_mapping 저장: {{CLASS_MAP_OUT}}")
-
-            # 6. Identifier 핫리로드
-            try:
-                resp = httpx.post(
-                    f"{{IDENTIFIER_URL}}/admin/reload-efficientnet",
-                    json={{"model_path": MODEL_OUT, "class_mapping_path": CLASS_MAP_OUT}},
-                    timeout=30.0,
-                )
-                log_raw(f"Identifier 핫리로드: {{resp.status_code}}")
-            except Exception as e:
-                log_raw(f"Identifier 핫리로드 실패 (무시): {{e}}")
-
-            log_raw("EfficientNetV2-M 파인튜닝 완료!")
-        """)
-
-        # 파라미터 치환
-        script = script.replace("{studio_url}", studio_url)
-        script = script.replace("{identifier_url}", settings.identifier_url)
-        script = script.replace("{model_out}", model_out)
-        script = script.replace("{class_map_out}", class_map_out)
-        script = script.replace("{jsonl_log}", jsonl_log)
-        script = script.replace("{raw_log}", raw_log)
-        script = script.replace("{data_dir}", str(self.data_dir))
-
-        script_path.write_text(script, encoding="utf-8")
-        return script_path
-
     async def start_training(
         self,
         learning_rate: float = 1e-4,
@@ -298,7 +56,7 @@ class EfficientNetTrainer:
 
         # 이미 실행 중 확인
         status = await self.get_status()
-        if status.get("status") == "running":
+        if status.get("is_running"):
             return {"error": "학습이 이미 실행 중입니다."}
 
         _studio_url = studio_url or settings.studio_url
@@ -327,13 +85,16 @@ class EfficientNetTrainer:
         (log_dir / _JSONL_LOG_FILENAME).unlink(missing_ok=True)
         (log_dir / _RAW_LOG_FILENAME).unlink(missing_ok=True)
 
-        cmd = f"nohup python3 {script_path} >> {raw_log} 2>&1 &"
-        proc = subprocess.Popen(cmd, shell=True)
+        cmd = f"nohup {sys.executable} {script_path} >> {raw_log} 2>&1 &"
+        subprocess.Popen(cmd, shell=True)
         await asyncio.sleep(1)
 
+        from datetime import datetime
+        job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         logger.info(f"EfficientNet 학습 시작: {script_path}")
         return {
             "status": "started",
+            "job_id": job_id,
             "script": str(script_path),
             "log": raw_log,
             "jsonl_log": jsonl_log,
@@ -605,6 +366,7 @@ class EfficientNetTrainer:
         status = "running" if is_running else ("done" if last_entry else "idle")
 
         return {
+            "is_running": is_running,
             "status": status,
             "pid": pid,
             "current_steps": last_entry.get("current_steps", 0),

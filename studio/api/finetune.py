@@ -77,6 +77,19 @@ def _apply_filters(query, manufacturer_id=None, date_from=None, date_to=None):
     return query
 
 
+@router.get("/mode")
+async def get_finetune_mode():
+    """식별 서비스의 현재 판별 모드 조회 (IDENTIFIER_MODE)"""
+    from studio.config import settings
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{settings.identifier_url}/health")
+            data = resp.json()
+            return {"identifier_mode": data.get("identifier_mode", "efficientnet")}
+    except Exception:
+        return {"identifier_mode": "efficientnet"}
+
+
 @router.get("/hw-profile")
 async def get_hw_profile():
     """하드웨어 감지 → 파인튜닝 최적 파라미터 프리셋 반환 (Trainer 서비스 프록시)"""

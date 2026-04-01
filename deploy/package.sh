@@ -8,7 +8,7 @@
 # target:
 #   dev-linux     개발사 납품 — Linux 개발 환경 (GPU)
 #   dev-windows   개발사 납품 — Windows 개발 환경 (GPU)
-#   dev-mac       개발사 납품 — Mac 개발 환경 (Apple Silicon, 네이티브 MLX)
+#   dev-mac       개발사 납품 — Mac 개발 환경 (Apple Silicon, 네이티브 Trainer)
 #   prod-linux    고객사 납품 — Linux 운영 환경
 #   prod-windows  고객사 납품 — Windows 운영 환경
 #   all           전체 패키지 생성
@@ -954,7 +954,7 @@ EOF
 }
 
 # ══════════════════════════════════════════════════════════
-# Dev Mac 패키지 (Apple Silicon, 네이티브 MLX)
+# Dev Mac 패키지 (Apple Silicon, 네이티브 Trainer)
 # ══════════════════════════════════════════════════════════
 package_dev_mac() {
     local dest="$SCRIPT_DIR/dev/mac"
@@ -1022,14 +1022,16 @@ if ! command -v python3 > /dev/null 2>&1; then
 fi
 echo "      Python: $(python3 --version)"
 
-echo "[3/5] 가상환경 및 Trainer(MLX) 의존성 설치 중..."
+echo "[3/5] 가상환경 및 Trainer 의존성 설치 중..."
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
     echo "      .venv 가상환경 생성 완료"
 fi
 .venv/bin/pip install --quiet --upgrade pip
+# MLX (visual_rag / vlm_only 모드) + EfficientNet (efficientnet 모드) 양쪽 의존성 설치
 .venv/bin/pip install --quiet mlx-lm mlx-vlm fastapi "uvicorn[standard]" pydantic-settings pyyaml psutil httpx
-echo "      mlx-lm, mlx-vlm, fastapi 설치 완료 (.venv)"
+.venv/bin/pip install --quiet torch==2.6.0 torchvision==0.21.0 timm Pillow
+echo "      mlx-lm, mlx-vlm, torch, timm, fastapi 설치 완료 (.venv)"
 
 echo "[4/5] 환경변수 파일 확인 중..."
 if [ ! -f ".env" ]; then
@@ -1096,14 +1098,26 @@ else
     ollama pull "$_MODEL"
 fi
 
-# 3. Trainer (MLX) 네이티브 시작 (실행 중이면 종료 후 재시작)
+# 3. Trainer 네이티브 시작 — IDENTIFIER_MODE에 따라 백엔드 자동 결정
+#    efficientnet → TRAINER_BACKEND=efficientnet (Mac/Linux/Windows 공통)
+#    그 외(visual_rag, vlm_only) → Mac: mlx
+if [ "${IDENTIFIER_MODE}" = "efficientnet" ]; then
+    _TRAINER_BACKEND=efficientnet
+    _TRAINER_LABEL="EfficientNet"
+else
+    _TRAINER_BACKEND=mlx
+    _TRAINER_LABEL="MLX (Qwen3-VL)"
+fi
+
 if pgrep -f "trainer.main:app" > /dev/null 2>&1; then
     echo "[2/3] Trainer 종료 중..."
     pkill -f "trainer.main:app"
     sleep 1
 fi
-echo "[2/3] Trainer (MLX) 시작 중..."
-TRAINER_BACKEND=mlx TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
+echo "[2/3] Trainer (${_TRAINER_LABEL}) 시작 중..."
+TRAINER_BACKEND=${_TRAINER_BACKEND} TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
+    EFFICIENTNET_MODEL_DIR=./output/efficientnet \
+    STUDIO_URL=http://localhost:8000 IDENTIFIER_URL=http://localhost:8001 \
     .venv/bin/uvicorn trainer.main:app --host 0.0.0.0 --port 8002 \
     > logs/trainer.log 2>&1 &
 TRAINER_PID=$!
@@ -1119,7 +1133,7 @@ echo ""
 echo "서비스가 시작되었습니다:"
 echo "  Studio        : http://localhost:8000"
 echo "  Identifier    : http://localhost:8001"
-echo "  Trainer (MLX) : http://localhost:8002  (네이티브 Apple Silicon)"
+echo "  Trainer (${_TRAINER_LABEL}) : http://localhost:8002  (네이티브 Apple Silicon)"
 echo "  Qdrant        : http://localhost:6333/dashboard"
 echo "  Ollama        : http://localhost:11434  (네이티브 Apple Silicon)"
 echo ""
@@ -1160,7 +1174,7 @@ if [ -z "$TARGET" ]; then
     echo ""
     echo "  dev-linux     개발사 납품 — Linux 개발 환경 (GPU)"
     echo "  dev-windows   개발사 납품 — Windows 개발 환경 (GPU)"
-    echo "  dev-mac       개발사 납품 — Mac 개발 환경 (Apple Silicon, 네이티브 MLX)"
+    echo "  dev-mac       개발사 납품 — Mac 개발 환경 (Apple Silicon, 네이티브 Trainer)"
     echo "  prod-linux    고객사 납품 — Linux 운영 환경"
     echo "  prod-windows  고객사 납품 — Windows 운영 환경"
     echo "  all           전체 패키지 생성"

@@ -73,6 +73,8 @@ class Semaphore {
     }
 }
 const detectionSemaphore = new Semaphore(MAX_CONCURRENT_DETECTIONS);
+const MAX_CONCURRENT_ANALYSES = 8;
+const analysisSemaphore = new Semaphore(MAX_CONCURRENT_ANALYSES);
 
 //=============================================================================
 // 초기화
@@ -102,6 +104,42 @@ uploadArea.addEventListener('drop', (e) => {
 
 // 화면 크기 변경 시 바운딩 박스 재조정
 let resizeTimeout;
+// 처리 중 여부 판단 헬퍼
+const IN_PROGRESS_STATUSES = new Set(['uploading', 'detecting', 'analyzing']);
+function isFileTabProcessing() {
+    for (const img of state.images.values()) {
+        if (img.source !== 'folder' && IN_PROGRESS_STATUSES.has(img.status)) return true;
+    }
+    return false;
+}
+function isBatchProcessing() {
+    return folderWatch.isProcessing || folderWatch.queue.length > 0;
+}
+
+// 배치/파일선택 처리 중 탭 이탈/창 닫기 경고
+window.addEventListener('beforeunload', (e) => {
+    if (isBatchProcessing() || isFileTabProcessing()) {
+        const msg = '분석이 진행 중입니다. 페이지를 벗어나면 분석이 중단됩니다.';
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+    }
+});
+
+// 탭 비활성화(다른 탭 전환) 시 경고 토스트
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && (isBatchProcessing() || isFileTabProcessing())) {
+        // 탭으로 돌아왔을 때 한 번 알림
+        const warnOnReturn = () => {
+            if (!document.hidden) {
+                showToast('⚠️ 분석 중 탭을 벗어났습니다. 탭이 열린 동안만 분석이 정상 동작합니다.', 'warning', 5000);
+                document.removeEventListener('visibilitychange', warnOnReturn);
+            }
+        };
+        document.addEventListener('visibilitychange', warnOnReturn);
+    }
+});
+
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
@@ -253,8 +291,11 @@ async function createImageCard(imageId, file) {
             });
             resizeObserver.observe(img);
 
-            // 차량 감지 시작
-            detectVehicle(imageId);
+            // 차량 감지 시작 (folder source는 파이프라인이 명시 호출하므로 제외)
+            const imgState = state.images.get(imageId);
+            if (!imgState || imgState.source !== 'folder') {
+                detectVehicle(imageId);
+            }
         };
     };
 
@@ -322,10 +363,7 @@ async function detectVehicle(imageId) {
             incrementStat(current.source, 'detected');
             showToast(`${displayName}: 차량 ${data.detections.length}대 감지됨`);
 
-            // 폴더 감시 모드: YOLO 감지 성공 시 자동 분석
-            if (current.source === 'folder') {
-                analyzeImageSimple(imageId, current);
-            }
+
         } else {
             // 차량이 감지되지 않은 경우 - 감지 실패로 분류
             current.status = 'no_vehicle';
@@ -882,14 +920,9 @@ async function analyzeVehicle(imageId) {
 }
 
 // 일괄 분석용 (버튼 조작 없이 분석만 실행)
+// folder source의 VectorDB 저장은 파이프라인 Stage 5에서 명시 처리
 async function analyzeImageSimple(imageId, imageState) {
     await runAnalysisStream(imageId, imageState, true);
-
-    // 폴더 감시 모드: 분석 완료 시 자동 벡터DB 저장 (카드는 "저장 완료" 상태로 유지)
-    const current = state.images.get(imageId);
-    if (current?.source === 'folder' && current.status === 'completed' && current.result?.id) {
-        await saveImageToVectorDB(imageId, { silent: true });
-    }
 }
 
 function handleStreamEvent(imageId, data, countStats = false) {
@@ -1122,7 +1155,7 @@ async function removeImage(imageId) {
     loadRecordsPage(src);
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 3000) {
     const toast = document.createElement('div');
     toast.className = 'reeve-toast';
     toast.textContent = message;
@@ -1131,6 +1164,8 @@ function showToast(message, type = 'info') {
         toast.style.background = '#ef4444';
     } else if (type === 'success') {
         toast.style.background = '#10b981';
+    } else if (type === 'warning') {
+        toast.style.background = '#f59e0b';
     }
 
     document.body.appendChild(toast);
@@ -1138,7 +1173,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, duration);
 }
 
 //=============================================================================
@@ -2233,48 +2268,134 @@ function updateFolderWatchStatus() {
     }
 }
 
+/**
+ * 배치 내 이미지를 병렬 업로드하고, 업로드 완료 즉시 YOLO 감지까지 실행한다.
+ * 업로드 완료 파일은 즉시 로컬에서 삭제. 업로드 성공한 imageId 배열 반환.
+ * YOLO 성공/실패 여부와 무관하게 업로드된 모든 ID를 반환 (Stage 4에서 status 필터).
+ */
+async function uploadAndDetectBatchParallel(imageFiles, dirHandle) {
+    const results = await Promise.all(imageFiles.map(async ({ file, handle }) => {
+        if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return null;
+
+        const imageId = 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        state.images.set(imageId, {
+            file, analyzedId: null, originalImagePath: null,
+            source: 'folder', detections: [], selectedBbox: null,
+            status: 'uploading', result: null
+        });
+        renderStats();
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('source', 'folder');
+            formData.append('client_uuid', CLIENT_UUID);
+            const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+            const { analyzed_id, original_image_path } = await resp.json();
+            const s = state.images.get(imageId);
+            s.analyzedId = analyzed_id;
+            s.originalImagePath = original_image_path;
+            incrementStat('folder', 'uploaded');
+            updateFolderWatchStatus();  // 실시간 업로드 카운트 갱신
+            state.hydrateState.folder.totalCount++;
+            renderPagination('folder');
+
+            // 업로드 성공 직후 로컬 파일 삭제
+            await dirHandle.removeEntry(file.name)
+                .catch(e => console.warn('로컬 파일 삭제 실패:', file.name, e));
+
+            // 카드 생성 (folder source이므로 img.onload에서 detectVehicle 호출 안 됨)
+            await createImageCard(imageId, file);
+
+            // 업로드 완료 즉시 YOLO 감지 (detectionSemaphore로 최대 4개 동시)
+            await detectVehicle(imageId);
+
+            return imageId;
+        } catch (e) {
+            console.warn('업로드/감지 실패:', file.name, e);
+            state.images.delete(imageId);
+            return null;
+        }
+    }));
+    return results.filter(Boolean);
+}
+
+/**
+ * 폴더 감시 배치 파이프라인 (4단계 staged, 배치 단위 원자성 보장)
+ * Stage 2+3: 병렬 업로드 → 즉시 YOLO 감지 (업로드 완료 파일부터 감지 시작, detectionSemaphore=4)
+ * Stage 4+5: 병렬 Vision API 분석 → 완료 즉시 VectorDB 저장 (analysisSemaphore=8)
+ *   - 분석 완료 2초 후 state.images 삭제로 인한 race condition 방지
+ * 각 단계가 완전히 완료된 후 다음 단계로 진행. 배치 완료 후 다음 배치 시작.
+ */
 async function processBatchQueue() {
     if (folderWatch.isProcessing || folderWatch.queue.length === 0) return;
-
     folderWatch.isProcessing = true;
     const dirHandle = folderWatch.dirHandle;
 
-    while (folderWatch.queue.length > 0 && folderWatch.dirHandle) {
-        const batchSize = Math.max(1, parseInt(document.getElementById('batchSizeInput')?.value) || 10);
-        const batch = folderWatch.queue.splice(0, batchSize);
-        const imageFiles = [];
+    try {
+        while (folderWatch.queue.length > 0 && folderWatch.dirHandle) {
+            const batchSize = Math.max(1,
+                parseInt(document.getElementById('batchSizeInput')?.value) || 50);
+            const batch = folderWatch.queue.splice(0, batchSize);
 
-        // 이번 배치에서 이미지 파일만 필터 (여기서 getFile() 호출)
-        for (const { name, handle } of batch) {
-            try {
-                const file = await handle.getFile();
-                if (file.type.startsWith('image/')) {
-                    imageFiles.push({ file, handle });
+            // Stage 1: 핸들 → File 객체 변환 (순차, 빠름)
+            const imageFiles = [];
+            for (const { name, handle } of batch) {
+                try {
+                    const file = await handle.getFile();
+                    if (file.type.startsWith('image/')) imageFiles.push({ file, handle });
+                } catch (e) {
+                    console.warn('파일 읽기 실패:', name, e);
                 }
-            } catch (e) {
-                console.warn('파일 읽기 실패:', name, e);
             }
-        }
+            if (imageFiles.length === 0) {
+                folderWatch.processed += batch.length;
+                updateFolderWatchStatus();
+                continue;
+            }
 
-        if (imageFiles.length > 0) {
-            await handleFiles(
-                imageFiles.map(({ file }) => file),
-                {
-                    source: 'folder',
-                    onEachUploadSuccess: async (file) => {
-                        await dirHandle.removeEntry(file.name)
-                            .catch(e => console.warn('로컬 파일 삭제 실패:', file.name, e));
+            // Stage 2+3: 병렬 업로드 + 즉시 YOLO 감지 (업로드 완료 즉시 감지 시작)
+            const uploadedIds = await uploadAndDetectBatchParallel(imageFiles, dirHandle);
+
+            // Stage 4: 병렬 Vision API 분석 (analysisSemaphore=8 동시)
+            analysisSemaphore.max = Math.max(1,
+                parseInt(document.getElementById('maxAnalysisInput')?.value) || 8);
+
+            const detectedIds = uploadedIds.filter(id => {
+                const s = state.images.get(id);
+                return s?.status === 'detected' && s.selectedBbox;
+            });
+
+            // Stage 4+5: 병렬 Vision API 분석 → 완료 즉시 VectorDB 저장
+            // (분석 완료 2초 후 state.images에서 삭제되므로, 완료 직후 저장해야 함)
+            await Promise.all(detectedIds.map(async id => {
+                await analysisSemaphore.acquire();
+                try {
+                    const s = state.images.get(id);
+                    if (s) await analyzeImageSimple(id, s);
+                    // 분석 완료 직후 즉시 저장 (카드 자동 제거 타이머 전에)
+                    const current = state.images.get(id);
+                    if (current?.status === 'completed' && current.result?.id) {
+                        await saveImageToVectorDB(id, { silent: true });
                     }
+                } catch (e) {
+                    console.error('분석/저장 실패:', id, e);
+                    const s = state.images.get(id);
+                    if (s && s.status !== 'analysis_error') s.status = 'analysis_error';
+                } finally {
+                    analysisSemaphore.release();
                 }
-            );
-        }
+            }));
 
-        folderWatch.processed += batch.length;
+            folderWatch.processed += batch.length;
+            updateFolderWatchStatus();
+        }
+    } finally {
+        folderWatch.isProcessing = false;
         updateFolderWatchStatus();
     }
-
-    folderWatch.isProcessing = false;
-    updateFolderWatchStatus();
 }
 
 async function pollFolderForNewFiles() {
