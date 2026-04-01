@@ -1,239 +1,198 @@
-# Reeve — AI 기반 차량 제조사/모델 자동 식별 시스템
+# Reeve
 
-CCTV·카메라 영상에서 차량을 감지하고, EfficientNet-B3 임베딩 + 벡터 검색 + VLM 재판정으로 제조사와 모델을 자동 식별합니다.
+AI 기반 차량 제조사·모델 자동 식별 시스템.
 
----
-
-## 시스템 구성
-
-| 서비스 | 포트 | 역할 |
-|--------|------|------|
-| **Studio** | 8000 | 데이터 관리, 분석, 학습 데이터 추출, 파인튜닝 오케스트레이션 |
-| **Identifier** | 8001 | 프로덕션 차량 식별 API (동기 + 비동기 배치) |
-| **Trainer** | 8002 | VLM 파인튜닝 API (LlamaFactory / MLX 백엔드 전환) |
+CCTV·사진 이미지에서 차량을 탐지하고, EfficientNet 임베딩 + Qdrant 벡터 검색 + 파인튜닝된 Qwen3-VL을 조합해 제조사와 모델을 자동으로 식별합니다.
 
 ---
 
 ## 아키텍처
 
-### 데이터 흐름
-
 ```
-이미지 업로드
-    │
-    ▼
-YOLO26 차량 감지 → BBox 선택
-    │
-    ▼
-Vision API 분석 (OpenAI GPT-5.2 / Gemini 2.5 Flash / Ollama)
-    │
-    ▼
-RapidFuzz 매칭 → manufacturers / vehicle_models (MySQL)
-    │
-    ▼
-관리자 검토 & 승인
-    │
-    ▼
-EfficientNet-B3 임베딩 (1536d) → Qdrant 저장
-    │
-    ▼
-Identifier 서비스 (벡터 검색 + 투표 + VLM 재판정)
+사용자 이미지
+    ↓
+Studio (8000) — 업로드, OpenAI/Ollama 비전 분석, 관리 UI
+    ↓
+Identifier (8001) — YOLO 탐지 → EfficientNet 임베딩 → Qdrant 검색 → 투표
+    ↓
+MySQL (결과 저장) + Qdrant (벡터 저장)
+    ↓
+Trainer (8002) — EfficientNet / LLM 파인튜닝 (LlamaFactory or MLX)
 ```
 
-### 식별 알고리즘
+| 서비스 | 포트 | 역할 |
+|--------|------|------|
+| Studio | 8000 | 관리 UI, 데이터 라벨링, OpenAI Vision 분석, 파인튜닝 오케스트레이션 |
+| Identifier | 8001 | 차량 식별 (동기/비동기), YOLO 탐지, EfficientNet 임베딩 |
+| Trainer | 8002 | 모델 파인튜닝, LoRA 병합, GGUF 내보내기 |
+| Qdrant | 6333 | 차량 이미지 임베딩(1280차원) 저장·검색 |
+| Redis | 6379 | Celery 브로커, 비동기 결과 저장 (24h TTL) |
+| Ollama | 11434 | Qwen3-VL:8b 로컬 VLM 서빙 |
+| MySQL | 3306 | 제조사, 모델, 분석 이력 저장 (개발 환경) |
 
-1. **YOLO26** — 차량 감지 및 크롭
-2. **EfficientNet-B3** — 1536d 벡터 임베딩 생성
-3. **Qdrant top-K 검색** — (manufacturer_id, model_id) 쌍으로 투표 집계
-4. **신뢰도 판정** — `identified` / `uncertain` / `unidentified`
-5. **VLM 재판정** (visual_rag 모드) — Qwen3-VL:8b 최종 판정
-
-**동작 모드** (`IDENTIFIER_MODE`):
-- `embedding_only` — EfficientNet-B3 + 투표만 사용 (기본)
-- `visual_rag` — EfficientNet-B3 후보 → Qwen3-VL 재판정
-- `vlm_only` — VLM 단독 판정
-
-**안전장치**:
-- 투표 집중도: 승자 득표율이 top-K의 30% 미만이면 `uncertain`
-- YOLO 미감지: 차량이 감지되지 않으면 결과를 `uncertain`으로 하향
+**식별 파이프라인 (Identifier, efficientnet 모드 기준):**
+1. **YOLO26** — 차량 바운딩 박스 탐지 및 크롭
+2. **EfficientNetV2-M** — 1280차원 특징 벡터 추출 후 분류
+3. 신뢰도 ≥ 0.9 → 즉시 반환
+4. 신뢰도 < 0.9 → **Qwen3-VL:8b** 폴백 추론
 
 ---
 
-## 기술 스택
+## 시작하기
 
-| 영역 | 기술 |
-|------|------|
-| 언어 | Python 3.12 |
-| API 프레임워크 | FastAPI + Uvicorn |
-| AI / Vision | OpenAI API, Gemini API, EfficientNet-B3, YOLO26, Ollama (Qwen3-VL) |
-| 임베딩 | EfficientNet-B3 (1536d) |
-| 파인튜닝 | Trainer 서비스 — LlamaFactory (Linux/Windows NVIDIA) / mlx-lm (Mac Apple Silicon) |
-| 관계형 DB | MySQL 8.0 (SQLAlchemy + aiomysql) |
-| 벡터 DB | Qdrant |
-| 비동기 처리 | Celery 5 + Redis 7 |
-| 스케줄러 | APScheduler |
-| 컨테이너 | Docker / Docker Compose |
+### 사전 요구사항
 
----
+- Docker & Docker Compose
+- (Linux/Windows) NVIDIA GPU + CUDA 드라이버
+- (Mac) Apple Silicon (M1 이상)
 
-## 빠른 시작
-
-### 사전 준비
-
-`docker/.env` 파일 생성 (`.env.example` 참고):
-
-```env
-OPENAI_API_KEY=sk-...
-GEMINI_API_KEY=...
-MYSQL_PASSWORD=your_password
-QDRANT_HOST=qdrant
-EMBEDDING_DEVICE=cuda   # Mac은 cpu
-```
-
-### 개발 환경 시작
+### 환경 설정
 
 ```bash
-# Linux / Windows (NVIDIA GPU) — 전체 Docker
-cd docker
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
+cp docker/.env.example docker/.env
+# docker/.env 파일을 열어 필수 값 입력
+```
 
-# macOS (Apple Silicon) — ollama + trainer 네이티브, 나머지 Docker
+**필수 설정:**
+
+| 변수 | 설명 |
+|------|------|
+| `MYSQL_ROOT_PASSWORD` | MySQL root 비밀번호 |
+| `MYSQL_PASSWORD` | 애플리케이션 DB 비밀번호 |
+| `OPENAI_API_KEY` | OpenAI API 키 (비전 분석용) |
+| `GEMINI_API_KEY` | Gemini API 키 (교차 검증용) |
+| `EMBEDDING_DEVICE` | `cuda` (Linux/Windows GPU) 또는 `cpu` (Mac) |
+
+### 실행
+
+**Linux/Windows (NVIDIA GPU):**
+```bash
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
+```
+
+**Mac (Apple Silicon):**
+```bash
+# Ollama와 Trainer는 네이티브로 실행
 ollama serve &
 TRAINER_BACKEND=mlx uvicorn trainer.main:app --port 8002 &
-cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
+
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f docker/docker-compose.mac.yml up -d
 ```
 
-### 프로덕션 시작
-
-```bash
-cd docker
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-```
-
-### 로컬 실행 (Docker 없이)
-
-```bash
-uvicorn studio.main:app --reload --port 8000
-uvicorn identifier.main:app --reload --port 8001
-TRAINER_BACKEND=mlx uvicorn trainer.main:app --reload --port 8002
-celery -A identifier.celery_app worker --loglevel=info
-```
+서비스 접속:
+- Studio UI: http://localhost:8000
+- Identifier API: http://localhost:8001
+- Trainer API: http://localhost:8002
 
 ---
 
-## API 주요 엔드포인트
+## 주요 환경 변수
 
-### Studio (8000)
+### 공통
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `GET` | `/` | 분석 UI (analyze_v2.html) |
-| `GET` | `/admin-ui` | 관리자 UI (DB관리 + 학습데이터추출) |
-| `GET` | `/finetune-ui` | 파인튜닝 관리 UI |
-| `POST` | `/api/upload` | 이미지 업로드 (DB 레코드 생성) |
-| `POST` | `/api/detect-vehicle` | YOLO 차량 감지 |
-| `POST` | `/api/analyze-vehicle-stream` | Vision API 분석 (SSE 스트리밍) |
-| `POST` | `/api/sync-to-qdrant` | 승인된 데이터 → Qdrant 동기화 |
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `QDRANT_HOST` | `qdrant` | Qdrant 호스트 |
+| `QDRANT_PORT` | `6333` | Qdrant 포트 |
+| `EMBEDDING_DEVICE` | `cuda` | 임베딩 연산 장치 (`cuda` / `cpu`) |
+| `LOG_LEVEL` | `INFO` | 로그 레벨 |
+
+### Studio (포트 8000)
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `OPENAI_MODEL` | `gpt-5-mini` | OpenAI 비전 모델 |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini 교차 검증 모델 |
+| `FUZZY_MATCH_THRESHOLD` | `80` | 퍼지 매칭 임계값 |
+| `CONFIDENCE_THRESHOLD` | `0.8` | 식별 신뢰도 임계값 |
+| `ANALYZED_VEHICLES_RETENTION_DAYS` | `30` | 분석 결과 보존 기간 (일) |
+
+### Identifier (포트 8001)
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `IDENTIFIER_MODE` | `efficientnet` | 식별 모드 (`efficientnet` / `visual_rag` / `vlm_only`) |
+| `VLM_MODEL_NAME` | `qwen3-vl:8b` | Ollama VLM 모델명 |
+| `IDENTIFIER_TOP_K` | `10` | Qdrant 후보 검색 수 |
+| `IDENTIFIER_CONFIDENCE_THRESHOLD` | `0.80` | 식별 신뢰도 임계값 |
+| `IDENTIFIER_MAX_BATCH_FILES` | `100` | 배치 최대 파일 수 |
+| `IDENTIFIER_MAX_BATCH_UPLOAD_SIZE` | `104857600` | 배치 최대 업로드 크기 (100MB) |
+
+---
+
+## API
 
 ### Identifier (8001)
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `POST` | `/identify` | 동기 단일 이미지 식별 |
-| `POST` | `/identify/batch` | 동기 배치 (최대 100개 / 100MB) |
-| `POST` | `/async/identify` | 비동기 단일 이미지 (task_id 반환) |
-| `POST` | `/async/identify/batch` | 비동기 배치 (task_id 반환) |
-| `GET` | `/async/result/{task_id}` | 비동기 결과 폴링 |
-| `GET` | `/docs` | OpenAPI 문서 (CCTV 연동 가이드 포함) |
+| 메서드 | 엔드포인트 | 설명 |
+|--------|-----------|------|
+| GET | `/health` | 서비스 상태 확인 |
+| POST | `/detect` | YOLO 차량 탐지 (바운딩 박스 반환) |
+| POST | `/identify` | 단일 이미지 동기 식별 |
+| POST | `/async/identify` | 단일 이미지 비동기 식별 |
+| POST | `/async/identify/batch` | 배치 비동기 식별 (최대 100장, 100MB) |
+| GET | `/async/result/{task_id}` | 비동기 결과 조회 |
+
+**식별 응답 예시:**
+```json
+{
+  "status": "identified",
+  "manufacturer_korean": "현대",
+  "manufacturer_english": "Hyundai",
+  "model_korean": "아반떼",
+  "model_english": "Avante",
+  "confidence": 0.95,
+  "yolo_detected": true
+}
+```
+
+status 해석: `identified` — 신뢰할 수 있는 결과 / `low_confidence` — 후보 있음, 수동 확인 필요 / `no_match` — 유사 학습 데이터 없음
 
 ### 비동기 처리 흐름
 
 ```
-POST /async/identify → task_id 즉시 반환 (<10ms)
-    │
-    ▼ (Redis 큐)
-Celery Worker 처리 (자동 3회 재시도)
-    │
-    ▼ (Redis 저장, 24h TTL)
-GET /async/result/{task_id} → PENDING / STARTED / SUCCESS / FAILURE
+POST /async/identify → { "task_id": "abc-123" }  (즉시 반환, <10ms)
+         ↓
+Redis 큐 → Celery Worker 처리
+         ↓
+GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 ```
+
+결과는 Redis에 24시간 보관됩니다. 자세한 내용은 [docs/ASYNC_USAGE.md](docs/ASYNC_USAGE.md) 참조.
+
+### Studio (8000)
+
+- `GET /` — 메인 분석 UI
+- `GET /admin-ui` — 관리/리뷰 UI
+- `GET /analyze-ui` — 차량 분석 UI (YOLO 탐지 + SSE 스트리밍)
+- `GET /finetune-ui` — 파인튜닝 관리 UI
+- `POST /api/analyze/vehicle` — OpenAI Vision 분석
+- `POST /admin/analyze-batch` — 배치 분석
+
+### Trainer (8002)
+
+- `POST /train/start` — 파인튜닝 시작
+- `GET /train/status` — 학습 진행 상태 (epoch, loss)
+- `POST /train/stop` — 학습 중단
+- `POST /train/export` — LoRA 병합 및 GGUF 내보내기
+- `GET /hw-profile` — 하드웨어 감지 및 최적 파라미터 제안
 
 ---
 
-## 데이터베이스
-
-MySQL 8.0, 4개 테이블:
-
-```
-manufacturers (제조사)
-    └── vehicle_models (차량 모델, 1:N cascade delete)
-            └── analyzed_vehicles (분석 결과, SET NULL on delete)
-                        └── training_dataset (학습 데이터, Qdrant qdrant_id 연결)
-```
-
-- 스키마: `sql/user_provided_ddl.sql`
-- 시드 데이터: `sql/user_provided_dml.sql`
-- Docker 초기화 시 자동 적용
-
----
-
-## 설정 (주요 환경변수)
-
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `IDENTIFIER_MODE` | `embedding_only` | 식별 모드 |
-| `IDENTIFIER_TOP_K` | `10` | Qdrant 검색 결과 수 |
-| `IDENTIFIER_VOTE_THRESHOLD` | `3` | 최소 득표 수 |
-| `IDENTIFIER_CONFIDENCE_THRESHOLD` | `0.80` | 최소 신뢰도 점수 |
-| `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD` | `0.3` | 승자 최소 득표율 |
-| `VLM_MODEL_NAME` | `qwen3-vl:8b` | Ollama VLM 모델명 |
-| `FUZZY_MATCH_THRESHOLD` | `80` | RapidFuzz 매칭 임계값 |
-| `EMBEDDING_DEVICE` | `cpu` | `cpu` 또는 `cuda` |
-| `CLEANUP_ENABLED` | `true` | 미검증 레코드 자동 정리 |
-| `ANALYZED_VEHICLES_RETENTION_DAYS` | `30` | 미검증 레코드 보존 기간 |
-
----
-
-## 파인튜닝 파이프라인
-
-1. Studio `/finetune-ui`에서 학습 데이터 Export
-   - `data/finetune/vehicle_train.json`, `vehicle_val.json` 생성 (ShareGPT 형식)
-2. Trainer API (port 8002)에서 학습 시작
-   - **Linux/Windows NVIDIA**: `TRAINER_BACKEND=llamafactory` — QLoRA 4bit
-   - **Mac Apple Silicon**: `TRAINER_BACKEND=mlx` — mlx-lm LoRA (네이티브 Metal GPU)
-3. LoRA merge → GGUF 변환 → Ollama 배포
-4. `VLM_MODEL_NAME`을 배포된 모델명으로 업데이트
-
-### 배포 패키지 생성
+## 배포 패키지 생성
 
 ```bash
-# 개발 패키지 (각 OS별)
-./deploy/package.sh dev-linux    # Linux GPU
-./deploy/package.sh dev-windows  # Windows GPU
-./deploy/package.sh dev-mac      # Mac Apple Silicon (MLX)
-./deploy/package.sh all          # 전체
-
-# 운영 패키지 (Identifier 단독)
-./deploy/package.sh prod-linux
-./deploy/package.sh prod-windows
+./deploy/package.sh [dev-linux|dev-windows|dev-mac|prod-linux|prod-windows]
 ```
 
----
-
-## 개발 참고
-
-- **Identifier는 MySQL 불필요.** 제조사/모델 이름은 Qdrant payload에서 직접 조회.
-- **Trainer 서비스 분리**: Studio의 `/finetune/train/*` 호출을 Trainer(port 8002)가 수신. `TRAINER_BACKEND` 환경변수로 백엔드 전환.
-- **Mac 파인튜닝**: `TRAINER_BACKEND=mlx`로 mlx-lm 사용. Docker 불필요, 네이티브 Metal GPU 최적화.
-- **워커 수 자동 계산**: `IDENTIFIER_TORCH_THREADS`만 설정하면 `start.sh`가 `workers = cpu_count // IDENTIFIER_TORCH_THREADS`로 계산.
-- **날짜별 파일 저장**: `data/uploads/YYYY-MM-DD/`, `data/crops/YYYY-MM-DD/`
-- **Vision 백엔드 추상화**: `studio/services/vision_backend.py`에서 OpenAI / Gemini / Ollama 통합 관리.
-- **Qdrant 중복 방지**: 동기화 시 유사도 0.92 이상이면 자동 스킵.
+프로덕션 패키지는 MySQL 컨테이너를 포함하지 않으며, 외부 DB 연결을 사용합니다.
 
 ---
 
-## 문서
+## 개발 환경 참고
 
-- [`docs/ASYNC_USAGE.md`](docs/ASYNC_USAGE.md) — 비동기 API 상세 사용 가이드
-- [`docs/별첨2_AI솔루션_세부설명자료.md`](docs/별첨2_AI솔루션_세부설명자료.md) — AI 솔루션 기술 상세 설명
-- `GET /docs` (Identifier) — OpenAPI Swagger (CCTV 연동 엔지니어용 가이드 포함)
+- 개발 환경에서는 소스 코드가 컨테이너에 bind mount되어 코드 변경 시 자동 재시작됩니다.
+- Uvicorn 워커 수는 `identifier/start.sh`에서 CPU 코어 수에 따라 자동 계산됩니다.
+- Qdrant 재인덱싱: `python3 .claude/index_qdrant.py --clear`
+- 학습 데이터 결과: [docs/학습데이터결과서.md](docs/학습데이터결과서.md)
+- 시스템 아키텍처 다이어그램: [docs/architecture.svg](docs/architecture.svg)

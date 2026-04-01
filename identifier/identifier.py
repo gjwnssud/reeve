@@ -62,9 +62,9 @@ class IdentificationResult(BaseModel):
     status: str = Field(
         description=(
             "판별 상태. "
-            "`identified`: 판별 성공 (confidence ≥ 0.8), "
-            "`uncertain`: 신뢰도 부족 — 가장 유사한 후보 표시, "
-            "`no_data`: 학습 데이터 없음"
+            "`identified`: 판별 성공 — 신뢰할 수 있는 결과, "
+            "`low_confidence`: 후보는 있지만 확신 부족 — 수동 확인 권장, "
+            "`no_match`: 유사한 학습 데이터 없음 — 데이터 추가 필요"
         )
     )
     manufacturer_korean: Optional[str] = Field(default=None, description="제조사 한글명 (예: 현대)")
@@ -81,7 +81,7 @@ class IdentificationResult(BaseModel):
     image_height: int = Field(default=0, description="원본 이미지 높이 (픽셀)")
     top_k_details: List[TopKDetail] = Field(
         default=[],
-        description="유사도 상위 K개 이미지 상세 정보. uncertain 또는 identified 상태일 때 포함됩니다."
+        description="유사도 상위 K개 이미지 상세 정보. identified 또는 low_confidence 상태일 때 포함됩니다."
     )
 
 
@@ -421,7 +421,7 @@ class VehicleIdentifier:
                     result_status = "identified"
                     # YOLO 미감지 시 신뢰도 하향
                     if detection is None:
-                        result_status = "uncertain"
+                        result_status = "low_confidence"
                         message = "차량 자동 감지 실패 - 분류기 결과이지만 신뢰도를 낮춥니다."
                     else:
                         message = "EfficientNetV2-M이 차량을 판별하였습니다."
@@ -459,7 +459,7 @@ class VehicleIdentifier:
         except Exception as e:
             logger.error(f"Qdrant 폴백도 실패: {e}")
             return IdentificationResult(
-                status="uncertain",
+                status="low_confidence",
                 confidence=0.0,
                 message="판별에 실패했습니다.",
                 detection=detection,
@@ -481,7 +481,7 @@ class VehicleIdentifier:
 
         if not search_results:
             return IdentificationResult(
-                status="no_data",
+                status="no_match",
                 confidence=0.0,
                 message="학습 데이터가 없습니다. 관리자에게 문의하세요.",
                 detection=detection,
@@ -581,15 +581,15 @@ class VehicleIdentifier:
             status = "identified"
             message = "VLM이 차량을 판별하였습니다."
         elif vlm.manufacturer_korean:
-            status = "uncertain"
+            status = "low_confidence"
             message = f"VLM 판별 신뢰도 낮음 ({vlm.confidence:.0%}). 가장 유사한 후보를 표시합니다."
         else:
-            status = "uncertain"
+            status = "low_confidence"
             message = "VLM이 차량을 판별하지 못했습니다."
 
         # YOLO 미감지 패널티 (기존 safeguard 유지)
         if detection is None and status == "identified":
-            status = "uncertain"
+            status = "low_confidence"
             message = "차량 자동 감지 실패 - VLM 판별 결과이지만 신뢰도가 낮습니다."
 
         return IdentificationResult(
@@ -860,7 +860,7 @@ class VehicleIdentifier:
         """검색 결과로부터 판별 결과 생성 (단건/배치 공통)"""
         if not search_results:
             return IdentificationResult(
-                status="no_data",
+                status="no_match",
                 confidence=0.0,
                 message="학습 데이터가 없습니다. 관리자에게 문의하세요.",
                 detection=detection,
@@ -873,7 +873,7 @@ class VehicleIdentifier:
 
         if best.max_score < settings.min_similarity:
             return IdentificationResult(
-                status="uncertain",
+                status="no_match",
                 confidence=round(best.confidence, 4),
                 message="판별 불가 - 유사한 차량 데이터를 찾을 수 없습니다.",
                 detection=detection,
@@ -886,14 +886,14 @@ class VehicleIdentifier:
             status = "identified"
             message = "차량이 판별되었습니다."
         else:
-            status = "uncertain"
+            status = "low_confidence"
             message = "판별 불가 - 신뢰도가 낮습니다. 가장 유사한 후보를 표시합니다."
 
         # ── 보정 1: 투표 집중도 (Vote Concentration) ──
-        # Top-K 결과 중 winner의 득표 비율이 낮으면 여러 차종으로 분산된 것 → uncertain
+        # Top-K 결과 중 winner의 득표 비율이 낮으면 여러 차종으로 분산된 것 → low_confidence
         concentration = best.count / len(search_results)
         if concentration < settings.vote_concentration_threshold and status == "identified":
-            status = "uncertain"
+            status = "low_confidence"
             message = (
                 f"판별 불가 - 상위 결과가 여러 차종으로 분산됩니다. "
                 f"(집중도 {concentration:.0%})"
@@ -908,10 +908,10 @@ class VehicleIdentifier:
         # ── 보정 2: YOLO 미감지 패널티 ──
         # detection이 None이면 전체 이미지(배경 포함)로 임베딩한 상태 → identified 차단
         if detection is None and status == "identified":
-            status = "uncertain"
+            status = "low_confidence"
             message = "차량 자동 감지 실패 - 전체 이미지로 판별한 결과이므로 신뢰도가 낮습니다."
             logger.info(
-                f"No vehicle detection — downgraded to uncertain "
+                f"No vehicle detection — downgraded to low_confidence "
                 f"(was identified with confidence={best.confidence:.4f})"
             )
 

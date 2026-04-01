@@ -4,151 +4,93 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Reeve는 AI 기반 차량 제조사/모델 자동 식별 시스템으로, 세 개의 독립적인 FastAPI 서비스로 구성됩니다.
+**Reeve** is an AI-powered vehicle manufacturer and model auto-classification system. It is a monorepo of three FastAPI microservices backed by MySQL, Qdrant (vector DB), Redis, and Ollama.
 
-- **Studio (port 8000)** — 개발/관리 서비스. OpenAI Vision / Gemini Vision으로 차량 분석, MySQL로 구조화 데이터 저장, Qdrant에 학습 데이터 동기화.
-- **Identifier (port 8001)** — 프로덕션 식별 서비스. MySQL 없음. EfficientNet-B3 임베딩 + Qdrant 벡터 검색 + Qwen3-VL로 차량 식별. 동기/비동기(Celery) 지원.
-- **Trainer (port 8002)** — 파인튜닝 서비스. `TRAINER_BACKEND=llamafactory` (Linux/Windows NVIDIA) 또는 `TRAINER_BACKEND=mlx` (Mac Apple Silicon 네이티브). Studio의 `/finetune/train/*` 호출을 수신.
+## Development Commands
 
-## Commands
+### Running Services
 
 ```bash
-# 개발 환경 시작 - Linux/Windows (NVIDIA GPU)
-cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
+# Linux/Windows (NVIDIA GPU)
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
 
-# 개발 환경 시작 - Mac (네이티브 ollama + trainer, 나머지 Docker)
-# .venv 가상환경 준비 (최초 1회)
-python3 -m venv .venv
-.venv/bin/pip install mlx-lm mlx-vlm fastapi "uvicorn[standard]" pydantic-settings pyyaml psutil httpx
+# Mac (Apple Silicon)
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.mac.yml up -d
+```
 
-ollama serve &                                                              # 네이티브 ollama
-TRAINER_BACKEND=mlx .venv/bin/uvicorn trainer.main:app --port 8002 &      # 네이티브 MLX trainer
-cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
+### Reindexing the Qdrant Knowledge Base
 
-# 프로덕션 시작 (qdrant + identifier + redis + celery-worker + ollama + trainer)
-cd docker && docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```bash
+python3 .claude/index_qdrant.py --clear
+```
 
-# 로컬 실행 (가상환경 기준)
-.venv/bin/uvicorn studio.main:app --reload --port 8000
-.venv/bin/uvicorn identifier.main:app --reload --port 8001
-.venv/bin/uvicorn trainer.main:app --reload --port 8002
-celery -A identifier.celery_app worker --loglevel=info
+### Deployment Packaging
 
-# 테스트
-pytest
-pytest -k test_name
-pytest --asyncio-mode=auto
-
-# 배포 패키지 생성
-./deploy/package.sh dev-linux    # Linux GPU 개발 패키지
-./deploy/package.sh dev-windows  # Windows GPU 개발 패키지
-./deploy/package.sh dev-mac      # Mac Apple Silicon 개발 패키지 (MLX)
-./deploy/package.sh prod-linux   # Linux 운영 패키지 (Identifier 전용)
-./deploy/package.sh all          # 전체 패키지
+```bash
+# Creates self-contained deployment packages
+./deploy/package.sh [dev-linux|dev-windows|dev-mac|prod-linux|prod-windows]
 ```
 
 ## Architecture
 
-### 데이터 흐름
+Three microservices communicate over a shared Docker network:
 
-```
-이미지 업로드 → YOLO 차량 감지 → BBox 선택 → Vision API 분석 (OpenAI/Gemini)
-→ RapidFuzz 매칭 (manufacturers/vehicle_models DB) → 관리자 검토/승인
-→ EfficientNet-B3 임베딩 생성 → Qdrant 저장 → Identifier 서비스가 벡터 검색으로 차량 식별
-```
+| Service | Port | Purpose |
+|---------|------|---------|
+| `studio` | 8000 | Web UI, admin CRUD, image upload, OpenAI/Ollama vision analysis |
+| `identifier` | 8001 | ML pipeline: YOLO detection → EfficientNetV2-M embeddings → Qdrant search → voting |
+| `trainer` | 8002 | Fine-tuning backend (LlamaFactory on Linux/Windows, MLX on Mac) |
 
-### 식별 알고리즘 (`identifier/identifier.py`)
+### Vehicle Identification Pipeline (`identifier/`)
 
-1. YOLO26으로 차량 감지 및 크롭
-2. EfficientNet-B3로 1536d 임베딩 생성
-3. Qdrant top-K 검색 + (manufacturer_id, model_id) 쌍으로 투표 집계
-4. 신뢰도 판정: `identified` / `uncertain` / `unidentified`
-5. `visual_rag` 모드: Qwen3-VL로 최종 재판정
+Default mode: `efficientnet`
 
-**3가지 동작 모드** (`IDENTIFIER_MODE`): `embedding_only` (기본) / `visual_rag` / `vlm_only`
+1. **YOLO26** — detects vehicle bounding boxes
+2. **EfficientNetV2-M** — extracts 1280-dim feature vectors and classifies
+3. confidence ≥ 0.9 → return result directly
+4. confidence < 0.9 → **Qwen3-VL:8b** fallback inference
 
-**안전장치**: vote_concentration (승자 득표율 ≥ 30%), YOLO 미감지 시 `uncertain` 강제 하향
+Other modes (configured via `IDENTIFIER_MODE`):
+- `visual_rag`: EfficientNet embedding → Qdrant search → always calls Qwen3-VL for final judgment
+- `vlm_only`: YOLO crop → Qwen3-VL only (no Qdrant/embedding)
 
-### 주요 설계 결정
+Async batch jobs are handled by **Celery + Redis** (`identifier/start_worker.sh`).
 
-- **Identifier는 MySQL-free.** 제조사/모델 이름은 Qdrant payload에 비정규화 저장 (`manufacturer_korean`, `manufacturer_english`, `model_korean`, `model_english`).
-- **단일 Qdrant 컬렉션** (`training_images`, 1536d). 추가 컬렉션 없음.
-- **DB-First 업로드**: `POST /api/upload` → DB 레코드 생성 (stage: `uploaded`) → `POST /api/detect-vehicle` → `POST /api/analyze-vehicle-stream` (SSE). 파일 수신과 분석을 분리.
-- **워커 자동 계산**: `workers = cpu_count // IDENTIFIER_TORCH_THREADS`. `.env`에 `IDENTIFIER_TORCH_THREADS`만 설정하면 `start.sh`가 계산.
-- **파일 삭제 정책**: 레코드 삭제 시 crop 이미지 + 원본 업로드 파일 함께 삭제.
-- **Vision 백엔드 추상화** (`studio/services/vision_backend.py`): OpenAI / Gemini / Ollama를 통합 인터페이스로 제공.
-- **Trainer 서비스 분리** (`trainer/`): 파인튜닝 로직을 Studio에서 분리. `TRAINER_BACKEND=mlx` (Mac, mlx-lm 네이티브) 또는 `llamafactory` (Linux/Windows Docker). Studio는 HTTP 프록시로 호출.
+### Studio Service (`studio/`)
 
-### Docker Compose 구조
+- Manages Manufacturer, VehicleModel, AnalyzedVehicle, TrainingDataset entities (SQLAlchemy + MySQL)
+- Calls `identifier` for ML analysis and `trainer` for fine-tuning jobs
+- Uses OpenAI (GPT-5-mini) or local Ollama (Qwen3-VL:8b) for vision pre-analysis
+- APScheduler runs automatic cleanup of old analyzed vehicles
 
-| 파일 | 용도 |
-|------|------|
-| `docker-compose.yml` | 프로덕션 베이스 (qdrant, identifier, redis, celery-worker, ollama, trainer) |
-| `docker-compose.dev.yml` | 개발 오버라이드 (mysql, studio 추가, 소스 bind-mount) |
-| `docker-compose.gpu.yml` | NVIDIA GPU 설정 |
-| `docker-compose.mac.yml` | macOS 오버라이드 (ollama/trainer 비활성화 → 네이티브 실행, studio Docker로 복원) |
+### Trainer Service (`trainer/`)
 
-`.env` 파일 위치: `docker/.env`
-
-### 비동기 처리 패턴
-
-FastAPI → Redis 큐 → Celery Worker → 결과 Redis 저장 (24h TTL)
-
-- `/async/identify` — 단일 이미지 비동기
-- `/async/identify/batch` — 최대 100개 파일 / 100MB
-- `/async/result/{task_id}` — 결과 폴링 (PENDING → STARTED → SUCCESS/FAILURE)
-
-### Studio UI 라우팅
-
-- `GET /` / `GET /analyze-ui` → `analyze_v2.html` (분석 메인)
-- `GET /admin-ui` → `index.html` (기초DB관리 탭 + 학습데이터추출 탭)
-- `GET /finetune-ui` → `finetune.html` (파인튜닝 관리)
-
-### 자동 정리 스케줄러 (`studio/tasks/cleanup.py`)
-
-매일 `CLEANUP_HOUR`시에 `is_verified=false`이고 `ANALYZED_VEHICLES_RETENTION_DAYS`일 초과된 레코드 + 이미지 자동 삭제.
-
-## Database (MySQL 8.0)
-
-4개 테이블: `manufacturers` → `vehicle_models` (1:N, cascade delete), `analyzed_vehicles` (양쪽 SET NULL on delete), `training_dataset` (Qdrant `qdrant_id`로 연결).
-
-스키마: `sql/user_provided_ddl.sql`, 시드: `sql/user_provided_dml.sql` (Docker 초기화 자동 적용)
+- On Linux/Windows: wraps LlamaFactory CLI for LLM fine-tuning
+- On Mac: uses MLX backend (Apple Silicon native)
+- Supports EfficientNet classifier fine-tuning as well
 
 ## Configuration
 
-세 서비스 모두 Pydantic Settings로 `docker/.env` 로드.
+Copy `docker/.env.example` to `docker/.env` and configure:
+- `OPENAI_API_KEY` / `GEMINI_API_KEY` for cloud vision
+- MySQL credentials (dev only — production uses external DB)
+- `EMBEDDING_DEVICE` (`cuda` / `cpu`)
+- Identifier mode and VLM settings
+- Retention and cleanup schedule for analyzed vehicles
 
-주요 변수:
+## Key File Locations
 
-| 변수 | 서비스 | 설명 |
-|------|--------|------|
-| `IDENTIFIER_MODE` | identifier | `embedding_only` / `visual_rag` / `vlm_only` |
-| `IDENTIFIER_TOP_K` | identifier | Qdrant 검색 결과 수 (default 10) |
-| `IDENTIFIER_VOTE_THRESHOLD` | identifier | 최소 득표 수 (default 3) |
-| `IDENTIFIER_CONFIDENCE_THRESHOLD` | identifier | 최소 신뢰도 (default 0.80) |
-| `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD` | identifier | 승자 최소 득표율 (default 0.3) |
-| `VLM_MODEL_NAME` | identifier | Ollama 모델명 (default qwen3-vl:8b) |
-| `FUZZY_MATCH_THRESHOLD` | studio | RapidFuzz 매칭 임계값 (default 80) |
-| `CLEANUP_ENABLED` | studio | 자동 정리 활성화 (default true) |
-| `EMBEDDING_DEVICE` | both | `cpu` 또는 `cuda` |
-| `TRAINER_BACKEND` | trainer | `llamafactory` (Linux/Windows) / `mlx` (Mac 네이티브) |
-| `TRAINER_URL` | studio | Trainer 서비스 URL (default http://localhost:8002) |
-| `TRAINER_DATA_DIR` | trainer | 학습 데이터 디렉토리 (default data/finetune) |
-| `TRAINER_OUTPUT_DIR` | trainer | 체크포인트 출력 디렉토리 (default output) |
-| `OLLAMA_BASE_URL` | trainer | Ollama URL (default http://localhost:11434) |
-| `IDENTIFIER_URL` | trainer | Identifier URL (default http://localhost:8001), 파인튜닝 완료 후 핫리로드 알림용 |
-| `GGUF_CONVERTER_PATH` | trainer | llama.cpp의 convert_hf_to_gguf.py 절대 경로 (미설정 시 GGUF 자동변환 비활성) |
+- Entry points: `studio/main.py`, `identifier/main.py`, `trainer/main.py`
+- ML inference core: `identifier/services/`
+- Database models: `studio/models/`
+- OpenAI vision wrapper: `studio/services/openai_vision.py` (current model: `gpt-5-mini`)
+- SQL schema & seed data: `sql/`
+- Architecture diagram: `docs/architecture.svg`
+- Async API usage guide: `docs/ASYNC_USAGE.md`
 
-## Language
+## Platform Notes
 
-코드 주석과 프로젝트 문서는 한국어. UI 텍스트는 한국어. 변수명과 API 경로는 영어.
-
-## MCP & Knowledge Base (Qdrant)
-
-```bash
-# 전체 재인덱싱
-python3 .claude/index_qdrant.py --clear
-```
-
-- 검색 시 `limit` 3~5로 제한 (컨텍스트 오버플로우 방지)
-- `.env`, `logs/`, `data/` 는 인덱싱 제외
+- `docker/docker-compose.dev.yml` — Linux/Windows with NVIDIA GPU; hot-reload via bind mounts
+- `docker/docker-compose.mac.yml` — Apple Silicon; uses CPU/MLX backends instead of CUDA
+- `Dockerfile.identifier` is multi-arch (`linux/amd64` builds with CUDA, `linux/arm64` uses CPU)
+- Uvicorn worker count in `identifier/start.sh` is auto-calculated from CPU core count
