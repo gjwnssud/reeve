@@ -158,6 +158,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "[Reeve] Linux 서비스 시작 (GPU)"
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>/dev/null || true
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 echo ""
@@ -257,6 +258,7 @@ EOF
 cd /d "%~dp0"
 
 echo [Reeve] Windows 서비스 시작 (GPU)...
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>nul
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 if errorlevel 1 (
@@ -644,6 +646,7 @@ else
 fi
 
 echo "[5/5] 서비스 시작 중..."
+docker compose down 2>/dev/null || true
 docker compose up -d
 
 echo ""
@@ -724,6 +727,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "[Reeve Identifier] 서비스 시작 (GPU)"
+docker compose down 2>/dev/null || true
 docker compose up -d
 
 echo ""
@@ -822,6 +826,7 @@ if errorlevel 1 (
 )
 
 echo [5/5] 서비스 시작 중...
+docker compose down 2>nul
 docker compose up -d
 if errorlevel 1 (
     echo [오류] 서비스 시작 실패.
@@ -920,6 +925,7 @@ EOF
 cd /d "%~dp0"
 
 echo [Reeve Identifier] 서비스 시작 (GPU)...
+docker compose down 2>nul
 docker compose up -d
 
 if errorlevel 1 (
@@ -1065,16 +1071,17 @@ if [ -f ".env" ]; then
     set -o allexport; source .env; set +o allexport
 fi
 
-# 2. Ollama 네이티브 시작 (이미 실행 중이면 스킵)
-if ! pgrep -x "ollama" > /dev/null 2>&1; then
-    echo "[1/3] Ollama 시작 중..."
-    ollama serve > logs/ollama.log 2>&1 &
-    OLLAMA_PID=$!
-    echo "      PID: $OLLAMA_PID (logs/ollama.log)"
-    sleep 2
-else
-    echo "[1/3] Ollama 이미 실행 중"
+# 2. Ollama 네이티브 시작 (실행 중이면 종료 후 재시작)
+if pgrep -x "ollama" > /dev/null 2>&1; then
+    echo "[1/3] Ollama 종료 중..."
+    pkill -x ollama
+    sleep 1
 fi
+echo "[1/3] Ollama 시작 중..."
+ollama serve > logs/ollama.log 2>&1 &
+OLLAMA_PID=$!
+echo "      PID: $OLLAMA_PID (logs/ollama.log)"
+sleep 2
 
 # Ollama 준비 대기 후 VLM 모델 pull (없을 경우)
 _MODEL="${VLM_MODEL_NAME:-qwen3-vl:8b}"
@@ -1089,21 +1096,23 @@ else
     ollama pull "$_MODEL"
 fi
 
-# 3. Trainer (MLX) 네이티브 시작 (이미 실행 중이면 스킵)
-if ! pgrep -f "trainer.main:app" > /dev/null 2>&1; then
-    echo "[2/3] Trainer (MLX) 시작 중..."
-    TRAINER_BACKEND=mlx TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
-        .venv/bin/uvicorn trainer.main:app --host 0.0.0.0 --port 8002 \
-        > logs/trainer.log 2>&1 &
-    TRAINER_PID=$!
-    echo "      PID: $TRAINER_PID (logs/trainer.log)"
-    sleep 2
-else
-    echo "[2/3] Trainer 이미 실행 중"
+# 3. Trainer (MLX) 네이티브 시작 (실행 중이면 종료 후 재시작)
+if pgrep -f "trainer.main:app" > /dev/null 2>&1; then
+    echo "[2/3] Trainer 종료 중..."
+    pkill -f "trainer.main:app"
+    sleep 1
 fi
+echo "[2/3] Trainer (MLX) 시작 중..."
+TRAINER_BACKEND=mlx TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
+    .venv/bin/uvicorn trainer.main:app --host 0.0.0.0 --port 8002 \
+    > logs/trainer.log 2>&1 &
+TRAINER_PID=$!
+echo "      PID: $TRAINER_PID (logs/trainer.log)"
+sleep 2
 
 # 4. Docker 서비스 시작 (studio, identifier, celery, mysql, qdrant, redis)
 echo "[3/3] Docker 서비스 시작 중..."
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml down 2>/dev/null || true
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
 
 echo ""
