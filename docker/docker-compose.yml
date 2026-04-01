@@ -93,11 +93,31 @@ services:
     networks:
       - reeve-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     deploy:
       resources:
         limits:
           cpus: '4.0'
           memory: 8G
+
+  # Ollama 모델 자동 pull (VLM_MODEL_NAME 없을 경우 qwen3-vl:8b)
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: reeve-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c", "ollama list | grep -q '${VLM_MODEL_NAME:-qwen3-vl:8b}' || ollama pull ${VLM_MODEL_NAME:-qwen3-vl:8b}"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - reeve-network
+    restart: "no"
 
   # Trainer (파인튜닝 API 서비스 - LlamaFactory 또는 EfficientNet)
   trainer:

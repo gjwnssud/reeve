@@ -1076,6 +1076,19 @@ else
     echo "[1/3] Ollama 이미 실행 중"
 fi
 
+# Ollama 준비 대기 후 VLM 모델 pull (없을 경우)
+_MODEL="${VLM_MODEL_NAME:-qwen3-vl:8b}"
+for _i in $(seq 1 15); do
+    ollama list > /dev/null 2>&1 && break
+    sleep 1
+done
+if ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qF "$_MODEL"; then
+    echo "      VLM 모델 존재: $_MODEL"
+else
+    echo "      VLM 모델 없음 — pull 시작: $_MODEL"
+    ollama pull "$_MODEL"
+fi
+
 # 3. Trainer (MLX) 네이티브 시작 (이미 실행 중이면 스킵)
 if ! pgrep -f "trainer.main:app" > /dev/null 2>&1; then
     echo "[2/3] Trainer (MLX) 시작 중..."
