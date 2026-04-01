@@ -211,7 +211,6 @@ class OpenAIVisionService:
                             }
                         ],
                         max_completion_tokens=500,
-                        temperature=0,
                     )
                     break  # 성공 시 루프 탈출
 
