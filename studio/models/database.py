@@ -20,7 +20,7 @@ engine = create_engine(
     pool_timeout=60,     # 커넥션 대기 타임아웃 (초)
     pool_pre_ping=True,  # 연결 전 ping으로 유효성 확인
     pool_recycle=3600,   # 1시간마다 연결 재생성
-    echo=settings.environment == "development"  # 개발 환경에서만 SQL 로그 출력
+    echo=False
 )
 
 # 비동기 엔진 (고성능 API용)
@@ -31,7 +31,7 @@ async_engine = create_async_engine(
     pool_timeout=60,
     pool_pre_ping=True,
     pool_recycle=3600,
-    echo=settings.environment == "development"
+    echo=False
 )
 
 # 세션 팩토리

@@ -41,10 +41,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 시작/종료 이벤트 처리"""
-    # 시작 시 — uvicorn이 dictConfig로 로깅을 재설정한 뒤에 억제 적용
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     logger.info("Starting Reeve application...")
     logger.info(f"Environment: {settings.environment}")

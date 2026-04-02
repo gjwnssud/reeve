@@ -169,7 +169,7 @@ class EfficientNetTrainer:
             log_raw("Studio에서 학습 데이터 내보내기 요청...")
             try:
                 resp = httpx.post(
-                    f"{{STUDIO_URL}}/api/finetune/export-efficientnet",
+                    f"{{STUDIO_URL}}/finetune/export-efficientnet",
                     json={{"split": 0.9}},
                     timeout=120.0,
                 )

@@ -4,6 +4,7 @@
  */
 
 const API_BASE = '';
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'tif']);
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
 const imageGridFile = document.getElementById('imageGridFile');
@@ -124,6 +125,25 @@ window.addEventListener('beforeunload', (e) => {
         e.returnValue = msg;
         return msg;
     }
+});
+
+// 사이드바 네비게이션 링크 클릭 시 분석 중 경고 모달
+let _pendingNavUrl = null;
+document.addEventListener('DOMContentLoaded', () => {
+    const navModal = new bootstrap.Modal(document.getElementById('navWarningModal'));
+    document.getElementById('navWarningConfirmBtn').addEventListener('click', () => {
+        navModal.hide();
+        if (_pendingNavUrl) window.location.href = _pendingNavUrl;
+    });
+    document.querySelectorAll('nav a[href]').forEach(link => {
+        link.addEventListener('click', (e) => {
+            if (isBatchProcessing() || isFileTabProcessing()) {
+                e.preventDefault();
+                _pendingNavUrl = link.href;
+                navModal.show();
+            }
+        });
+    });
 });
 
 // 탭 비활성화(다른 탭 전환) 시 경고 토스트
@@ -2217,6 +2237,8 @@ async function startFolderWatch() {
         document.getElementById('folderWatchStatus').textContent = '폴더 스캔 중...';
         for await (const [name, handle] of dirHandle) {
             if (handle.kind !== 'file') continue;
+            const ext = name.split('.').pop().toLowerCase();
+            if (!IMAGE_EXTS.has(ext)) continue;
             folderWatch.seen.add(name);
             folderWatch.queue.push({ name, handle });
         }
@@ -2405,6 +2427,8 @@ async function pollFolderForNewFiles() {
     try {
         for await (const [name, handle] of folderWatch.dirHandle) {
             if (folderWatch.seen.has(name) || handle.kind !== 'file') continue;
+            const ext = name.split('.').pop().toLowerCase();
+            if (!IMAGE_EXTS.has(ext)) continue;
             folderWatch.seen.add(name);
             folderWatch.queue.push({ name, handle });
             folderWatch.total++;
