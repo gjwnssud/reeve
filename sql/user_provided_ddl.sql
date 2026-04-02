@@ -101,7 +101,3 @@ CREATE TABLE IF NOT EXISTS `training_dataset`
   COLLATE = utf8mb4_general_ci
   COMMENT = '검증된 학습 데이터셋 저장 테이블';
 
-# 인덱스 마이그레이션 (기존 DB에 적용)
-ALTER TABLE `analyzed_vehicles`
-    ADD KEY `idx_processing_stage` (`processing_stage`),
-    ADD KEY `idx_processing_stage_verified_created` (`processing_stage`, `is_verified`, `created_at`);
