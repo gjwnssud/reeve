@@ -502,6 +502,8 @@ services:
     container_name: reeve-ollama
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
     volumes:
       - ./data/ollama:/root/.ollama
     networks:
@@ -546,6 +548,9 @@ IDENTIFIER_MODE=visual_rag
 # 파인튜닝 GGUF 배포 시: reeve-vlm-v1
 OLLAMA_BASE_URL=http://ollama:11434
 VLM_MODEL_NAME=qwen3-vl:8b
+# KV 캐시 크기 제한 — 기본 256K는 ~36 GB를 소모하므로 차량 분석 용도에 맞게 축소
+# 8192: ~1.1 GB (권장), 4096: ~0.6 GB, 16384: ~2.2 GB
+OLLAMA_NUM_CTX=8192
 VLM_TIMEOUT=30
 VLM_MAX_CANDIDATES=5
 VLM_FALLBACK_TO_EMBEDDING=true
@@ -1080,7 +1085,7 @@ if pgrep -x "ollama" > /dev/null 2>&1; then
     sleep 1
 fi
 echo "[1/3] Ollama 시작 중..."
-ollama serve > logs/ollama.log 2>&1 &
+OLLAMA_NUM_CTX="${OLLAMA_NUM_CTX:-8192}" ollama serve > logs/ollama.log 2>&1 &
 OLLAMA_PID=$!
 echo "      PID: $OLLAMA_PID (logs/ollama.log)"
 sleep 2

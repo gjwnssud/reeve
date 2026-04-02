@@ -88,6 +88,8 @@ services:
     container_name: reeve-ollama
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
     volumes:
       - ../data/ollama:/root/.ollama
     networks:

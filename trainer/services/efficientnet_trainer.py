@@ -344,11 +344,11 @@ class EfficientNetTrainer:
                         {{"params": list(model[2].parameters()), "lr": LEARNING_RATE,       "weight_decay": 0.05}},
                         {{"params": list(backbone.parameters()),  "lr": LEARNING_RATE * 0.1, "weight_decay": 0.05}},
                     ])
+                    remaining_steps = max(1, total_steps - global_step)
                     scheduler = optim.lr_scheduler.OneCycleLR(
                         opt,
                         max_lr=[LEARNING_RATE, LEARNING_RATE * 0.1],
-                        total_steps=total_steps, pct_start=0.1, anneal_strategy="cos",
-                        last_epoch=global_step - 1,
+                        total_steps=remaining_steps, pct_start=0.1, anneal_strategy="cos",
                     )
                     log_raw(f"Epoch {{epoch+1}}: 전체 파인튜닝 시작 — head lr={{LEARNING_RATE:.2e}}, backbone lr={{LEARNING_RATE * 0.1:.2e}}")
 
