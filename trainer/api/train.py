@@ -173,6 +173,7 @@ class TrainingConfig(BaseModel):
     # EfficientNet 전용 필드
     freeze_epochs: int = 1
     studio_url: Optional[str] = None
+    max_per_class: Optional[int] = None  # 클래스당 최대 샘플 수 (None = 제한 없음)
 
 
 class ExportModelRequest(BaseModel):
@@ -196,6 +197,7 @@ async def start_training(config: TrainingConfig):
                 freeze_epochs=config.freeze_epochs,
                 output_dir=config.output_dir,
                 studio_url=config.studio_url or settings.studio_url,
+                max_per_class=config.max_per_class,
             )
         elif settings.trainer_backend == "llamafactory":
             config_path = trainer.generate_train_yaml(
@@ -271,6 +273,17 @@ async def get_raw_training_log(tail: int = Query(default=100, ge=1, le=1000)):
         return {"content": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/train/deploy-config")
+async def get_deploy_config():
+    """핫리로드에 필요한 Identifier 측 경로 반환 (EfficientNet 전용)"""
+    from trainer.config import settings
+    return {
+        "model_path": settings.identifier_efficientnet_model_path,
+        "class_mapping_path": settings.identifier_class_mapping_path,
+        "identifier_url": settings.identifier_url,
+    }
 
 
 @router.post("/train/export")

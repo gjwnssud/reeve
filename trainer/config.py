@@ -28,6 +28,16 @@ class Settings(BaseSettings):
 
     # EfficientNet 학습 설정
     efficientnet_model_dir: str = Field(default="output/efficientnet", alias="EFFICIENTNET_MODEL_DIR")
+    # Identifier 컨테이너 내부의 모델 경로 (핫리로드 요청 시 사용)
+    identifier_efficientnet_model_path: str = Field(
+        default="/app/models/efficientnet/efficientnetv2_m_finetuned.pth",
+        alias="IDENTIFIER_EFFICIENTNET_MODEL_PATH",
+    )
+    identifier_class_mapping_path: str = Field(
+        default="/app/models/efficientnet/class_mapping.json",
+        alias="IDENTIFIER_CLASS_MAPPING_PATH",
+    )
+    trainer_log_dir: str = Field(default="logs/trainer", alias="TRAINER_LOG_DIR")
     studio_url: str = Field(default="http://localhost:8000", alias="STUDIO_URL")
 
     class Config:

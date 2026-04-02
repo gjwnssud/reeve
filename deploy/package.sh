@@ -1116,7 +1116,7 @@ if pgrep -f "trainer.main:app" > /dev/null 2>&1; then
 fi
 echo "[2/3] Trainer (${_TRAINER_LABEL}) 시작 중..."
 TRAINER_BACKEND=${_TRAINER_BACKEND} TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
-    EFFICIENTNET_MODEL_DIR=./output/efficientnet \
+    EFFICIENTNET_MODEL_DIR=./data/efficientnet-models TRAINER_LOG_DIR=./logs/trainer \
     STUDIO_URL=http://localhost:8000 IDENTIFIER_URL=http://localhost:8001 \
     .venv/bin/uvicorn trainer.main:app --host 0.0.0.0 --port 8002 \
     > logs/trainer.log 2>&1 &

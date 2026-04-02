@@ -129,6 +129,8 @@ services:
       - "8002:8002"
     volumes:
       - ../data/finetune:/app/data/finetune  # Studio에서 export한 학습 데이터
+      - ../data/uploads:/app/data/uploads    # Studio 업로드 이미지 (EfficientNet 학습용)
+      - ../data/crops:/app/data/crops        # Studio 크롭 이미지 (EfficientNet 학습용)
       - ../output:/app/output                # 체크포인트 저장
       - ../data/hf-cache:/root/.cache/huggingface  # HuggingFace 모델 캐시
       - ../data/efficientnet-models:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)

@@ -7,7 +7,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func as sql_func
+from sqlalchemy import func as sql_func, select
 from typing import Optional
 from pydantic import BaseModel
 import httpx
@@ -15,6 +15,8 @@ import logging
 import json
 import math
 import random
+import shutil
+import csv as csv_module
 from pathlib import Path
 from datetime import datetime
 
@@ -299,96 +301,205 @@ class EfficientNetExportParams(BaseModel):
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     split: float = 0.9
+    max_per_class: Optional[int] = None  # 클래스당 최대 샘플 수 (None = 제한 없음)
 
 
 @router.post("/export-efficientnet")
 async def export_efficientnet_data(params: EfficientNetExportParams, db: Session = Depends(get_db)):
     """EfficientNetV2-M 분류기 학습용 데이터 내보내기
 
-    생성 파일:
-    - data/finetune/efficientnet_train.csv (image_path,class_idx)
-    - data/finetune/efficientnet_val.csv
+    생성 디렉토리:
+    - data/finetune/train/chunk_0000.csv, chunk_0001.csv, ...
+    - data/finetune/val/chunk_0000.csv, ...
     - data/finetune/class_mapping.json
+
+    최적화:
+    - class mapping: 경량 DISTINCT 쿼리 (joinedload 없음)
+    - max_per_class: SQL Window Function으로 DB 레벨 처리
+    - 데이터 스트리밍: stream_results + yield_per (메모리 일정)
+    - CSV 청크: 50,000행 단위 파일 분할
     """
-    import csv
+    CHUNK_SIZE = 50_000
 
     if not (0.0 < params.split <= 1.0):
         raise HTTPException(status_code=400, detail="split은 0 초과 1 이하 값이어야 합니다.")
 
-    query = (
-        db.query(TrainingDataset)
-        .options(
-            joinedload(TrainingDataset.manufacturer),
-            joinedload(TrainingDataset.model),
+    # ── 1. class mapping: 경량 DISTINCT 쿼리 ──────────────────────────────
+    pairs_stmt = (
+        select(
+            TrainingDataset.manufacturer_id,
+            TrainingDataset.model_id,
+            Manufacturer.korean_name.label("mfr_korean"),
+            Manufacturer.english_name.label("mfr_english"),
+            VehicleModel.korean_name.label("model_korean"),
+            VehicleModel.english_name.label("model_english"),
         )
+        .join(Manufacturer, TrainingDataset.manufacturer_id == Manufacturer.id)
+        .join(VehicleModel, TrainingDataset.model_id == VehicleModel.id)
+        .where(
+            TrainingDataset.manufacturer_id.isnot(None),
+            TrainingDataset.model_id.isnot(None),
+        )
+        .distinct()
     )
-    query = _apply_filters(query, params.manufacturer_id, params.date_from, params.date_to)
-    records = query.order_by(TrainingDataset.id).all()
+    if params.manufacturer_id:
+        pairs_stmt = pairs_stmt.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
+    if params.date_from:
+        try:
+            pairs_stmt = pairs_stmt.where(
+                TrainingDataset.created_at >= datetime.strptime(params.date_from, "%Y-%m-%d")
+            )
+        except ValueError:
+            pass
+    if params.date_to:
+        try:
+            dt = datetime.strptime(params.date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            pairs_stmt = pairs_stmt.where(TrainingDataset.created_at < dt)
+        except ValueError:
+            pass
 
-    if not records:
+    pairs_rows = db.execute(pairs_stmt).all()
+    if not pairs_rows:
         raise HTTPException(status_code=404, detail="해당 조건의 학습 데이터가 없습니다.")
 
-    # 고유 (manufacturer_id, model_id) 쌍 정렬 → 결정론적 클래스 인덱스
-    pairs = sorted({(r.manufacturer_id, r.model_id) for r in records if r.manufacturer_id and r.model_id})
-    if not pairs:
-        raise HTTPException(status_code=400, detail="제조사/모델 정보가 없는 레코드만 존재합니다.")
-
+    pairs = sorted({(r.manufacturer_id, r.model_id) for r in pairs_rows})
     pair_to_idx = {pair: idx for idx, pair in enumerate(pairs)}
+    name_map = {(r.manufacturer_id, r.model_id): r for r in pairs_rows}
 
-    # class_mapping.json
     classes = {}
     for idx, (mid, vid) in enumerate(pairs):
-        # 해당 쌍의 첫 번째 레코드에서 이름 추출
-        sample = next((r for r in records if r.manufacturer_id == mid and r.model_id == vid), None)
+        r = name_map.get((mid, vid))
         classes[str(idx)] = {
             "manufacturer_id": mid,
             "model_id": vid,
-            "manufacturer_korean": sample.manufacturer.korean_name if sample and sample.manufacturer else None,
-            "manufacturer_english": sample.manufacturer.english_name if sample and sample.manufacturer else None,
-            "model_korean": sample.model.korean_name if sample and sample.model else None,
-            "model_english": sample.model.english_name if sample and sample.model else None,
+            "manufacturer_korean": r.mfr_korean if r else None,
+            "manufacturer_english": r.mfr_english if r else None,
+            "model_korean": r.model_korean if r else None,
+            "model_english": r.model_english if r else None,
         }
-
     class_mapping = {"num_classes": len(pairs), "classes": classes}
 
-    # 유효 레코드만 필터 (manufacturer_id, model_id 있는 것)
-    valid_records = [r for r in records if r.manufacturer_id and r.model_id]
-    random.shuffle(valid_records)
+    # ── 2. 데이터 쿼리: SQL Window Function + 스트리밍 ────────────────────
+    base_cols = [
+        TrainingDataset.image_path,
+        TrainingDataset.manufacturer_id,
+        TrainingDataset.model_id,
+    ]
 
-    if params.split >= 1.0:
-        train_records = valid_records
-        val_records = []
+    if params.max_per_class and params.max_per_class > 0:
+        # ROW_NUMBER() OVER (PARTITION BY class ORDER BY id) — DB 레벨 클램핑
+        rn = sql_func.row_number().over(
+            partition_by=[TrainingDataset.manufacturer_id, TrainingDataset.model_id],
+            order_by=TrainingDataset.id,
+        ).label("rn")
+        inner = select(*base_cols, rn).where(
+            TrainingDataset.manufacturer_id.isnot(None),
+            TrainingDataset.model_id.isnot(None),
+        )
+        if params.manufacturer_id:
+            inner = inner.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
+        if params.date_from:
+            try:
+                inner = inner.where(
+                    TrainingDataset.created_at >= datetime.strptime(params.date_from, "%Y-%m-%d")
+                )
+            except ValueError:
+                pass
+        if params.date_to:
+            try:
+                dt = datetime.strptime(params.date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                inner = inner.where(TrainingDataset.created_at < dt)
+            except ValueError:
+                pass
+        subq = inner.subquery()
+        stmt = select(
+            subq.c.image_path,
+            subq.c.manufacturer_id,
+            subq.c.model_id,
+        ).where(subq.c.rn <= params.max_per_class)
     else:
-        split_idx = int(len(valid_records) * params.split)
-        train_records = valid_records[:split_idx]
-        val_records = valid_records[split_idx:]
+        stmt = select(*base_cols).where(
+            TrainingDataset.manufacturer_id.isnot(None),
+            TrainingDataset.model_id.isnot(None),
+        ).order_by(TrainingDataset.id)
+        if params.manufacturer_id:
+            stmt = stmt.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
+        if params.date_from:
+            try:
+                stmt = stmt.where(
+                    TrainingDataset.created_at >= datetime.strptime(params.date_from, "%Y-%m-%d")
+                )
+            except ValueError:
+                pass
+        if params.date_to:
+            try:
+                dt = datetime.strptime(params.date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                stmt = stmt.where(TrainingDataset.created_at < dt)
+            except ValueError:
+                pass
 
+    # ── 3. 디렉토리 초기화 ────────────────────────────────────────────────
     export_dir = Path("./data/finetune")
+    train_dir = export_dir / "train"
+    val_dir = export_dir / "val"
+    shutil.rmtree(train_dir, ignore_errors=True)
+    shutil.rmtree(val_dir, ignore_errors=True)
+    train_dir.mkdir(parents=True, exist_ok=True)
     export_dir.mkdir(parents=True, exist_ok=True)
 
     class_mapping_path = export_dir / "class_mapping.json"
     class_mapping_path.write_text(json.dumps(class_mapping, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def write_csv(path: Path, recs) -> None:
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["image_path", "class_idx"])
-            for r in recs:
-                class_idx = pair_to_idx.get((r.manufacturer_id, r.model_id))
-                if class_idx is not None:
-                    writer.writerow([str(Path(r.image_path).resolve()), class_idx])
+    # ── 4. 스트리밍 + 청크 CSV 쓰기 ──────────────────────────────────────
+    train_count = 0
+    val_count = 0
+    train_chunk_idx = 0
+    val_chunk_idx = 0
+    train_f = train_writer = None
+    val_f = val_writer = None
 
-    train_path = export_dir / "efficientnet_train.csv"
-    write_csv(train_path, train_records)
+    def open_chunk(directory: Path, chunk_idx: int):
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"chunk_{chunk_idx:04d}.csv"
+        f = open(path, "w", newline="", encoding="utf-8")
+        w = csv_module.writer(f)
+        w.writerow(["image_path", "class_idx"])
+        return f, w
 
-    val_path = None
-    if val_records:
-        val_path = export_dir / "efficientnet_val.csv"
-        write_csv(val_path, val_records)
+    result = db.execute(stmt.execution_options(stream_results=True))
+    for row in result.yield_per(1000):
+        class_idx = pair_to_idx.get((row.manufacturer_id, row.model_id))
+        if class_idx is None:
+            continue
+
+        if params.split >= 1.0 or random.random() < params.split:
+            if train_writer is None or train_count % CHUNK_SIZE == 0 and train_count > 0:
+                if train_f:
+                    train_f.close()
+                train_f, train_writer = open_chunk(train_dir, train_chunk_idx)
+                train_chunk_idx += 1
+            train_writer.writerow([row.image_path, class_idx])
+            train_count += 1
+        else:
+            if val_writer is None or val_count % CHUNK_SIZE == 0 and val_count > 0:
+                if val_f:
+                    val_f.close()
+                val_f, val_writer = open_chunk(val_dir, val_chunk_idx)
+                val_chunk_idx += 1
+            val_writer.writerow([row.image_path, class_idx])
+            val_count += 1
+
+    if train_f:
+        train_f.close()
+    if val_f:
+        val_f.close()
+
+    if train_count == 0:
+        raise HTTPException(status_code=404, detail="유효한 학습 이미지가 없습니다.")
 
     logger.info(
-        f"EfficientNet export 완료: train={len(train_records)}건, val={len(val_records)}건, "
-        f"classes={len(pairs)} → {export_dir}"
+        f"EfficientNet export 완료: train={train_count}건({train_chunk_idx}청크), "
+        f"val={val_count}건({val_chunk_idx}청크), classes={len(pairs)} → {export_dir}"
     )
 
     return JSONResponse({
@@ -397,14 +508,16 @@ async def export_efficientnet_data(params: EfficientNetExportParams, db: Session
         "num_classes": len(pairs),
         "class_mapping_path": str(class_mapping_path),
         "files": {
-            "train_csv": str(train_path),
-            "val_csv": str(val_path) if val_path else None,
+            "train_dir": str(train_dir),
+            "val_dir": str(val_dir) if val_count > 0 else None,
             "class_mapping": str(class_mapping_path),
         },
         "counts": {
-            "total_records": len(valid_records),
-            "train_count": len(train_records),
-            "val_count": len(val_records),
+            "total_records": train_count + val_count,
+            "train_count": train_count,
+            "val_count": val_count,
+            "train_chunks": train_chunk_idx,
+            "val_chunks": val_chunk_idx,
             "split_ratio": params.split,
         },
     })
@@ -474,6 +587,12 @@ async def get_training_logs(tail: int = Query(default=50, ge=1, le=500)):
 async def get_raw_training_log(tail: int = Query(default=100, ge=1, le=1000)):
     """원시 학습 로그 반환 (Trainer 서비스 프록시)"""
     return await _proxy_get("/train/raw-log", params={"tail": tail})
+
+
+@router.get("/train/deploy-config")
+async def get_deploy_config():
+    """핫리로드 경로 설정 반환 (Trainer 서비스 프록시)"""
+    return await _proxy_get("/train/deploy-config")
 
 
 @router.post("/train/export")

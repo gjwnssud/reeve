@@ -6,31 +6,28 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import NullPool
 from typing import Generator, AsyncGenerator
 from studio.config import settings
 
 # SQLAlchemy Base 클래스
 Base = declarative_base()
 
-# 동기 엔진 (일반 작업용)
+# 동기 엔진 (MySQL 기본 max_connections=151 기준, admin용 1개 여유)
 engine = create_engine(
     settings.database_url,
-    pool_size=20,        # 기본 커넥션 풀 크기
-    max_overflow=40,     # 풀 초과 시 추가 허용 커넥션 수 (최대 60개)
+    pool_size=100,       # 기본 커넥션 풀 크기
+    max_overflow=50,     # 풀 초과 시 추가 허용 커넥션 수 (최대 150개)
     pool_timeout=60,     # 커넥션 대기 타임아웃 (초)
     pool_pre_ping=True,  # 연결 전 ping으로 유효성 확인
     pool_recycle=3600,   # 1시간마다 연결 재생성
     echo=False
 )
 
-# 비동기 엔진 (고성능 API용)
+# 비동기 엔진 (미사용 — NullPool로 커넥션 점유 없음)
 async_engine = create_async_engine(
     settings.async_database_url,
-    pool_size=20,
-    max_overflow=40,
-    pool_timeout=60,
-    pool_pre_ping=True,
-    pool_recycle=3600,
+    poolclass=NullPool,
     echo=False
 )
 

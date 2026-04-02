@@ -192,7 +192,36 @@ async def get_all_analyzed_vehicles(
 
     return {
         "total": total,
-        "items": [item.to_dict() for item in items]
+        "items": [item.to_dict(include_raw=False) for item in items]
+    }
+
+
+@router.get("/analyzed-vehicles-counts")
+def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
+    """탭별 건수를 단일 쿼리로 반환 (뱃지 업데이트용)"""
+    from sqlalchemy import case
+    from sqlalchemy.sql import func as sql_func
+
+    row = db.query(
+        sql_func.count().label("all"),
+        sql_func.sum(case((AnalyzedVehicle.processing_stage == 'uploaded', 1), else_=0)).label("uploaded"),
+        sql_func.sum(case((AnalyzedVehicle.processing_stage == 'yolo_detected', 1), else_=0)).label("yolo_detected"),
+        sql_func.sum(case(
+            (
+                (AnalyzedVehicle.processing_stage == 'analysis_complete') &
+                (AnalyzedVehicle.is_verified == False),
+                1
+            ), else_=0
+        )).label("analysis_complete"),
+        sql_func.sum(case((AnalyzedVehicle.is_verified == True, 1), else_=0)).label("verified"),
+    ).one()
+
+    return {
+        "all": row.all or 0,
+        "uploaded": row.uploaded or 0,
+        "yolo_detected": row.yolo_detected or 0,
+        "analysis_complete": row.analysis_complete or 0,
+        "verified": row.verified or 0,
     }
 
 

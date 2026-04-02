@@ -60,12 +60,15 @@ class AnalyzedVehicle(Base):
     def __repr__(self):
         return f"<AnalyzedVehicle(id={self.id}, manufacturer={self.manufacturer}, model={self.model}, verified={self.is_verified})>"
 
-    def to_dict(self):
-        """딕셔너리 변환 (API 응답용)"""
+    def to_dict(self, include_raw: bool = False):
+        """딕셔너리 변환 (API 응답용)
+        include_raw=False(기본): 목록 조회 시 raw_result 제외로 응답 크기 축소
+        include_raw=True: 상세 조회 시 원본 Vision API 응답 포함
+        """
         return {
             "id": self.id,
             "image_path": self.image_path,
-            "raw_result": self.raw_result,
+            "raw_result": self.raw_result if include_raw else None,
             "manufacturer": self.manufacturer,
             "model": self.model,
             "year": self.year,

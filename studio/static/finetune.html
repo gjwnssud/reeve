@@ -589,6 +589,7 @@ function goStep(stepKey) {
     } else if (stepKey === 'step3') {
         const panelId = _mode === 'efficientnet' ? 'panel-step3-efficientnet' : 'panel-step3-vlm';
         document.getElementById(panelId).classList.add('active');
+        if (_mode === 'efficientnet') loadDeployConfig();
     }
 }
 
@@ -956,6 +957,20 @@ function startTrainPolling() {
 
 function stopTrainPolling() {
     if (_trainPolling) { clearInterval(_trainPolling); _trainPolling = null; }
+}
+
+// ============================================================
+// EfficientNet: 배포 설정 자동 채움
+// ============================================================
+async function loadDeployConfig() {
+    try {
+        const res = await fetch('/finetune/train/deploy-config');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.model_path) document.getElementById('eff-deploy-model-path').value = data.model_path;
+        if (data.class_mapping_path) document.getElementById('eff-deploy-mapping-path').value = data.class_mapping_path;
+        if (data.identifier_url) document.getElementById('eff-deploy-identifier-url').value = data.identifier_url;
+    } catch (_) {}
 }
 
 // ============================================================

@@ -1044,22 +1044,20 @@ function goToVehiclePage(page) {
 }
 
 async function updateVehicleTabBadges() {
-    const statusMap = [
-        ['all', 'badgeAll'], ['uploaded', 'badgeUploaded'],
-        ['yolo_detected', 'badgeYoloDetected'], ['analysis_complete', 'badgeAnalysisComplete'],
-        ['verified', 'badgeVerified']
-    ];
-    for (const [s, badgeId] of statusMap) {
-        try {
-            const url = s === 'all' ? '/admin/analyzed-vehicles?limit=1' : `/admin/analyzed-vehicles?limit=1&status=${s}`;
-            const resp = await fetch(API_BASE + url);
-            if (resp.ok) {
-                const { total } = await resp.json();
-                const badge = document.getElementById(badgeId);
-                if (badge) badge.textContent = total;
-            }
-        } catch (e) {}
-    }
+    try {
+        const resp = await fetch(API_BASE + '/admin/analyzed-vehicles-counts');
+        if (!resp.ok) return;
+        const counts = await resp.json();
+        const map = {
+            all: 'badgeAll', uploaded: 'badgeUploaded',
+            yolo_detected: 'badgeYoloDetected', analysis_complete: 'badgeAnalysisComplete',
+            verified: 'badgeVerified',
+        };
+        for (const [key, badgeId] of Object.entries(map)) {
+            const badge = document.getElementById(badgeId);
+            if (badge) badge.textContent = counts[key] ?? 0;
+        }
+    } catch (e) {}
 }
 
 function showAdminToast(message, type = 'info') {

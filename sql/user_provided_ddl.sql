@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS `analyzed_vehicles`
     KEY `idx_matched_manufacturer_id` (`matched_manufacturer_id`),
     KEY `idx_matched_model_id` (`matched_model_id`),
     KEY `idx_created_at` (`created_at`),
+    KEY `idx_processing_stage` (`processing_stage`),
+    KEY `idx_processing_stage_verified_created` (`processing_stage`, `is_verified`, `created_at`),
     KEY `idx_client_source_verified` (`client_uuid`, `source`, `is_verified`),
     CONSTRAINT `fk_analyzed_manufacturer` FOREIGN KEY (`matched_manufacturer_id`) REFERENCES `manufacturers` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_analyzed_model` FOREIGN KEY (`matched_model_id`) REFERENCES `vehicle_models` (`id`) ON DELETE SET NULL
@@ -98,3 +100,8 @@ CREATE TABLE IF NOT EXISTS `training_dataset`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci
   COMMENT = '검증된 학습 데이터셋 저장 테이블';
+
+# 인덱스 마이그레이션 (기존 DB에 적용)
+ALTER TABLE `analyzed_vehicles`
+    ADD KEY `idx_processing_stage` (`processing_stage`),
+    ADD KEY `idx_processing_stage_verified_created` (`processing_stage`, `is_verified`, `created_at`);
