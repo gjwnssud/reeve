@@ -90,6 +90,11 @@ class DualVisionService:
             "dual_verified": True,
         }
 
+    def preload_db_context(self, db) -> None:
+        """Vision 프롬프트용 DB 데이터를 두 백엔드에 캐싱"""
+        self._openai.preload_db_context(db)
+        self._gemini.preload_db_context(db)
+
 
 def get_vision_backend() -> VisionBackend:
     """설정에 따라 Vision 백엔드 인스턴스 반환"""

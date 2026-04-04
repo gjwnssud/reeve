@@ -15,6 +15,7 @@ from pathlib import Path
 import logging
 
 from studio.models import get_db
+from studio.models.database import SessionLocal
 from studio.models.analyzed_vehicle import AnalyzedVehicle
 from studio.config import settings
 
@@ -84,48 +85,52 @@ async def analyze_vehicle_image(
     vision_service = get_vision_backend()
     from studio.services.matcher import VehicleMatcher
 
+    # Vision 프롬프트용 DB 컨텍스트를 미리 캐싱한 후 커넥션 반환
+    # (OpenAI/Gemini 호출 중 DB 커넥션을 점유하지 않도록)
+    vision_service.preload_db_context(db)
+    db.close()
+
     try:
-        # OpenAI Vision API 호출 (DB 세션 전달)
-        vision_result = await vision_service.analyze_vehicle_image(str(file_path), db=db)
+        # OpenAI Vision API 호출 (DB 없이 캐시 사용)
+        vision_result = await vision_service.analyze_vehicle_image(str(file_path))
 
-        # 기준 DB와 매칭 (auto_insert=True: 매칭 실패 시 자동으로 DB에 추가)
-        matcher = VehicleMatcher(db, auto_insert=True)
-        match_result = matcher.match_vehicle(
-            vision_result.get("manufacturer_code", ""),
-            vision_result.get("model_code", ""),
-            vision_confidence=vision_result.get("confidence")  # Vision API 신뢰도 전달
-        )
+        # 기준 DB와 매칭 및 결과 저장 (짧은 세션)
+        with SessionLocal() as write_db:
+            matcher = VehicleMatcher(write_db, auto_insert=True)
+            match_result = matcher.match_vehicle(
+                vision_result.get("manufacturer_code", ""),
+                vision_result.get("model_code", ""),
+                vision_confidence=vision_result.get("confidence")
+            )
 
-        # 분석 결과 저장 (한글명 사용)
-        analyzed = AnalyzedVehicle(
-            image_path=str(file_path),
-            raw_result=vision_result,
-            manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
-            model=match_result["model"].korean_name if match_result["model"] else None,
-            year=vision_result.get("year"),
-            matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
-            matched_model_id=match_result["model"].id if match_result["model"] else None,
-            confidence_score=match_result["overall_confidence"],
-            is_verified=False
-        )
-
-        db.add(analyzed)
-        db.commit()
-        db.refresh(analyzed)
+            analyzed = AnalyzedVehicle(
+                image_path=str(file_path),
+                raw_result=vision_result,
+                manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
+                model=match_result["model"].korean_name if match_result["model"] else None,
+                year=vision_result.get("year"),
+                matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
+                matched_model_id=match_result["model"].id if match_result["model"] else None,
+                confidence_score=match_result["overall_confidence"],
+                is_verified=False
+            )
+            write_db.add(analyzed)
+            write_db.commit()
+            write_db.refresh(analyzed)
 
     except Exception as e:
-        # 오류 발생 시에도 기록
-        analyzed = AnalyzedVehicle(
-            image_path=str(file_path),
-            raw_result={"error": str(e)},
-            manufacturer=None,
-            model=None,
-            confidence_score=0.0,
-            is_verified=False
-        )
-        db.add(analyzed)
-        db.commit()
-        db.refresh(analyzed)
+        with SessionLocal() as write_db:
+            analyzed = AnalyzedVehicle(
+                image_path=str(file_path),
+                raw_result={"error": str(e)},
+                manufacturer=None,
+                model=None,
+                confidence_score=0.0,
+                is_verified=False
+            )
+            write_db.add(analyzed)
+            write_db.commit()
+            write_db.refresh(analyzed)
 
         raise HTTPException(
             status_code=500,
@@ -275,7 +280,6 @@ async def detect_vehicle(
 async def stream_analysis_progress(
     file_path: str,
     bbox: List[int],
-    db: Session,
     analyzed_id: Optional[int] = None
 ):
     """
@@ -284,7 +288,6 @@ async def stream_analysis_progress(
     Args:
         file_path: 원본 이미지 경로
         bbox: 크롭할 바운딩 박스 [x1, y1, x2, y2]
-        db: 데이터베이스 세션
 
     Yields:
         SSE 형식의 진행 상황 및 결과
@@ -324,86 +327,81 @@ async def stream_analysis_progress(
         crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
         cv2.imwrite(str(crop_path), cropped)
 
-        # 2단계: Vision API 호출
+        # 2단계: Vision API 호출 (DB 커넥션 점유 없이 실행)
         api_label = "ChatGPT + Gemini 교차 검증 중" if settings.gemini_api_key else "ChatGPT Vision API 호출 중"
         yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': api_label})}\n\n"
         await asyncio.sleep(0.1)
 
         from studio.services.vision_backend import get_vision_backend
         vision_service = get_vision_backend()
-        vision_result = await vision_service.analyze_vehicle_image(str(crop_path), db=db)
+        vision_result = await vision_service.analyze_vehicle_image(str(crop_path))
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)
 
-        # 3단계: 기준 DB와 매칭 (auto_insert=True: 매칭 실패 시 자동으로 DB에 추가)
-        matcher = VehicleMatcher(db, auto_insert=True)
-        match_result = matcher.match_vehicle(
-            vision_result.get("manufacturer_code", ""),
-            vision_result.get("model_code", ""),
-            vision_confidence=vision_result.get("confidence")  # Vision API 신뢰도 전달
-        )
-
+        # 3-4단계: 매칭 및 저장 (짧은 세션)
         yield f"data: {json.dumps({'event': 'progress', 'progress': 80, 'message': '결과 저장 중'})}\n\n"
         await asyncio.sleep(0.1)
 
-        # 4단계: 분석 결과 저장 (한글명 사용)
         new_raw_result = {
             **vision_result,
             "original_image": file_path,
             "bbox": bbox
         }
-        new_manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
-        new_model = match_result["model"].korean_name if match_result["model"] else None
-        new_mf_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
-        new_model_id = match_result["model"].id if match_result["model"] else None
-        new_confidence = match_result["overall_confidence"]
 
-        analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first() if analyzed_id else None
-
-        if analyzed:
-            # 기존 크롭 이미지 삭제 (원본 이미지는 삭제하지 않음)
-            if analyzed.image_path and analyzed.image_path != analyzed.original_image_path:
-                old_crop = Path(analyzed.image_path)
-                if old_crop.exists():
-                    old_crop.unlink()
-            # 기존 레코드 업데이트
-            analyzed.image_path = str(crop_path)
-            analyzed.raw_result = new_raw_result
-            analyzed.manufacturer = new_manufacturer
-            analyzed.model = new_model
-            analyzed.year = vision_result.get("year")
-            analyzed.matched_manufacturer_id = new_mf_id
-            analyzed.matched_model_id = new_model_id
-            analyzed.confidence_score = new_confidence
-            analyzed.is_verified = False
-            analyzed.processing_stage = 'analysis_complete'
-            analyzed.selected_bbox = bbox
-        else:
-            analyzed = AnalyzedVehicle(
-                image_path=str(crop_path),
-                original_image_path=file_path,
-                raw_result=new_raw_result,
-                manufacturer=new_manufacturer,
-                model=new_model,
-                year=vision_result.get("year"),
-                matched_manufacturer_id=new_mf_id,
-                matched_model_id=new_model_id,
-                confidence_score=new_confidence,
-                is_verified=False,
-                processing_stage='analysis_complete',
-                selected_bbox=bbox,
+        with SessionLocal() as db:
+            matcher = VehicleMatcher(db, auto_insert=True)
+            match_result = matcher.match_vehicle(
+                vision_result.get("manufacturer_code", ""),
+                vision_result.get("model_code", ""),
+                vision_confidence=vision_result.get("confidence")
             )
-            db.add(analyzed)
 
-        db.commit()
-        db.refresh(analyzed)
+            new_manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
+            new_model = match_result["model"].korean_name if match_result["model"] else None
+            new_mf_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
+            new_model_id = match_result["model"].id if match_result["model"] else None
+            new_confidence = match_result["overall_confidence"]
 
-        # 5단계: 완료 전송
-        result = {
-            "event": "completed",
-            "progress": 100,
-            "result": {
+            analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first() if analyzed_id else None
+
+            if analyzed:
+                if analyzed.image_path and analyzed.image_path != analyzed.original_image_path:
+                    old_crop = Path(analyzed.image_path)
+                    if old_crop.exists():
+                        old_crop.unlink()
+                analyzed.image_path = str(crop_path)
+                analyzed.raw_result = new_raw_result
+                analyzed.manufacturer = new_manufacturer
+                analyzed.model = new_model
+                analyzed.year = vision_result.get("year")
+                analyzed.matched_manufacturer_id = new_mf_id
+                analyzed.matched_model_id = new_model_id
+                analyzed.confidence_score = new_confidence
+                analyzed.is_verified = False
+                analyzed.processing_stage = 'analysis_complete'
+                analyzed.selected_bbox = bbox
+            else:
+                analyzed = AnalyzedVehicle(
+                    image_path=str(crop_path),
+                    original_image_path=file_path,
+                    raw_result=new_raw_result,
+                    manufacturer=new_manufacturer,
+                    model=new_model,
+                    year=vision_result.get("year"),
+                    matched_manufacturer_id=new_mf_id,
+                    matched_model_id=new_model_id,
+                    confidence_score=new_confidence,
+                    is_verified=False,
+                    processing_stage='analysis_complete',
+                    selected_bbox=bbox,
+                )
+                db.add(analyzed)
+
+            db.commit()
+            db.refresh(analyzed)
+
+            result_data = {
                 "id": analyzed.id,
                 "manufacturer": analyzed.manufacturer,
                 "model": analyzed.model,
@@ -412,17 +410,12 @@ async def stream_analysis_progress(
                 "matched_manufacturer_id": analyzed.matched_manufacturer_id,
                 "matched_model_id": analyzed.matched_model_id
             }
-        }
 
-        yield f"data: {json.dumps(result)}\n\n"
+        # 5단계: 완료 전송
+        yield f"data: {json.dumps({'event': 'completed', 'progress': 100, 'result': result_data})}\n\n"
 
     except Exception as e:
-        # 에러 전송
-        error_data = {
-            "event": "error",
-            "message": str(e)
-        }
-        yield f"data: {json.dumps(error_data)}\n\n"
+        yield f"data: {json.dumps({'event': 'error', 'message': str(e)})}\n\n"
 
 
 @router.post("/upload")
@@ -508,6 +501,15 @@ async def analyze_vehicle_stream(
             detail=f"Invalid bbox format: {str(e)}"
         )
 
+    from studio.services.vision_backend import get_vision_backend
+    vision_service = get_vision_backend()
+
+    sse_headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no"
+    }
+
     if analyzed_id:
         # DB에서 original_image_path 로드 (파일 재전송 불필요)
         analyzed_record = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
@@ -515,14 +517,14 @@ async def analyze_vehicle_stream(
             raise HTTPException(status_code=404, detail="Analyzed vehicle not found or no original image")
         file_path_str = analyzed_record.original_image_path
 
+        # Vision 프롬프트 캐시 준비 후 커넥션 반환
+        vision_service.preload_db_context(db)
+        db.close()
+
         return StreamingResponse(
-            stream_analysis_progress(file_path_str, bbox_list, db, analyzed_id=analyzed_id),
+            stream_analysis_progress(file_path_str, bbox_list, analyzed_id=analyzed_id),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
-            }
+            headers=sse_headers
         )
 
     elif file:
@@ -545,14 +547,14 @@ async def analyze_vehicle_stream(
             with open(file_path, "wb") as buffer:
                 buffer.write(await file.read())
 
+            # Vision 프롬프트 캐시 준비 후 커넥션 반환
+            vision_service.preload_db_context(db)
+            db.close()
+
             return StreamingResponse(
-                stream_analysis_progress(str(file_path), bbox_list, db, analyzed_id=None),
+                stream_analysis_progress(str(file_path), bbox_list, analyzed_id=None),
                 media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no"
-                }
+                headers=sse_headers
             )
 
         except Exception as e:

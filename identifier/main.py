@@ -44,9 +44,11 @@ log_level = getattr(logging, settings.log_level)
 log_path = Path(settings.log_file)
 log_path.parent.mkdir(parents=True, exist_ok=True)
 
+# force=True: uvicorn이 먼저 root logger를 설정해도 덮어쓰기
 logging.basicConfig(
     level=log_level,
     format=log_format,
+    force=True,
     handlers=[
         logging.StreamHandler(),
         logging.handlers.RotatingFileHandler(
@@ -54,6 +56,11 @@ logging.basicConfig(
         ),
     ],
 )
+# uvicorn 자체 로거가 root로 전파하지 않도록 설정 (중복 방지)
+for uv_logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    uv_logger = logging.getLogger(uv_logger_name)
+    uv_logger.handlers.clear()
+    uv_logger.propagate = True
 logger = logging.getLogger(__name__)
 
 

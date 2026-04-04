@@ -14,6 +14,7 @@ import asyncio
 import functools
 
 from studio.models import get_db
+from studio.models.database import SessionLocal
 from studio.models.manufacturer import Manufacturer
 from studio.models.vehicle_model import VehicleModel
 from studio.models.analyzed_vehicle import AnalyzedVehicle
@@ -406,9 +407,7 @@ async def review_analyzed_vehicle(
 
 
 @router.post("/review/batch-save-all")
-async def batch_save_all_to_vectordb(
-    db: Session = Depends(get_db)
-):
+async def batch_save_all_to_vectordb():
     """is_verified=false인 전체 항목을 벡터DB에 일괄 저장 (SSE 스트리밍, 커서 기반 페이지네이션)"""
     from sqlalchemy import func as sql_func
     from studio.models.training_dataset import TrainingDataset
@@ -417,17 +416,16 @@ async def batch_save_all_to_vectordb(
 
     BATCH_SIZE = 100
 
-    # 전체 미검수 개수
-    total_unverified = db.query(sql_func.count(AnalyzedVehicle.id)).filter(
-        AnalyzedVehicle.is_verified == False
-    ).scalar()
-
-    # 저장 가능한 항목 개수 (제조사/모델 매칭 완료된 항목만)
-    total = db.query(sql_func.count(AnalyzedVehicle.id)).filter(
-        AnalyzedVehicle.is_verified == False,
-        AnalyzedVehicle.matched_manufacturer_id.isnot(None),
-        AnalyzedVehicle.matched_model_id.isnot(None)
-    ).scalar()
+    # 초기 카운트 조회 후 즉시 세션 반환
+    with SessionLocal() as db:
+        total_unverified = db.query(sql_func.count(AnalyzedVehicle.id)).filter(
+            AnalyzedVehicle.is_verified == False
+        ).scalar()
+        total = db.query(sql_func.count(AnalyzedVehicle.id)).filter(
+            AnalyzedVehicle.is_verified == False,
+            AnalyzedVehicle.matched_manufacturer_id.isnot(None),
+            AnalyzedVehicle.matched_model_id.isnot(None)
+        ).scalar()
 
     skipped = total_unverified - total
 
@@ -444,156 +442,183 @@ async def batch_save_all_to_vectordb(
         yield f"data: {json.dumps({'type': 'start', 'total': total, 'total_unverified': total_unverified, 'skipped': skipped})}\n\n"
 
         while True:
-            # 커서 기반 배치 조회 (desc 순) + JOIN 최적화
-            query = db.query(AnalyzedVehicle).options(
-                joinedload(AnalyzedVehicle.matched_manufacturer),
-                joinedload(AnalyzedVehicle.matched_model)
-            ).filter(
-                AnalyzedVehicle.is_verified == False,
-                AnalyzedVehicle.matched_manufacturer_id.isnot(None),
-                AnalyzedVehicle.matched_model_id.isnot(None)
-            ).order_by(AnalyzedVehicle.id.desc())
+            # 배치마다 새 세션으로 짧게 커넥션 점유
+            with SessionLocal() as db:
+                # 커서 기반 배치 조회 (desc 순) + JOIN 최적화
+                query = db.query(AnalyzedVehicle).options(
+                    joinedload(AnalyzedVehicle.matched_manufacturer),
+                    joinedload(AnalyzedVehicle.matched_model)
+                ).filter(
+                    AnalyzedVehicle.is_verified == False,
+                    AnalyzedVehicle.matched_manufacturer_id.isnot(None),
+                    AnalyzedVehicle.matched_model_id.isnot(None)
+                ).order_by(AnalyzedVehicle.id.desc())
 
-            if last_id is not None:
-                query = query.filter(AnalyzedVehicle.id < last_id)
+                if last_id is not None:
+                    query = query.filter(AnalyzedVehicle.id < last_id)
 
-            batch = query.limit(BATCH_SIZE).all()
+                batch = query.limit(BATCH_SIZE).all()
 
-            if not batch:
-                break
+                if not batch:
+                    break
 
-            for analyzed in batch:
+                # 배치 데이터를 메모리에 복사해 세션 닫기 전에 준비
+                batch_data = [
+                    {
+                        "id": a.id,
+                        "image_path": a.image_path,
+                        "confidence_score": float(a.confidence_score) if a.confidence_score else 0.0,
+                        "matched_manufacturer_id": a.matched_manufacturer_id,
+                        "matched_model_id": a.matched_model_id,
+                        "mfr_korean": a.matched_manufacturer.korean_name if a.matched_manufacturer else None,
+                        "mfr_english": a.matched_manufacturer.english_name if a.matched_manufacturer else None,
+                        "mdl_korean": a.matched_model.korean_name if a.matched_model else None,
+                        "mdl_english": a.matched_model.english_name if a.matched_model else None,
+                    }
+                    for a in batch
+                ]
+                last_id = batch[-1].id
+            # 세션 닫힘 → 커넥션 반환
+
+            for item in batch_data:
                 current += 1
                 vectordb_ok = False
+
                 try:
-                    # 기존 학습 데이터 확인
-                    existing = db.query(TrainingDataset).filter(
-                        TrainingDataset.image_path == analyzed.image_path
-                    ).first()
+                    # ── Phase 1: DB 읽기 (커넥션 즉시 반환) ──────────────────
+                    with SessionLocal() as db:
+                        existing = db.query(TrainingDataset).filter(
+                            TrainingDataset.image_path == item["image_path"]
+                        ).first()
+                        existing_snapshot = {
+                            "id": existing.id,
+                            "qdrant_id": existing.qdrant_id,
+                            "manufacturer_id": existing.manufacturer_id,
+                            "model_id": existing.model_id,
+                        } if existing else None
+                    # ← 커넥션 반환
 
-                    mfr = analyzed.matched_manufacturer
-                    mdl = analyzed.matched_model
+                    qdrant_metadata = {
+                        "confidence_score": item["confidence_score"],
+                        "verified_by": "admin",
+                        "verified_at": datetime.now().isoformat()
+                    }
 
-                    if existing:
-                        # qdrant_id 없거나 제조사/모델 변경 시 재저장
+                    if existing_snapshot:
                         needs_update = (
-                            existing.qdrant_id is None
-                            or existing.manufacturer_id != analyzed.matched_manufacturer_id
-                            or existing.model_id != analyzed.matched_model_id
+                            existing_snapshot["qdrant_id"] is None
+                            or existing_snapshot["manufacturer_id"] != item["matched_manufacturer_id"]
+                            or existing_snapshot["model_id"] != item["matched_model_id"]
                         )
                         if needs_update:
-                            if existing.qdrant_id:
-                                await loop.run_in_executor(None, vectordb_service.delete_training_image, existing.id)
-                            existing.manufacturer_id = analyzed.matched_manufacturer_id
-                            existing.model_id = analyzed.matched_model_id
-                            db.flush()
+                            # ── Phase 2a: 비동기 작업 (DB 커넥션 없음) ────────
+                            if existing_snapshot["qdrant_id"]:
+                                await loop.run_in_executor(None, vectordb_service.delete_training_image, existing_snapshot["id"])
                             image_embedding = await loop.run_in_executor(
-                                None, embedding_service.encode_image, analyzed.image_path
+                                None, embedding_service.encode_image, item["image_path"]
                             )
-                            qdrant_metadata = {
-                                "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-                                "verified_by": "admin",
-                                "verified_at": datetime.now().isoformat()
-                            }
                             qdrant_success = await loop.run_in_executor(
                                 None,
                                 functools.partial(
                                     vectordb_service.add_training_image,
-                                    training_id=existing.id,
-                                    image_path=existing.image_path,
-                                    manufacturer_id=existing.manufacturer_id,
-                                    model_id=existing.model_id,
+                                    training_id=existing_snapshot["id"],
+                                    image_path=item["image_path"],
+                                    manufacturer_id=item["matched_manufacturer_id"],
+                                    model_id=item["matched_model_id"],
                                     embedding=image_embedding,
                                     metadata=qdrant_metadata,
-                                    manufacturer_korean=mfr.korean_name if mfr else None,
-                                    manufacturer_english=mfr.english_name if mfr else None,
-                                    model_korean=mdl.korean_name if mdl else None,
-                                    model_english=mdl.english_name if mdl else None,
+                                    manufacturer_korean=item["mfr_korean"],
+                                    manufacturer_english=item["mfr_english"],
+                                    model_korean=item["mdl_korean"],
+                                    model_english=item["mdl_english"],
                                 )
                             )
-                            if qdrant_success:
-                                existing.qdrant_id = f"train_{existing.id}"
-                            db.commit()
+                            # ── Phase 3a: DB 쓰기 (커넥션 즉시 반환) ─────────
+                            with SessionLocal() as db:
+                                record = db.query(TrainingDataset).filter(
+                                    TrainingDataset.id == existing_snapshot["id"]
+                                ).first()
+                                if record:
+                                    record.manufacturer_id = item["matched_manufacturer_id"]
+                                    record.model_id = item["matched_model_id"]
+                                    if qdrant_success:
+                                        record.qdrant_id = f"train_{existing_snapshot['id']}"
+                                    db.commit()
                         vectordb_ok = True
+
                     else:
-                        # 이미지 임베딩 생성
+                        # ── Phase 2b: 신규 레코드 DB 생성 (ID 확보) ──────────
+                        with SessionLocal() as db:
+                            training_data = TrainingDataset(
+                                image_path=item["image_path"],
+                                manufacturer_id=item["matched_manufacturer_id"],
+                                model_id=item["matched_model_id"],
+                                qdrant_id=None
+                            )
+                            db.add(training_data)
+                            db.commit()
+                            db.refresh(training_data)
+                            new_training_id = training_data.id
+                        # ← 커넥션 반환
+
+                        # ── Phase 3b: 비동기 작업 (DB 커넥션 없음) ────────────
                         image_embedding = await loop.run_in_executor(
-                            None, embedding_service.encode_image, analyzed.image_path
+                            None, embedding_service.encode_image, item["image_path"]
                         )
-
-                        # 학습 데이터셋에 추가
-                        training_data = TrainingDataset(
-                            image_path=analyzed.image_path,
-                            manufacturer_id=analyzed.matched_manufacturer_id,
-                            model_id=analyzed.matched_model_id,
-                            qdrant_id=None
-                        )
-
-                        db.add(training_data)
-                        db.flush()
-
-                        # Qdrant 메타데이터
-                        qdrant_metadata = {
-                            "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-                            "verified_by": "admin",
-                            "verified_at": datetime.now().isoformat()
-                        }
-
-                        # QdrantDB에 추가
                         qdrant_success = await loop.run_in_executor(
                             None,
                             functools.partial(
                                 vectordb_service.add_training_image,
-                                training_id=training_data.id,
-                                image_path=training_data.image_path,
-                                manufacturer_id=training_data.manufacturer_id,
-                                model_id=training_data.model_id,
+                                training_id=new_training_id,
+                                image_path=item["image_path"],
+                                manufacturer_id=item["matched_manufacturer_id"],
+                                model_id=item["matched_model_id"],
                                 embedding=image_embedding,
                                 metadata=qdrant_metadata,
-                                manufacturer_korean=mfr.korean_name if mfr else None,
-                                manufacturer_english=mfr.english_name if mfr else None,
-                                model_korean=mdl.korean_name if mdl else None,
-                                model_english=mdl.english_name if mdl else None,
+                                manufacturer_korean=item["mfr_korean"],
+                                manufacturer_english=item["mfr_english"],
+                                model_korean=item["mdl_korean"],
+                                model_english=item["mdl_english"],
                             )
                         )
-
+                        # ── Phase 4b: qdrant_id 업데이트 ──────────────────────
                         if qdrant_success:
-                            training_data.qdrant_id = f"train_{training_data.id}"
-
-                        db.commit()
+                            with SessionLocal() as db:
+                                record = db.query(TrainingDataset).filter(
+                                    TrainingDataset.id == new_training_id
+                                ).first()
+                                if record:
+                                    record.qdrant_id = f"train_{new_training_id}"
+                                    db.commit()
                         vectordb_ok = True
 
                 except Exception as e:
-                    db.rollback()
-                    logger.error(f"Batch VectorDB save: {analyzed.id} training_data failed - {e}")
+                    logger.error(f"Batch VectorDB save: {item['id']} training_data failed - {e}")
 
                 # is_verified는 training_data 성공/실패와 무관하게 항상 업데이트
                 try:
-                    # rollback 후 객체가 detached 될 수 있으므로 다시 조회
-                    analyzed_fresh = db.query(AnalyzedVehicle).filter(
-                        AnalyzedVehicle.id == analyzed.id
-                    ).first()
-                    if analyzed_fresh and not analyzed_fresh.is_verified:
-                        analyzed_fresh.is_verified = True
-                        analyzed_fresh.verified_by = "admin"
-                        analyzed_fresh.verified_at = datetime.now()
-                        db.commit()
+                    with SessionLocal() as db:
+                        analyzed_fresh = db.query(AnalyzedVehicle).filter(
+                            AnalyzedVehicle.id == item["id"]
+                        ).first()
+                        if analyzed_fresh and not analyzed_fresh.is_verified:
+                            analyzed_fresh.is_verified = True
+                            analyzed_fresh.verified_by = "admin"
+                            analyzed_fresh.verified_at = datetime.now()
+                            db.commit()
 
                     succeeded += 1
-                    logger.info(f"Batch VectorDB save: {analyzed.id} succeeded (vectordb={'OK' if vectordb_ok else 'SKIP'}) ({current}/{total})")
+                    logger.info(f"Batch VectorDB save: {item['id']} succeeded (vectordb={'OK' if vectordb_ok else 'SKIP'}) ({current}/{total})")
 
                 except Exception as e:
-                    db.rollback()
-                    logger.error(f"Batch VectorDB save: {analyzed.id} is_verified update failed - {e}")
+                    logger.error(f"Batch VectorDB save: {item['id']} is_verified update failed - {e}")
                     failed += 1
-                    failed_ids.append(analyzed.id)
+                    failed_ids.append(item["id"])
 
                 # 진행 이벤트
-                yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': analyzed.id})}\n\n"
+                yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': item['id']})}\n\n"
 
                 await asyncio.sleep(0.1)
-
-            last_id = batch[-1].id
 
         # 완료 이벤트
         yield f"data: {json.dumps({'type': 'done', 'total': total, 'succeeded': succeeded, 'failed': failed, 'failed_ids': failed_ids})}\n\n"
@@ -945,30 +970,41 @@ async def analyze_single_image(
             target_path = str(crop_path)
 
         vision_service = get_vision_backend()
-        vision_result = await vision_service.analyze_vehicle_image(target_path, db=db)
+        # Vision 프롬프트 캐시 준비 후 커넥션 반환
+        vision_service.preload_db_context(db)
+        db.close()
 
-        matcher = VehicleMatcher(db, auto_insert=True)
-        match_result = matcher.match_vehicle(
-            vision_result.get("manufacturer_code", ""),
-            vision_result.get("model_code", ""),
-            vision_confidence=vision_result.get("confidence")
-        )
+        # Vision API 호출 (DB 커넥션 미점유)
+        vision_result = await vision_service.analyze_vehicle_image(target_path)
 
-        analyzed.raw_result = vision_result
-        analyzed.manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
-        analyzed.model = match_result["model"].korean_name if match_result["model"] else None
-        analyzed.matched_manufacturer_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
-        analyzed.matched_model_id = match_result["model"].id if match_result["model"] else None
-        analyzed.confidence_score = match_result["overall_confidence"]
-        analyzed.processing_stage = 'analysis_complete'
-        analyzed.is_verified = False  # 재분석 시 검증 상태 리셋 (재저장 필요)
+        # 매칭 및 저장 (짧은 세션)
+        with SessionLocal() as write_db:
+            matcher = VehicleMatcher(write_db, auto_insert=True)
+            match_result = matcher.match_vehicle(
+                vision_result.get("manufacturer_code", ""),
+                vision_result.get("model_code", ""),
+                vision_confidence=vision_result.get("confidence")
+            )
 
-        db.commit()
-        db.refresh(analyzed)
+            analyzed_fresh = write_db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+            if not analyzed_fresh:
+                raise ValueError("Record not found after re-query")
+            analyzed_fresh.raw_result = vision_result
+            analyzed_fresh.manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
+            analyzed_fresh.model = match_result["model"].korean_name if match_result["model"] else None
+            analyzed_fresh.matched_manufacturer_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
+            analyzed_fresh.matched_model_id = match_result["model"].id if match_result["model"] else None
+            analyzed_fresh.confidence_score = match_result["overall_confidence"]
+            analyzed_fresh.processing_stage = 'analysis_complete'
+            analyzed_fresh.is_verified = False
+
+            write_db.commit()
+            write_db.refresh(analyzed_fresh)
+            result_dict = analyzed_fresh.to_dict()
 
         return {
             "message": "Analysis completed",
-            "data": analyzed.to_dict()
+            "data": result_dict
         }
 
     except Exception as e:
@@ -1011,38 +1047,40 @@ async def analyze_batch_images(
     if not image_files:
         raise HTTPException(status_code=400, detail="No image files found in directory")
 
-    # 일괄 분석
+    # Vision 프롬프트 캐시 준비 후 커넥션 반환
+    vision_service.preload_db_context(db)
+    db.close()
+
+    # 일괄 분석 (이미지당 짧은 세션)
     results = []
-    matcher = VehicleMatcher(db, auto_insert=True)  # 매칭 실패 시 자동 DB 추가
 
     for image_path in image_files:
         try:
-            # OpenAI Vision API 분석 (DB 세션 전달)
-            vision_result = await vision_service.analyze_vehicle_image(image_path, db=db)
+            # OpenAI Vision API 분석 (DB 커넥션 미점유)
+            vision_result = await vision_service.analyze_vehicle_image(image_path)
 
-            # 기준 DB와 매칭
-            match_result = matcher.match_vehicle(
-                vision_result.get("manufacturer_code", ""),
-                vision_result.get("model_code", ""),
-                vision_confidence=vision_result.get("confidence")  # Vision API 신뢰도 전달
-            )
+            with SessionLocal() as write_db:
+                matcher = VehicleMatcher(write_db, auto_insert=True)
+                match_result = matcher.match_vehicle(
+                    vision_result.get("manufacturer_code", ""),
+                    vision_result.get("model_code", ""),
+                    vision_confidence=vision_result.get("confidence")
+                )
 
-            # DB에 저장 (한글명 사용)
-            analyzed = AnalyzedVehicle(
-                image_path=image_path,
-                raw_result=vision_result,
-                manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
-                model=match_result["model"].korean_name if match_result["model"] else None,
-                year=vision_result.get("year"),
-                matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
-                matched_model_id=match_result["model"].id if match_result["model"] else None,
-                confidence_score=match_result["overall_confidence"],
-                is_verified=False
-            )
-
-            db.add(analyzed)
-            db.commit()
-            db.refresh(analyzed)
+                analyzed = AnalyzedVehicle(
+                    image_path=image_path,
+                    raw_result=vision_result,
+                    manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
+                    model=match_result["model"].korean_name if match_result["model"] else None,
+                    year=vision_result.get("year"),
+                    matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
+                    matched_model_id=match_result["model"].id if match_result["model"] else None,
+                    confidence_score=match_result["overall_confidence"],
+                    is_verified=False
+                )
+                write_db.add(analyzed)
+                write_db.commit()
+                write_db.refresh(analyzed)
 
             results.append({
                 "image_path": image_path,

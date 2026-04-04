@@ -438,7 +438,7 @@ class VehicleIdentifier:
                         image_height=img_h,
                     )
                 # 신뢰도 낮음 → VLM 폴백
-                logger.debug(f"분류기 신뢰도 낮음 ({confidence:.3f}), VLM 폴백")
+                logger.info(f"분류기 신뢰도 낮음 ({confidence:.3f} < {settings.classifier_confidence_threshold}), VLM 폴백")
             except Exception as e:
                 logger.warning(f"EfficientNet 분류 실패, VLM 폴백: {e}")
 

@@ -235,3 +235,10 @@ class GeminiVisionService:
         except Exception as e:
             logger.error(f"Gemini 이미지 분석 오류 {image_path}: {e}")
             raise
+
+    def preload_db_context(self, db: Session) -> None:
+        """Vision 프롬프트용 DB 데이터를 캐싱 (커넥션 반환 전 호출)"""
+        self.db = db
+        self._get_manufacturers_from_db()
+        self._get_popular_models_from_db()
+        self.db = None

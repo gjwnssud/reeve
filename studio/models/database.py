@@ -13,12 +13,14 @@ from studio.config import settings
 # SQLAlchemy Base 클래스
 Base = declarative_base()
 
-# 동기 엔진 (MySQL 기본 max_connections=151 기준, admin용 1개 여유)
+# 동기 엔진 (MySQL 기본 max_connections=151 기준)
+# 분석 엔드포인트는 Vision API 호출 전 커넥션을 반환하므로
+# 실제 동시 점유는 매우 낮음 → 작은 풀 크기로도 충분
 engine = create_engine(
     settings.database_url,
-    pool_size=100,       # 기본 커넥션 풀 크기
-    max_overflow=50,     # 풀 초과 시 추가 허용 커넥션 수 (최대 150개)
-    pool_timeout=60,     # 커넥션 대기 타임아웃 (초)
+    pool_size=20,        # 기본 커넥션 풀 크기
+    max_overflow=10,     # 풀 초과 시 추가 허용 커넥션 수 (최대 30개)
+    pool_timeout=30,     # 커넥션 대기 타임아웃 (초)
     pool_pre_ping=True,  # 연결 전 ping으로 유효성 확인
     pool_recycle=3600,   # 1시간마다 연결 재생성
     echo=False

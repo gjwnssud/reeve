@@ -218,6 +218,13 @@ class OllamaVisionService:
 
         return result
 
+    def preload_db_context(self, db: Session) -> None:
+        """Vision 프롬프트용 DB 데이터를 캐싱 (커넥션 반환 전 호출)"""
+        self.db = db
+        self._get_manufacturers_from_db()
+        self._get_popular_models_from_db()
+        self.db = None
+
 
 # 전역 인스턴스
 ollama_vision_service = OllamaVisionService()

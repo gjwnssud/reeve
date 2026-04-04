@@ -216,7 +216,8 @@ class VLMService:
             "stream": False,
             "options": {
                 "temperature": 0.1,
-                "num_predict": 256,
+                "num_predict": 512,
+                "think": False,  # Qwen3 thinking 모드 비활성화 (빈 응답 방지)
             },
             "format": "json",
         }

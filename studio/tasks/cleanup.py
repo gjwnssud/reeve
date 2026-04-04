@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
 from studio.models.analyzed_vehicle import AnalyzedVehicle
-from studio.models import get_db
+from studio.models.database import SessionLocal
 from studio.config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ async def cleanup_old_analyzed_vehicles():
     cutoff_date = datetime.now() - timedelta(days=settings.analyzed_vehicles_retention_days)
 
     # DB 세션 생성
-    db = next(get_db())
+    db = SessionLocal()
 
     try:
         # 삭제 대상 조회: 미검수 + 오래된 데이터
