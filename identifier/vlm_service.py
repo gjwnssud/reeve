@@ -174,6 +174,7 @@ class VLMService:
         candidate_text = "\n".join(candidate_lines)
 
         return (
+            "/no_think\n"
             "이 차량 이미지를 보고, 아래 후보 중에서 가장 적합한 차량을 선택하세요.\n\n"
             f"후보 목록:\n{candidate_text}\n\n"
             "규칙:\n"
@@ -187,6 +188,7 @@ class VLMService:
     def _build_freeform_prompt(self) -> str:
         """VLM-only 모드용 프롬프트"""
         return (
+            "/no_think\n"
             "이 차량 이미지에서 제조사와 모델을 식별하세요.\n\n"
             "반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:\n"
             '{"manufacturer_korean": "<제조사 한글>", "manufacturer_english": "<제조사 영문>", '
@@ -216,10 +218,9 @@ class VLMService:
             "stream": False,
             "options": {
                 "temperature": 0.1,
-                "num_predict": 512,
-                "think": False,  # Qwen3 thinking 모드 비활성화 (빈 응답 방지)
+                "num_predict": 2048,  # thinking 토큰 소모 후에도 content 생성 여유 확보
+                "num_ctx": 8192,      # KV 캐시 — 요청 단위 적용 (서버/모델 기본값 무시)
             },
-            "format": "json",
         }
 
         start = time.time()
@@ -229,7 +230,8 @@ class VLMService:
             elapsed = time.time() - start
 
             data = resp.json()
-            raw_content = data.get("message", {}).get("content", "")
+            msg = data.get("message", {})
+            raw_content = msg.get("content", "")
             logger.info(f"VLM response ({elapsed:.1f}s): {raw_content[:200]}")
 
             return self._parse_response(raw_content, candidates)

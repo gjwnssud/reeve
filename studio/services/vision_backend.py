@@ -96,14 +96,20 @@ class DualVisionService:
         self._gemini.preload_db_context(db)
 
 
+_dual_vision_service: Optional[DualVisionService] = None
+
+
 def get_vision_backend() -> VisionBackend:
     """설정에 따라 Vision 백엔드 인스턴스 반환"""
+    global _dual_vision_service
     if settings.vision_backend == "ollama":
         from studio.services.ollama_vision import ollama_vision_service
         return ollama_vision_service
     elif settings.openai_api_key and settings.gemini_api_key:
-        # 두 API 키가 모두 설정된 경우 교차 검증 모드
-        return DualVisionService()
+        # 두 API 키가 모두 설정된 경우 교차 검증 모드 (싱글턴)
+        if _dual_vision_service is None:
+            _dual_vision_service = DualVisionService()
+        return _dual_vision_service
     else:
         from studio.services.openai_vision import vision_service
         return vision_service

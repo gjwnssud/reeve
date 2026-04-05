@@ -127,20 +127,15 @@ window.addEventListener('beforeunload', (e) => {
     }
 });
 
-// 사이드바 네비게이션 링크 클릭 시 분석 중 경고 모달
-let _pendingNavUrl = null;
+// 사이드바 네비게이션 링크 클릭 시 분석 중 경고
 document.addEventListener('DOMContentLoaded', () => {
-    const navModal = new bootstrap.Modal(document.getElementById('navWarningModal'));
-    document.getElementById('navWarningConfirmBtn').addEventListener('click', () => {
-        navModal.hide();
-        if (_pendingNavUrl) window.location.href = _pendingNavUrl;
-    });
     document.querySelectorAll('nav a[href]').forEach(link => {
         link.addEventListener('click', (e) => {
             if (isBatchProcessing() || isFileTabProcessing()) {
                 e.preventDefault();
-                _pendingNavUrl = link.href;
-                navModal.show();
+                if (confirm('분석이 진행 중입니다. 페이지를 벗어나면 분석이 중단됩니다.\n계속하시겠습니까?')) {
+                    window.location.href = link.href;
+                }
             }
         });
     });

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func as sql_func, select
 from typing import Optional
 from pydantic import BaseModel
+import asyncio
 import httpx
 import logging
 import json
@@ -103,6 +104,16 @@ async def get_stats(db: Session = Depends(get_db)):
     """학습 데이터 통계 (총 레코드 수, 제조사별 분포)"""
     total = db.query(sql_func.count(TrainingDataset.id)).scalar() or 0
 
+    num_classes = (
+        db.query(TrainingDataset.manufacturer_id, TrainingDataset.model_id)
+        .filter(
+            TrainingDataset.manufacturer_id.isnot(None),
+            TrainingDataset.model_id.isnot(None),
+        )
+        .distinct()
+        .count()
+    )
+
     by_manufacturer = (
         db.query(
             Manufacturer.id,
@@ -118,6 +129,7 @@ async def get_stats(db: Session = Depends(get_db)):
 
     return {
         "total": total,
+        "num_classes": num_classes,
         "manufacturers_count": len(by_manufacturer),
         "by_manufacturer": [
             {
@@ -304,21 +316,8 @@ class EfficientNetExportParams(BaseModel):
     max_per_class: Optional[int] = None  # 클래스당 최대 샘플 수 (None = 제한 없음)
 
 
-@router.post("/export-efficientnet")
-async def export_efficientnet_data(params: EfficientNetExportParams, db: Session = Depends(get_db)):
-    """EfficientNetV2-M 분류기 학습용 데이터 내보내기
-
-    생성 디렉토리:
-    - data/finetune/train/chunk_0000.csv, chunk_0001.csv, ...
-    - data/finetune/val/chunk_0000.csv, ...
-    - data/finetune/class_mapping.json
-
-    최적화:
-    - class mapping: 경량 DISTINCT 쿼리 (joinedload 없음)
-    - max_per_class: SQL Window Function으로 DB 레벨 처리
-    - 데이터 스트리밍: stream_results + yield_per (메모리 일정)
-    - CSV 청크: 50,000행 단위 파일 분할
-    """
+def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -> dict:
+    """EfficientNetV2-M export 동기 작업 (스레드풀에서 실행)"""
     CHUNK_SIZE = 50_000
 
     if not (0.0 < params.split <= 1.0):
@@ -502,7 +501,7 @@ async def export_efficientnet_data(params: EfficientNetExportParams, db: Session
         f"val={val_count}건({val_chunk_idx}청크), classes={len(pairs)} → {export_dir}"
     )
 
-    return JSONResponse({
+    return {
         "message": "EfficientNet 학습 데이터 내보내기 완료",
         "export_dir": str(export_dir),
         "num_classes": len(pairs),
@@ -520,7 +519,28 @@ async def export_efficientnet_data(params: EfficientNetExportParams, db: Session
             "val_chunks": val_chunk_idx,
             "split_ratio": params.split,
         },
-    })
+    }
+
+
+@router.post("/export-efficientnet")
+async def export_efficientnet_data(params: EfficientNetExportParams, db: Session = Depends(get_db)):
+    """EfficientNetV2-M 분류기 학습용 데이터 내보내기
+
+    생성 디렉토리:
+    - data/finetune/train/chunk_0000.csv, chunk_0001.csv, ...
+    - data/finetune/val/chunk_0000.csv, ...
+    - data/finetune/class_mapping.json
+
+    최적화:
+    - class mapping: 경량 DISTINCT 쿼리 (joinedload 없음)
+    - max_per_class: SQL Window Function으로 DB 레벨 처리
+    - 데이터 스트리밍: stream_results + yield_per (메모리 일정)
+    - CSV 청크: 50,000행 단위 파일 분할
+    - blocking I/O는 스레드풀에서 실행 (event loop 점유 방지)
+    """
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: _export_efficientnet_sync(params, db))
+    return JSONResponse(result)
 
 
 @router.get("/deploy/cmd")

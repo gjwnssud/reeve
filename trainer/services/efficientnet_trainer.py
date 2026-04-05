@@ -268,7 +268,7 @@ class EfficientNetTrainer:
             class_weights = torch.zeros(num_classes)
             for cls_idx in range(num_classes):
                 count = label_counts.get(cls_idx, 0)
-                class_weights[cls_idx] = total_samples / (num_classes * count) if count > 0 else 1.0
+                class_weights[cls_idx] = (total_samples / (num_classes * count)) ** 0.5 if count > 0 else 1.0
             class_weights = class_weights.to(device)
             log_raw(f"클래스 가중치: min={{class_weights.min():.3f}}, max={{class_weights.max():.3f}}")
 

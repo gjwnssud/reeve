@@ -101,7 +101,7 @@
                                 <div class="card text-center">
                                     <div class="card-body py-3">
                                         <div class="fs-3 fw-bold text-primary" id="eff-stat-mfr">-</div>
-                                        <div class="small text-muted mt-1">제조사 수 (클래스 수)</div>
+                                        <div class="small text-muted mt-1">차종 수 (제조사×모델 조합)</div>
                                     </div>
                                 </div>
                             </div>
@@ -265,6 +265,10 @@
                                 <div class="col-md-3">
                                     <label class="form-label">Freeze Epochs <small class="text-muted">(백본 동결)</small></label>
                                     <input type="number" class="form-control" id="eff-freeze-epochs" value="1" min="0" max="10">
+                                    <div class="form-text">
+                                        <strong>1 권장</strong> — 차종(클래스)이 추가됐거나 처음 학습할 때<br>
+                                        <strong>0</strong> — 클래스 구성은 그대로이고 데이터만 추가됐을 때
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -603,7 +607,7 @@ async function loadEfficientNetStats() {
         const data = await res.json();
 
         document.getElementById('eff-stat-total').textContent = data.total.toLocaleString();
-        document.getElementById('eff-stat-mfr').textContent = data.manufacturers_count;
+        document.getElementById('eff-stat-mfr').textContent = data.num_classes;
 
         if (data.total < 100) {
             document.getElementById('eff-data-warning').style.display = '';
