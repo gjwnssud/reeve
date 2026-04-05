@@ -139,20 +139,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-});
 
-// 탭 비활성화(다른 탭 전환) 시 경고 토스트
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && (isBatchProcessing() || isFileTabProcessing())) {
-        // 탭으로 돌아왔을 때 한 번 알림
-        const warnOnReturn = () => {
-            if (!document.hidden) {
-                showToast('⚠️ 분석 중 탭을 벗어났습니다. 탭이 열린 동안만 분석이 정상 동작합니다.', 'warning', 5000);
-                document.removeEventListener('visibilitychange', warnOnReturn);
+    // 탭 버튼(파일선택/폴더감시) 클릭 시 분석 중 경고
+    document.getElementById('snbTabFile')?.addEventListener('click', (e) => {
+        if (isBatchProcessing()) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (confirm('폴더 감시가 진행 중입니다. 탭을 전환하면 분석이 중단됩니다.\n계속하시겠습니까?')) {
+                bootstrap.Tab.getOrCreateInstance(e.currentTarget).show();
             }
-        };
-        document.addEventListener('visibilitychange', warnOnReturn);
-    }
+        }
+    });
+
+    document.getElementById('snbTabFolder')?.addEventListener('click', (e) => {
+        if (isFileTabProcessing()) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (confirm('파일 분석이 진행 중입니다. 탭을 전환하면 분석이 중단됩니다.\n계속하시겠습니까?')) {
+                bootstrap.Tab.getOrCreateInstance(e.currentTarget).show();
+            }
+        }
+    });
 });
 
 window.addEventListener('resize', () => {
