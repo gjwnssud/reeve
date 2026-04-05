@@ -416,7 +416,12 @@ class VehicleIdentifier:
             try:
                 results = self.classifier.classify([crop])
                 class_idx, confidence = results[0]
-                if confidence >= settings.classifier_confidence_threshold:
+                # 동적 임계값: CLASSIFIER_CONFIDENCE_THRESHOLD가 0이면 k / num_classes 계산
+                if settings.classifier_confidence_threshold > 0:
+                    clf_threshold = settings.classifier_confidence_threshold
+                else:
+                    clf_threshold = settings.classifier_confidence_k / self.classifier.num_classes
+                if confidence >= clf_threshold:
                     entry = self.classifier.class_mapping["classes"][str(class_idx)]
                     result_status = "identified"
                     # YOLO 미감지 시 신뢰도 하향
@@ -438,7 +443,7 @@ class VehicleIdentifier:
                         image_height=img_h,
                     )
                 # 신뢰도 낮음 → VLM 폴백
-                logger.info(f"분류기 신뢰도 낮음 ({confidence:.3f} < {settings.classifier_confidence_threshold}), VLM 폴백")
+                logger.info(f"분류기 신뢰도 낮음 ({confidence:.3f} < {clf_threshold:.4f}), VLM 폴백")
             except Exception as e:
                 logger.warning(f"EfficientNet 분류 실패, VLM 폴백: {e}")
 
