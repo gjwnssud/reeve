@@ -22,7 +22,7 @@ services:
   # ollama, trainer가 네이티브 실행이므로 host.docker.internal로 URL 교체
   identifier:
     volumes:
-      - ./data/efficientnet-models:/app/models/efficientnet
+      - ./data/models/efficientnet:/app/models/efficientnet
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - TRAINER_URL=http://host.docker.internal:8002
@@ -31,7 +31,7 @@ services:
 
   celery-worker:
     volumes:
-      - ./data/efficientnet-models:/app/models/efficientnet
+      - ./data/models/efficientnet:/app/models/efficientnet
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - TRAINER_URL=http://host.docker.internal:8002
@@ -46,7 +46,7 @@ services:
 
 # Mac 네이티브 Trainer 실행 시:
 # TRAINER_BACKEND=efficientnet
-# EFFICIENTNET_MODEL_DIR=../data/efficientnet-models  (docker bind mount 경로와 동일)
+# EFFICIENTNET_MODEL_DIR=../data/models/efficientnet  (docker bind mount 경로와 동일)
 # STUDIO_URL=http://localhost:8000
 # IDENTIFIER_URL=http://localhost:8001
 # uvicorn trainer.main:app --port 8002

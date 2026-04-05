@@ -73,8 +73,16 @@ set DEST=%SCRIPT_DIR%dev\%OS%
 echo.
 echo ===== Building Dev %OS% package =====
 
-if exist "%DEST%" rd /s /q "%DEST%"
-mkdir "%DEST%"
+:: data\, logs\ 는 운영 데이터이므로 보존 — 소스 파일만 교체
+if exist "%DEST%" (
+    for /f "delims=" %%i in ('dir /b /a "%DEST%" 2^>nul') do (
+        if /i not "%%i"=="data" if /i not "%%i"=="logs" (
+            if exist "%DEST%\%%i\" (rd /s /q "%DEST%\%%i") else (del /q "%DEST%\%%i" 2>nul)
+        )
+    )
+) else (
+    mkdir "%DEST%"
+)
 
 :: Copy and patch docker-compose files (fix paths for package root context)
 :: context: .. -> context: .  |  dockerfile: docker/ -> dockerfile:  |  - ../ -> - ./
@@ -118,8 +126,12 @@ del "%_LJS%" 2>nul
 for %%d in (
     data\mysql data\qdrant data\redis data\ollama
     data\hf-cache data\shared data\finetune
-    logs\studio logs\identifier output
+    logs\studio logs\identifier
+    data\models\efficientnet data\models\vlm data\checkpoints\vlm
 ) do mkdir "%DEST%\%%d" 2>nul
+
+:: Ollama Modelfile - VLM GGUF export 결과와 같은 위치에 배치
+copy "%DOCKER_DIR%\ollama\Modelfile" "%DEST%\data\models\vlm\Modelfile" > nul
 
 :: Write OS-specific scripts
 if "%OS%"=="linux" (
@@ -269,7 +281,6 @@ powershell -NoProfile -Command ^
   "'    echo \"\"'," ^
   "'    echo \" ★ 필수 수정 항목:\"'," ^
   "'    echo \"   - OPENAI_API_KEY\"'," ^
-  "'    echo \"   - MYSQL_ROOT_PASSWORD\"'," ^
   "'    echo \"   - MYSQL_PASSWORD\"'," ^
   "'    echo \"\"'," ^
   "'    echo \"   .env 파일을 편집한 후 start.sh를 실행하세요.\"'," ^
@@ -366,7 +377,6 @@ echo         echo       .env 파일이 생성되었습니다.
 echo         echo.
 echo         echo  * 필수 수정 항목:
 echo         echo    - OPENAI_API_KEY
-echo         echo    - MYSQL_ROOT_PASSWORD
 echo         echo    - MYSQL_PASSWORD
 echo         echo.
 echo         echo    .env 파일을 편집한 후 start.bat을 실행하세요.

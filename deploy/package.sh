@@ -55,7 +55,12 @@ package_dev() {
 
     info "===== Dev $os 패키지 생성 시작 ====="
 
-    rm -rf "$dest"
+    # data/, logs/ 는 운영 데이터이므로 보존 — 소스 파일만 교체
+    if [ -d "$dest" ]; then
+        find "$dest" -maxdepth 1 -mindepth 1 \
+            ! -name 'data' ! -name 'logs' \
+            -exec rm -rf {} +
+    fi
     mkdir -p "$dest"
 
     # docker 파일 복사 (경로 패치 적용)
@@ -79,11 +84,13 @@ package_dev() {
     # 빈 디렉토리 생성 (Docker 볼륨 마운트 대상)
     mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
-             "$dest/data/finetune" "$dest/logs/studio" "$dest/logs/identifier" \
-             "$dest/output" "$dest/models"
+             "$dest/data/finetune" \
+             "$dest/data/models/efficientnet" "$dest/data/models/vlm" \
+             "$dest/data/checkpoints/vlm" \
+             "$dest/logs/studio" "$dest/logs/identifier"
 
-    # Ollama Modelfile (파인튜닝 GGUF 배포용)
-    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/models/Modelfile"
+    # Ollama Modelfile — VLM GGUF export 결과와 같은 위치에 배치
+    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/data/models/vlm/Modelfile"
 
     if [ "$os" = "linux" ]; then
         _write_dev_linux_scripts "$dest"
@@ -133,7 +140,6 @@ if [ ! -f ".env" ]; then
     echo " ★ 필수 수정 항목:"
     echo "   - OPENAI_API_KEY        (OpenAI Vision API 키)"
     echo "   - GEMINI_API_KEY        (Google Gemini API 키, 교차검증용)"
-    echo "   - MYSQL_ROOT_PASSWORD"
     echo "   - MYSQL_PASSWORD"
     echo ""
     echo "   .env 파일을 편집한 후 start.sh를 실행하세요."
@@ -226,7 +232,6 @@ if not exist ".env" (
         echo  * 필수 수정 항목:
         echo    - OPENAI_API_KEY        (OpenAI Vision API 키)
         echo    - GEMINI_API_KEY        (Google Gemini API 키, 교차검증용)
-        echo    - MYSQL_ROOT_PASSWORD
         echo    - MYSQL_PASSWORD
         echo.
         echo    .env 파일을 편집한 후 start.bat을 실행하세요.
@@ -966,7 +971,12 @@ package_dev_mac() {
 
     info "===== Dev mac 패키지 생성 시작 ====="
 
-    rm -rf "$dest"
+    # data/, logs/ 는 운영 데이터이므로 보존 — 소스 파일만 교체
+    if [ -d "$dest" ]; then
+        find "$dest" -maxdepth 1 -mindepth 1 \
+            ! -name 'data' ! -name 'logs' \
+            -exec rm -rf {} +
+    fi
     mkdir -p "$dest"
 
     # docker 파일 복사 (base + dev + mac 오버라이드, 경로 패치 적용)
@@ -990,11 +1000,13 @@ package_dev_mac() {
     # 빈 디렉토리 생성
     mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
-             "$dest/data/finetune" "$dest/logs/studio" "$dest/logs/identifier" \
-             "$dest/output" "$dest/models"
+             "$dest/data/finetune" \
+             "$dest/data/models/efficientnet" "$dest/data/models/vlm" \
+             "$dest/data/checkpoints/vlm" \
+             "$dest/logs/studio" "$dest/logs/identifier"
 
-    # Ollama Modelfile (파인튜닝 GGUF 배포용)
-    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/models/Modelfile"
+    # Ollama Modelfile — VLM GGUF export 결과와 같은 위치에 배치
+    cp "$DOCKER_DIR/ollama/Modelfile" "$dest/data/models/vlm/Modelfile"
 
     _write_dev_mac_scripts "$dest"
 
@@ -1046,7 +1058,6 @@ if [ ! -f ".env" ]; then
     echo " ★ 필수 수정 항목:"
     echo "   - OPENAI_API_KEY        (OpenAI Vision API 키)"
     echo "   - GEMINI_API_KEY        (Google Gemini API 키, 교차검증용)"
-    echo "   - MYSQL_ROOT_PASSWORD"
     echo "   - MYSQL_PASSWORD"
     echo ""
     echo "   .env 파일을 편집한 후 start.sh를 실행하세요."
@@ -1120,8 +1131,8 @@ if pgrep -f "trainer.main:app" > /dev/null 2>&1; then
     sleep 1
 fi
 echo "[2/3] Trainer (${_TRAINER_LABEL}) 시작 중..."
-TRAINER_BACKEND=${_TRAINER_BACKEND} TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./output \
-    EFFICIENTNET_MODEL_DIR=./data/efficientnet-models TRAINER_LOG_DIR=./logs/trainer \
+TRAINER_BACKEND=${_TRAINER_BACKEND} TRAINER_DATA_DIR=./data/finetune TRAINER_OUTPUT_DIR=./data/checkpoints/vlm \
+    VLM_MODEL_DIR=./data/models/vlm EFFICIENTNET_MODEL_DIR=./data/models/efficientnet TRAINER_LOG_DIR=./logs/trainer \
     STUDIO_URL=http://localhost:8000 IDENTIFIER_URL=http://localhost:8001 \
     .venv/bin/uvicorn trainer.main:app --host 0.0.0.0 --port 8002 \
     > logs/trainer.log 2>&1 &

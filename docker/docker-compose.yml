@@ -56,7 +56,7 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared  # 비동기 작업용 공유 스토리지
-      - ../data/efficientnet-models:/app/models/efficientnet  # Trainer와 공유하는 파인튜닝 모델
+      - ../data/models/efficientnet:/app/models/efficientnet  # Trainer와 공유하는 파인튜닝 모델
     environment:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
@@ -133,14 +133,16 @@ services:
       - ../data/finetune:/app/data/finetune  # Studio에서 export한 학습 데이터
       - ../data/uploads:/app/data/uploads    # Studio 업로드 이미지 (EfficientNet 학습용)
       - ../data/crops:/app/data/crops        # Studio 크롭 이미지 (EfficientNet 학습용)
-      - ../output:/app/output                # 체크포인트 저장
-      - ../data/hf-cache:/root/.cache/huggingface  # HuggingFace 모델 캐시
-      - ../data/efficientnet-models:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
+      - ../data/checkpoints/vlm:/app/output             # VLM 학습 체크포인트
+      - ../data/hf-cache:/root/.cache/huggingface        # HuggingFace 모델 캐시
+      - ../data/models/vlm:/app/models/vlm               # VLM 병합 모델 (export 결과)
+      - ../data/models/efficientnet:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
     environment:
       - TRAINER_BACKEND=${TRAINER_BACKEND:-llamafactory}
       - OLLAMA_BASE_URL=http://ollama:11434
       - IDENTIFIER_URL=http://identifier:8001
       - STUDIO_URL=http://studio:8000
+      - VLM_MODEL_DIR=/app/models/vlm
       - EFFICIENTNET_MODEL_DIR=/app/models/efficientnet
     networks:
       - reeve-network
@@ -163,7 +165,7 @@ services:
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared
-      - ../data/efficientnet-models:/app/models/efficientnet  # Identifier와 동일한 모델 공유
+      - ../data/models/efficientnet:/app/models/efficientnet  # Identifier와 동일한 모델 공유
     environment:
       - QDRANT_HOST=qdrant
       - REDIS_HOST=redis

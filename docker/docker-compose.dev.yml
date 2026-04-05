@@ -91,5 +91,5 @@ services:
     volumes:
       - ../trainer:/app/trainer
       - ../data/finetune:/app/data/finetune
-      - ../output:/app/output
+      - ../data/checkpoints/vlm:/app/output
     restart: no

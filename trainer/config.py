@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     )
     # 학습 데이터 디렉토리 (컨테이너 내: /app/data, 네이티브: data/finetune)
     data_dir: str = Field(default="data/finetune", alias="TRAINER_DATA_DIR")
-    # 체크포인트 출력 디렉토리 (컨테이너 내: /app/output, 네이티브: output)
-    output_dir: str = Field(default="output", alias="TRAINER_OUTPUT_DIR")
+    # VLM 학습 체크포인트 출력 디렉토리 (컨테이너 내: /app/output, 네이티브: data/checkpoints/vlm)
+    output_dir: str = Field(default="data/checkpoints/vlm", alias="TRAINER_OUTPUT_DIR")
 
     # Ollama 배포
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
@@ -26,8 +26,10 @@ class Settings(BaseSettings):
     # llama.cpp의 convert_hf_to_gguf.py 절대 경로 (미설정 시 GGUF 자동변환 비활성)
     gguf_converter_path: Optional[str] = Field(default=None, alias="GGUF_CONVERTER_PATH")
 
+    # VLM export 후 병합 모델 저장 디렉토리
+    vlm_model_dir: str = Field(default="data/models/vlm", alias="VLM_MODEL_DIR")
     # EfficientNet 학습 설정
-    efficientnet_model_dir: str = Field(default="output/efficientnet", alias="EFFICIENTNET_MODEL_DIR")
+    efficientnet_model_dir: str = Field(default="data/models/efficientnet", alias="EFFICIENTNET_MODEL_DIR")
     # Identifier 컨테이너 내부의 모델 경로 (핫리로드 요청 시 사용)
     identifier_efficientnet_model_path: str = Field(
         default="/app/models/efficientnet/efficientnetv2_m_finetuned.pth",

@@ -225,7 +225,7 @@ class LlamaFactoryTrainer:
         model_name: str = "Qwen/Qwen3-VL-8B-Instruct",
     ) -> dict:
         if output_dir is None:
-            output_dir = f"{self.output_base}/merged"
+            output_dir = str(settings.vlm_model_dir)
         cmd = (
             f"llamafactory-cli export "
             f"--model_name_or_path {model_name} "

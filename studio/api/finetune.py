@@ -570,6 +570,7 @@ class TrainingConfig(BaseModel):
     flash_attn: Optional[str] = None
     use_mps: bool = False
     fp16: bool = False
+    max_per_class: Optional[int] = None
 
 
 class ExportModelRequest(BaseModel):

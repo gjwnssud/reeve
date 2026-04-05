@@ -43,7 +43,6 @@ class Settings(BaseSettings):
 
     # 매칭 알고리즘 설정
     fuzzy_match_threshold: int = Field(default=80, alias="FUZZY_MATCH_THRESHOLD")
-    confidence_threshold: float = Field(default=0.7, alias="CONFIDENCE_THRESHOLD")
 
     # 로깅 설정
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

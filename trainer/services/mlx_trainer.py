@@ -268,7 +268,7 @@ proc.wait()
     ) -> dict:
         """mlx-lm LoRA 어댑터를 베이스 모델에 병합"""
         if output_dir is None:
-            output_dir = f"{self.output_base}/merged"
+            output_dir = str(settings.vlm_model_dir)
 
         cmd = (
             f"python -m mlx_lm.fuse"
