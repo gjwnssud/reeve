@@ -90,61 +90,69 @@ async def analyze_vehicle_image(
     vision_service.preload_db_context(db)
     db.close()
 
+    loop = asyncio.get_running_loop()
+
     try:
         # OpenAI Vision API 호출 (DB 없이 캐시 사용)
         vision_result = await vision_service.analyze_vehicle_image(str(file_path))
 
-        # 기준 DB와 매칭 및 결과 저장 (짧은 세션)
-        with SessionLocal() as write_db:
-            matcher = VehicleMatcher(write_db, auto_insert=True)
-            match_result = matcher.match_vehicle(
-                vision_result.get("manufacturer_code", ""),
-                vision_result.get("model_code", ""),
-                vision_confidence=vision_result.get("confidence")
-            )
+        # 매칭 및 저장 — sync 블로킹이므로 스레드풀에서 실행
+        def _match_and_save():
+            with SessionLocal() as write_db:
+                matcher = VehicleMatcher(write_db, auto_insert=True)
+                match_result = matcher.match_vehicle(
+                    vision_result.get("manufacturer_code", ""),
+                    vision_result.get("model_code", ""),
+                    vision_confidence=vision_result.get("confidence")
+                )
+                row = AnalyzedVehicle(
+                    image_path=str(file_path),
+                    raw_result=vision_result,
+                    manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
+                    model=match_result["model"].korean_name if match_result["model"] else None,
+                    year=vision_result.get("year"),
+                    matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
+                    matched_model_id=match_result["model"].id if match_result["model"] else None,
+                    confidence_score=match_result["overall_confidence"],
+                    is_verified=False
+                )
+                write_db.add(row)
+                write_db.commit()
+                write_db.refresh(row)
+                return {
+                    "id": row.id, "manufacturer": row.manufacturer, "model": row.model,
+                    "year": row.year, "confidence_score": row.confidence_score,
+                    "matched_manufacturer_id": row.matched_manufacturer_id,
+                    "matched_model_id": row.matched_model_id,
+                }
 
-            analyzed = AnalyzedVehicle(
-                image_path=str(file_path),
-                raw_result=vision_result,
-                manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
-                model=match_result["model"].korean_name if match_result["model"] else None,
-                year=vision_result.get("year"),
-                matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
-                matched_model_id=match_result["model"].id if match_result["model"] else None,
-                confidence_score=match_result["overall_confidence"],
-                is_verified=False
-            )
-            write_db.add(analyzed)
-            write_db.commit()
-            write_db.refresh(analyzed)
+        result = await loop.run_in_executor(None, _match_and_save)
 
     except Exception as e:
-        with SessionLocal() as write_db:
-            analyzed = AnalyzedVehicle(
-                image_path=str(file_path),
-                raw_result={"error": str(e)},
-                manufacturer=None,
-                model=None,
-                confidence_score=0.0,
-                is_verified=False
-            )
-            write_db.add(analyzed)
-            write_db.commit()
-            write_db.refresh(analyzed)
+        def _save_error():
+            with SessionLocal() as write_db:
+                row = AnalyzedVehicle(
+                    image_path=str(file_path),
+                    raw_result={"error": str(e)},
+                    manufacturer=None, model=None,
+                    confidence_score=0.0, is_verified=False
+                )
+                write_db.add(row)
+                write_db.commit()
+                write_db.refresh(row)
+                return row.id
 
-        raise HTTPException(
-            status_code=500,
-            detail=f"Analysis failed: {str(e)}"
-        )
+        await loop.run_in_executor(None, _save_error)
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
     return AnalysisResponse(
-        id=analyzed.id,
-        manufacturer=analyzed.manufacturer,
-        model=analyzed.model,
-        year=analyzed.year,
-        confidence_score=float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-        matched_manufacturer_id=analyzed.matched_manufacturer_id,
-        matched_model_id=analyzed.matched_model_id
+        id=result["id"],
+        manufacturer=result["manufacturer"],
+        model=result["model"],
+        year=result["year"],
+        confidence_score=float(result["confidence_score"]) if result["confidence_score"] else 0.0,
+        matched_manufacturer_id=result["matched_manufacturer_id"],
+        matched_model_id=result["matched_model_id"],
     )
 
 
@@ -295,121 +303,118 @@ async def stream_analysis_progress(
     import cv2
     from studio.services.matcher import VehicleMatcher
 
+    loop = asyncio.get_running_loop()
+
     try:
-        # 1단계: 진행 상황 전송
+        # 1단계: 이미지 크롭 — cv2 blocking I/O를 스레드풀에서 실행
         yield f"data: {json.dumps({'event': 'progress', 'progress': 10, 'message': '이미지 크롭 중'})}\n\n"
         await asyncio.sleep(0.1)
 
-        # 이미지 크롭
-        image = cv2.imread(file_path)
-        if image is None:
-            raise ValueError("Failed to load image")
+        def _crop():
+            image = cv2.imread(file_path)
+            if image is None:
+                raise ValueError("Failed to load image")
+            h, w = image.shape[:2]
+            x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            if x2 <= x1 or y2 <= y1:
+                raise ValueError(f"유효하지 않은 bbox: [{x1},{y1},{x2},{y2}] (이미지 크기: {w}x{h})")
+            cropped = image[y1:y2, x1:x2]
+            if cropped.size == 0:
+                raise ValueError("크롭 결과가 비어있습니다")
+            from datetime import datetime
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            crop_dir = Path(f"data/crops/{date_str}")
+            crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
+            cv2.imwrite(str(crop_path), cropped)
+            return str(crop_path)
 
-        h, w = image.shape[:2]
-        x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        # 좌표 정규화: x1<x2, y1<y2 보장
-        x1, x2 = min(x1, x2), max(x1, x2)
-        y1, y2 = min(y1, y2), max(y1, y2)
-        # 이미지 범위 클램핑
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
-        if x2 <= x1 or y2 <= y1:
-            raise ValueError(f"유효하지 않은 bbox: [{x1},{y1},{x2},{y2}] (이미지 크기: {w}x{h})")
-        cropped = image[y1:y2, x1:x2]
-        if cropped.size == 0:
-            raise ValueError("크롭 결과가 비어있습니다")
+        crop_path_str = await loop.run_in_executor(None, _crop)
 
-        # 크롭된 이미지 저장 (날짜별 디렉토리)
-        from datetime import datetime
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        crop_dir = Path(f"data/crops/{date_str}")
-        crop_dir.mkdir(parents=True, exist_ok=True)
-        crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
-        cv2.imwrite(str(crop_path), cropped)
-
-        # 2단계: Vision API 호출 (DB 커넥션 점유 없이 실행)
+        # 2단계: Vision API 호출 (이미 async)
         api_label = "ChatGPT + Gemini 교차 검증 중" if settings.gemini_api_key else "ChatGPT Vision API 호출 중"
         yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': api_label})}\n\n"
         await asyncio.sleep(0.1)
 
         from studio.services.vision_backend import get_vision_backend
         vision_service = get_vision_backend()
-        vision_result = await vision_service.analyze_vehicle_image(str(crop_path))
+        vision_result = await vision_service.analyze_vehicle_image(crop_path_str)
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)
 
-        # 3-4단계: 매칭 및 저장 (짧은 세션)
+        # 3-4단계: 매칭 및 저장 — sync 블로킹이므로 스레드풀에서 실행
         yield f"data: {json.dumps({'event': 'progress', 'progress': 80, 'message': '결과 저장 중'})}\n\n"
         await asyncio.sleep(0.1)
 
-        new_raw_result = {
-            **vision_result,
-            "original_image": file_path,
-            "bbox": bbox
-        }
+        new_raw_result = {**vision_result, "original_image": file_path, "bbox": bbox}
 
-        with SessionLocal() as db:
-            matcher = VehicleMatcher(db, auto_insert=True)
-            match_result = matcher.match_vehicle(
-                vision_result.get("manufacturer_code", ""),
-                vision_result.get("model_code", ""),
-                vision_confidence=vision_result.get("confidence")
-            )
-
-            new_manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
-            new_model = match_result["model"].korean_name if match_result["model"] else None
-            new_mf_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
-            new_model_id = match_result["model"].id if match_result["model"] else None
-            new_confidence = match_result["overall_confidence"]
-
-            analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first() if analyzed_id else None
-
-            if analyzed:
-                if analyzed.image_path and analyzed.image_path != analyzed.original_image_path:
-                    old_crop = Path(analyzed.image_path)
-                    if old_crop.exists():
-                        old_crop.unlink()
-                analyzed.image_path = str(crop_path)
-                analyzed.raw_result = new_raw_result
-                analyzed.manufacturer = new_manufacturer
-                analyzed.model = new_model
-                analyzed.year = vision_result.get("year")
-                analyzed.matched_manufacturer_id = new_mf_id
-                analyzed.matched_model_id = new_model_id
-                analyzed.confidence_score = new_confidence
-                analyzed.is_verified = False
-                analyzed.processing_stage = 'analysis_complete'
-                analyzed.selected_bbox = bbox
-            else:
-                analyzed = AnalyzedVehicle(
-                    image_path=str(crop_path),
-                    original_image_path=file_path,
-                    raw_result=new_raw_result,
-                    manufacturer=new_manufacturer,
-                    model=new_model,
-                    year=vision_result.get("year"),
-                    matched_manufacturer_id=new_mf_id,
-                    matched_model_id=new_model_id,
-                    confidence_score=new_confidence,
-                    is_verified=False,
-                    processing_stage='analysis_complete',
-                    selected_bbox=bbox,
+        def _match_and_save():
+            with SessionLocal() as db:
+                matcher = VehicleMatcher(db, auto_insert=True)
+                match_result = matcher.match_vehicle(
+                    vision_result.get("manufacturer_code", ""),
+                    vision_result.get("model_code", ""),
+                    vision_confidence=vision_result.get("confidence")
                 )
-                db.add(analyzed)
+                new_manufacturer = match_result["manufacturer"].korean_name if match_result["manufacturer"] else None
+                new_model = match_result["model"].korean_name if match_result["model"] else None
+                new_mf_id = match_result["manufacturer"].id if match_result["manufacturer"] else None
+                new_model_id = match_result["model"].id if match_result["model"] else None
+                new_confidence = match_result["overall_confidence"]
 
-            db.commit()
-            db.refresh(analyzed)
+                analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first() if analyzed_id else None
 
-            result_data = {
-                "id": analyzed.id,
-                "manufacturer": analyzed.manufacturer,
-                "model": analyzed.model,
-                "year": analyzed.year,
-                "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-                "matched_manufacturer_id": analyzed.matched_manufacturer_id,
-                "matched_model_id": analyzed.matched_model_id
-            }
+                if analyzed:
+                    if analyzed.image_path and analyzed.image_path != analyzed.original_image_path:
+                        old_crop = Path(analyzed.image_path)
+                        if old_crop.exists():
+                            old_crop.unlink()
+                    analyzed.image_path = crop_path_str
+                    analyzed.raw_result = new_raw_result
+                    analyzed.manufacturer = new_manufacturer
+                    analyzed.model = new_model
+                    analyzed.year = vision_result.get("year")
+                    analyzed.matched_manufacturer_id = new_mf_id
+                    analyzed.matched_model_id = new_model_id
+                    analyzed.confidence_score = new_confidence
+                    analyzed.is_verified = False
+                    analyzed.processing_stage = 'analysis_complete'
+                    analyzed.selected_bbox = bbox
+                else:
+                    analyzed = AnalyzedVehicle(
+                        image_path=crop_path_str,
+                        original_image_path=file_path,
+                        raw_result=new_raw_result,
+                        manufacturer=new_manufacturer,
+                        model=new_model,
+                        year=vision_result.get("year"),
+                        matched_manufacturer_id=new_mf_id,
+                        matched_model_id=new_model_id,
+                        confidence_score=new_confidence,
+                        is_verified=False,
+                        processing_stage='analysis_complete',
+                        selected_bbox=bbox,
+                    )
+                    db.add(analyzed)
+
+                db.commit()
+                db.refresh(analyzed)
+                return {
+                    "id": analyzed.id,
+                    "manufacturer": analyzed.manufacturer,
+                    "model": analyzed.model,
+                    "year": analyzed.year,
+                    "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
+                    "matched_manufacturer_id": analyzed.matched_manufacturer_id,
+                    "matched_model_id": analyzed.matched_model_id,
+                }
+
+        result_data = await loop.run_in_executor(None, _match_and_save)
 
         # 5단계: 완료 전송
         yield f"data: {json.dumps({'event': 'completed', 'progress': 100, 'result': result_data})}\n\n"

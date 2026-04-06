@@ -523,7 +523,7 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
 
 
 @router.post("/export-efficientnet")
-async def export_efficientnet_data(params: EfficientNetExportParams, db: Session = Depends(get_db)):
+async def export_efficientnet_data(params: EfficientNetExportParams):
     """EfficientNetV2-M 분류기 학습용 데이터 내보내기
 
     생성 디렉토리:
@@ -538,8 +538,14 @@ async def export_efficientnet_data(params: EfficientNetExportParams, db: Session
     - CSV 청크: 50,000행 단위 파일 분할
     - blocking I/O는 스레드풀에서 실행 (event loop 점유 방지)
     """
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, lambda: _export_efficientnet_sync(params, db))
+    from studio.models.database import SessionLocal
+
+    def run():
+        with SessionLocal() as db:
+            return _export_efficientnet_sync(params, db)
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, run)
     return JSONResponse(result)
 
 

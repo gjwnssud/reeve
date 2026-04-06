@@ -34,7 +34,6 @@ RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 
 # Copy application code
 COPY studio/ ./studio/
-COPY data/ ./data/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -44,4 +43,4 @@ ENV PYTHONPATH=/app
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "studio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "studio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/studio"]
