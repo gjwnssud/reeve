@@ -5,6 +5,7 @@
 
 const API_BASE = '';
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'tif']);
+const FOLDER_LIVE_CARD_MAX = 100; // 폴더감시 라이브 카드 DOM 최대 개수
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
 const imageGridFile = document.getElementById('imageGridFile');
@@ -243,6 +244,16 @@ async function handleFiles(files, { onEachUploadSuccess, source = 'file' } = {})
 // UI 생성
 //=============================================================================
 
+function trimFolderLiveCards() {
+    const cards = imageGridFolder.querySelectorAll('.col[data-live="true"]');
+    if (cards.length > FOLDER_LIVE_CARD_MAX) {
+        const excess = cards.length - FOLDER_LIVE_CARD_MAX;
+        for (let i = cards.length - 1; i >= cards.length - excess; i--) {
+            cards[i].remove();
+        }
+    }
+}
+
 async function createImageCard(imageId, file) {
     const card = document.createElement('div');
     card.className = 'col';
@@ -284,8 +295,13 @@ async function createImageCard(imageId, file) {
         </div>
     `;
 
-    const targetGrid = (state.images.get(imageId)?.source === 'folder') ? imageGridFolder : imageGridFile;
+    const isFolder = state.images.get(imageId)?.source === 'folder';
+    const targetGrid = isFolder ? imageGridFolder : imageGridFile;
+    if (isFolder) card.setAttribute('data-live', 'true');
     targetGrid.insertBefore(card, targetGrid.firstChild);
+
+    // 폴더감시: 라이브 카드 DOM 상한 적용 (브라우저 응답없음 방지)
+    if (isFolder) trimFolderLiveCards();
 
     // 이미지 로드
     const img = document.getElementById(`img-${imageId}`);

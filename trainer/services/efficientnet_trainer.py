@@ -320,6 +320,7 @@ class EfficientNetTrainer:
             best_val_acc = 0.0
             opt = None
             scheduler = None
+            scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
 
             for epoch in range(NUM_EPOCHS):
                 # Optimizer / Scheduler 초기화 (freeze → unfreeze 전환 시 재생성)
@@ -359,9 +360,15 @@ class EfficientNetTrainer:
                 for batch_idx, (imgs, labels) in enumerate(train_loader):
                     imgs, labels = imgs.to(device), labels.to(device)
                     opt.zero_grad()
-                    loss = criterion(model(imgs), labels)
-                    loss.backward()
-                    opt.step()
+                    if scaler is not None:
+                        with torch.autocast("cuda"):
+                            loss = criterion(model(imgs), labels)
+                        scaler.scale(loss).backward()
+                        scaler.step(opt)
+                        scaler.update()
+                    else:
+                        loss = criterion(model(imgs), labels)
+                        loss.backward()
                     scheduler.step()
 
                     global_step += 1
