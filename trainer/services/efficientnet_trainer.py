@@ -288,6 +288,7 @@ class EfficientNetTrainer:
             ).to(device)
 
             # 기존 모델 이어 학습
+            head_reinitialized = False
             if os.path.exists(MODEL_OUT):
                 log_raw(f"기존 모델 발견: {{MODEL_OUT}} — 이어 학습 시도")
                 try:
@@ -301,10 +302,18 @@ class EfficientNetTrainer:
                         backbone_state = {{k: v for k, v in ckpt.items() if k.startswith("0.")}}
                         model.load_state_dict(backbone_state, strict=False)
                         log_raw(f"backbone 가중치만 로드 (클래스 수 변경: {{saved_n}} → {{num_classes}}, head 재초기화)")
+                        head_reinitialized = True
                 except Exception as e:
                     log_raw(f"기존 모델 로드 실패, 처음부터 학습: {{e}}")
+                    head_reinitialized = True
             else:
                 log_raw("기존 모델 없음 — ImageNet 사전학습 가중치로 시작")
+                head_reinitialized = True
+
+            # head 재초기화 시 freeze_epochs=0이면 자동 보정
+            if head_reinitialized and FREEZE_EPOCHS == 0:
+                FREEZE_EPOCHS = 1
+                log_raw("head 재초기화 감지 → freeze_epochs 자동 보정: 1")
 
             # CUDA 환경에서만 torch.compile 적용 (MPS는 Metal shader 컴파일 오버헤드로 비효율)
             if device.type == "cuda":
@@ -324,7 +333,7 @@ class EfficientNetTrainer:
 
             for epoch in range(NUM_EPOCHS):
                 # Optimizer / Scheduler 초기화 (freeze → unfreeze 전환 시 재생성)
-                if epoch == 0:
+                if epoch == 0 and FREEZE_EPOCHS > 0:
                     # freeze 구간: head만 학습, LR × 10
                     for p in backbone.parameters():
                         p.requires_grad = False
@@ -337,6 +346,20 @@ class EfficientNetTrainer:
                         total_steps=total_steps, pct_start=0.1, anneal_strategy="cos",
                     )
                     log_raw(f"Epoch 1: backbone 동결, head lr={{LEARNING_RATE * 10:.2e}}")
+                elif epoch == 0 and FREEZE_EPOCHS == 0:
+                    # freeze 없이 처음부터 전체 파인튜닝
+                    for p in backbone.parameters():
+                        p.requires_grad = True
+                    opt = optim.AdamW([
+                        {{"params": list(model[2].parameters()), "lr": LEARNING_RATE,       "weight_decay": 0.05}},
+                        {{"params": list(backbone.parameters()),  "lr": LEARNING_RATE * 0.1, "weight_decay": 0.05}},
+                    ])
+                    scheduler = optim.lr_scheduler.OneCycleLR(
+                        opt,
+                        max_lr=[LEARNING_RATE, LEARNING_RATE * 0.1],
+                        total_steps=total_steps, pct_start=0.1, anneal_strategy="cos",
+                    )
+                    log_raw(f"Epoch 1: freeze 없이 전체 파인튜닝 — head lr={{LEARNING_RATE:.2e}}, backbone lr={{LEARNING_RATE * 0.1:.2e}}")
                 elif epoch == FREEZE_EPOCHS:
                     # unfreeze: backbone은 LR × 0.1, head는 LR × 1.0 (Layer-wise LR decay)
                     for p in backbone.parameters():
