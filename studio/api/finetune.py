@@ -99,6 +99,39 @@ async def get_hw_profile():
     return await _proxy_get("/hw-profile")
 
 
+@router.get("/freeze-epochs")
+async def get_freeze_epochs(db: Session = Depends(get_db)):
+    """현재 DB 클래스 수와 저장된 모델 클래스 수를 비교해 freeze_epochs 권장값 반환"""
+    db_classes = (
+        db.query(TrainingDataset.manufacturer_id, TrainingDataset.model_id)
+        .filter(
+            TrainingDataset.manufacturer_id.isnot(None),
+            TrainingDataset.model_id.isnot(None),
+        )
+        .distinct()
+        .count()
+    )
+
+    model_classes = None
+    try:
+        info = await _proxy_get("/train/model-info")
+        model_classes = info.get("num_classes")
+    except Exception:
+        pass
+
+    if model_classes is None:
+        reason = "저장된 모델 없음 — 첫 학습"
+        freeze_epochs = 1
+    elif db_classes != model_classes:
+        reason = f"클래스 수 변경 ({model_classes} → {db_classes})"
+        freeze_epochs = 1
+    else:
+        reason = f"클래스 수 동일 ({db_classes})"
+        freeze_epochs = 0
+
+    return {"freeze_epochs": freeze_epochs, "reason": reason, "db_classes": db_classes, "model_classes": model_classes}
+
+
 @router.get("/stats")
 async def get_stats(db: Session = Depends(get_db)):
     """학습 데이터 통계 (총 레코드 수, 제조사별 분포)"""

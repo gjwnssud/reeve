@@ -264,11 +264,13 @@
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Freeze Epochs <small class="text-muted">(백본 동결)</small></label>
-                                    <input type="number" class="form-control" id="eff-freeze-epochs" value="1" min="0" max="10">
-                                    <div class="form-text">
-                                        <strong>1 권장</strong> — 차종(클래스)이 추가됐거나 처음 학습할 때<br>
-                                        <strong>0</strong> — 클래스 구성은 그대로이고 데이터만 추가됐을 때
+                                    <div class="input-group">
+                                        <input type="text" class="form-control bg-light" id="eff-freeze-epochs-display" value="…" readonly>
+                                        <button class="btn btn-outline-secondary" type="button" onclick="loadFreezeEpochs()" title="새로고침">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
                                     </div>
+                                    <div class="form-text" id="eff-freeze-epochs-reason">자동 결정 중...</div>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Max per Class <small class="text-muted">(클래스당 최대 샘플)</small></label>
@@ -530,6 +532,7 @@ async function init() {
 
     if (_mode === 'efficientnet') {
         loadEfficientNetStats();
+        loadFreezeEpochs();
     } else {
         loadVlmMfrFilter();
     }
@@ -713,6 +716,30 @@ function getVlmExportParams() {
 }
 
 // ============================================================
+// freeze_epochs 자동 결정
+// ============================================================
+let _freezeEpochs = 0;
+
+async function loadFreezeEpochs() {
+    const display = document.getElementById('eff-freeze-epochs-display');
+    const reason  = document.getElementById('eff-freeze-epochs-reason');
+    display.value = '…';
+    reason.textContent = '조회 중...';
+    try {
+        const res = await fetch('/finetune/freeze-epochs');
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        _freezeEpochs = data.freeze_epochs;
+        display.value = _freezeEpochs;
+        reason.textContent = data.reason;
+    } catch (e) {
+        _freezeEpochs = 1;
+        display.value = 1;
+        reason.textContent = '조회 실패 — 기본값 1 사용';
+    }
+}
+
+// ============================================================
 // 하드웨어 자동감지
 // ============================================================
 async function detectHardware() {
@@ -760,7 +787,7 @@ document.getElementById('btn-train-start').addEventListener('click', async () =>
             learning_rate: parseFloat(document.getElementById('eff-lr').value),
             num_epochs: parseInt(document.getElementById('eff-epochs').value),
             batch_size: parseInt(document.getElementById('eff-batch-size').value),
-            freeze_epochs: parseInt(document.getElementById('eff-freeze-epochs').value),
+            freeze_epochs: _freezeEpochs,
             max_per_class: parseInt(document.getElementById('eff-max-per-class').value) || null,
             output_dir: 'efficientnet',
             studio_url: window.location.origin,

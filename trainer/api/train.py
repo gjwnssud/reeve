@@ -157,6 +157,19 @@ async def get_hw_profile():
     return {"hw": hw, "backend": "llamafactory", "label": label, "preset": preset}
 
 
+@router.get("/model-info")
+async def get_model_info():
+    """현재 저장된 EfficientNet 모델의 클래스 수 반환"""
+    import json, os
+    from trainer.config import settings
+    path = settings.identifier_class_mapping_path
+    if not os.path.exists(path):
+        return {"num_classes": None}
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return {"num_classes": data.get("num_classes")}
+
+
 class TrainingConfig(BaseModel):
     model_name: str = "Qwen/Qwen3-VL-8B-Instruct"
     learning_rate: float = 1e-4
