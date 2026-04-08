@@ -1,0 +1,258 @@
+"""
+Vision 서비스 공통 상수
+sql/user_provided_dml.sql 기반 제조사/모델 코드 기초 데이터
+
+- MANUFACTURER_FALLBACK : DB 연결 불가 시 _get_manufacturers_from_db() 반환값
+- MODEL_FALLBACK        : DB 연결 불가 시 _get_all_models_by_manufacturer() 반환값
+"""
+
+from typing import Dict, List
+
+# ──────────────────────────────────────────────
+# 제조사 fallback
+# code는 sql/user_provided_dml.sql manufacturers.code 와 정확히 일치해야 함
+# ──────────────────────────────────────────────
+MANUFACTURER_FALLBACK: Dict[str, List[Dict[str, str]]] = {
+    "국산": [
+        {"code": "hyundai",           "korean_name": "현대",          "english_name": "Hyundai",              "description": "현대자동차 (국내 생산)"},
+        {"code": "kia",               "korean_name": "기아",          "english_name": "Kia",                  "description": "기아자동차 (국내 생산)"},
+        {"code": "chevrolet_gmdaewoo","korean_name": "쉐보레(GM대우)","english_name": "Chevrolet (GM Daewoo)","description": "한국GM 구 대우 (국내 생산) — 스파크, 트랙스, 말리부 등"},
+        {"code": "ssangyong",         "korean_name": "쌍용",          "english_name": "SsangYong",            "description": "쌍용자동차 (국내 생산)"},
+        {"code": "renault_samsung",   "korean_name": "르노삼성",      "english_name": "Renault Samsung",      "description": "르노삼성 (국내 생산)"},
+        {"code": "genesis",           "korean_name": "제네시스",      "english_name": "Genesis",              "description": "제네시스 (현대 프리미엄 브랜드)"},
+    ],
+    "수입": [
+        {"code": "chevrolet",    "korean_name": "쉐보레(수입)",   "english_name": "Chevrolet (Import)",  "description": "쉐보레 수입 차량 (카마로, 콜벳 등)"},
+        {"code": "bmw",          "korean_name": "BMW",            "english_name": "BMW",                 "description": "BMW (독일)"},
+        {"code": "mercedes_benz","korean_name": "벤츠",           "english_name": "Mercedes-Benz",       "description": "메르세데스-벤츠 (독일)"},
+        {"code": "audi",         "korean_name": "아우디",         "english_name": "Audi",                "description": "아우디 (독일)"},
+        {"code": "volkswagen",   "korean_name": "폭스바겐",       "english_name": "Volkswagen",          "description": "폭스바겐 (독일)"},
+        {"code": "porsche",      "korean_name": "포르쉐",         "english_name": "Porsche",             "description": "포르쉐 (독일)"},
+        {"code": "volvo",        "korean_name": "볼보",           "english_name": "Volvo",               "description": "볼보 (스웨덴)"},
+        {"code": "mini",         "korean_name": "미니",           "english_name": "Mini",                "description": "미니 (영국)"},
+        {"code": "jaguar",       "korean_name": "재규어",         "english_name": "Jaguar",              "description": "재규어 (영국)"},
+        {"code": "land_rover",   "korean_name": "랜드로버",       "english_name": "Land Rover",          "description": "랜드로버 (영국)"},
+        {"code": "rolls_royce",  "korean_name": "롤스로이스",     "english_name": "Rolls-Royce",         "description": "롤스로이스 (영국)"},
+        {"code": "bentley",      "korean_name": "벤틀리",         "english_name": "Bentley",             "description": "벤틀리 (영국)"},
+        {"code": "astonmartin",  "korean_name": "애스턴마틴",     "english_name": "Aston Martin",        "description": "애스턴마틴 (영국)"},
+        {"code": "lotus",        "korean_name": "로터스",         "english_name": "Lotus",               "description": "로터스 (영국)"},
+        {"code": "mclaren",      "korean_name": "맥라렌",         "english_name": "McLaren",             "description": "맥라렌 (영국)"},
+        {"code": "toyota",       "korean_name": "도요타",         "english_name": "Toyota",              "description": "도요타 (일본)"},
+        {"code": "honda",        "korean_name": "혼다",           "english_name": "Honda",               "description": "혼다 (일본)"},
+        {"code": "nissan",       "korean_name": "닛산",           "english_name": "Nissan",              "description": "닛산 (일본)"},
+        {"code": "lexus",        "korean_name": "렉서스",         "english_name": "Lexus",               "description": "렉서스 (일본)"},
+        {"code": "mazda",        "korean_name": "마쯔다",         "english_name": "Mazda",               "description": "마쯔다 (일본)"},
+        {"code": "mitsubishi",   "korean_name": "미쯔비시",       "english_name": "Mitsubishi",          "description": "미쯔비시 (일본)"},
+        {"code": "subaru",       "korean_name": "스바루",         "english_name": "Subaru",              "description": "스바루 (일본)"},
+        {"code": "suzuki",       "korean_name": "스즈키",         "english_name": "Suzuki",              "description": "스즈키 (일본)"},
+        {"code": "daihatsu",     "korean_name": "다이하쯔",       "english_name": "Daihatsu",            "description": "다이하쯔 (일본)"},
+        {"code": "isuzu",        "korean_name": "이스즈",         "english_name": "Isuzu",               "description": "이스즈 (일본)"},
+        {"code": "infinity",     "korean_name": "인피니티",       "english_name": "Infiniti",            "description": "인피니티 (일본)"},
+        {"code": "acura",        "korean_name": "어큐라",         "english_name": "Acura",               "description": "어큐라 (일본)"},
+        {"code": "tesla",        "korean_name": "테슬라",         "english_name": "Tesla",               "description": "테슬라 (미국)"},
+        {"code": "ford",         "korean_name": "포드",           "english_name": "Ford",                "description": "포드 (미국)"},
+        {"code": "chevrolet",    "korean_name": "쉐보레(수입)",   "english_name": "Chevrolet",           "description": "쉐보레 수입 차량"},
+        {"code": "dodge",        "korean_name": "닷지",           "english_name": "Dodge",               "description": "닷지 (미국)"},
+        {"code": "cadillac",     "korean_name": "캐딜락",         "english_name": "Cadillac",            "description": "캐딜락 (미국)"},
+        {"code": "lincoln",      "korean_name": "링컨",           "english_name": "Lincoln",             "description": "링컨 (미국)"},
+        {"code": "jeep",         "korean_name": "지프",           "english_name": "Jeep",                "description": "지프 (미국)"},
+        {"code": "buick",        "korean_name": "뷰익",           "english_name": "Buick",               "description": "뷰익 (미국)"},
+        {"code": "gmc",          "korean_name": "GMC",            "english_name": "GMC",                 "description": "GMC (미국)"},
+        {"code": "hummer",       "korean_name": "험머",           "english_name": "Hummer",              "description": "험머 (미국)"},
+        {"code": "chrysler",     "korean_name": "크라이슬러",     "english_name": "Chrysler",            "description": "크라이슬러 (미국)"},
+        {"code": "peugeot",      "korean_name": "푸조",           "english_name": "Peugeot",             "description": "푸조 (프랑스)"},
+        {"code": "citroen",      "korean_name": "시트로엥",       "english_name": "Citroen",             "description": "시트로엥 (프랑스)"},
+        {"code": "renault",      "korean_name": "르노",           "english_name": "Renault",             "description": "르노 (프랑스)"},
+        {"code": "ferrari",      "korean_name": "페라리",         "english_name": "Ferrari",             "description": "페라리 (이탈리아)"},
+        {"code": "lamborghini",  "korean_name": "람보르기니",     "english_name": "Lamborghini",         "description": "람보르기니 (이탈리아)"},
+        {"code": "maserati",     "korean_name": "마세라티",       "english_name": "Maserati",            "description": "마세라티 (이탈리아)"},
+        {"code": "alfa_romeo",   "korean_name": "알파 로메오",   "english_name": "Alfa Romeo",          "description": "알파 로메오 (이탈리아)"},
+        {"code": "fiat",         "korean_name": "피아트",         "english_name": "Fiat",                "description": "피아트 (이탈리아)"},
+        {"code": "pagani",       "korean_name": "파가니",         "english_name": "Pagani",              "description": "파가니 (이탈리아)"},
+        {"code": "bugatti",      "korean_name": "부가티",         "english_name": "Bugatti",             "description": "부가티 (프랑스)"},
+        {"code": "koenigsegg",   "korean_name": "코닉세그",       "english_name": "Koenigsegg",          "description": "코닉세그 (스웨덴)"},
+        {"code": "maybach",      "korean_name": "마이바흐",       "english_name": "Maybach",             "description": "마이바흐 (독일)"},
+        {"code": "saab",         "korean_name": "사브",           "english_name": "Saab",                "description": "사브 (스웨덴)"},
+        {"code": "opel",         "korean_name": "오펠",           "english_name": "Opel",                "description": "오펠 (독일)"},
+        {"code": "smart",        "korean_name": "스마트",         "english_name": "Smart",               "description": "스마트 (독일)"},
+        {"code": "etc",          "korean_name": "기타 수입차",    "english_name": "etc",                 "description": "기타 수입 차량"},
+        {"code": "others",       "korean_name": "기타 제조사",    "english_name": "Others",              "description": "기타 제조사"},
+    ],
+}
+
+# ──────────────────────────────────────────────
+# 모델 fallback (제조사 코드별 모델 코드 목록)
+# sql/user_provided_dml.sql vehicle_models 기반
+# ──────────────────────────────────────────────
+MODEL_FALLBACK: Dict[str, List[str]] = {
+    "hyundai": [
+        "avante", "sonata", "grandeur", "tucson", "santafe", "casper", "veloster",
+        "ioniq", "nexo", "staria", "starex", "porter", "galloper", "accent", "verna",
+        "terracan", "veracruz", "i30", "i40", "aslan", "maxcruz", "genesis", "equus",
+        "pony", "excel", "elantra", "scoupe", "tiburon", "tuscani", "dynasty", "lavita",
+        "matrix", "click", "getz",
+    ],
+    "kia": [
+        "k3", "k5", "k7", "k8", "k9", "sportage", "sorento", "carnival", "stinger",
+        "niro", "stonic", "morning", "ray", "soul", "mohave", "opirus", "lotze",
+        "carens", "cerato", "rio", "pride", "retona", "pregio", "visto", "spectra",
+        "shuma", "sephia", "optima",
+    ],
+    "chevrolet_gmdaewoo": [
+        "spark", "trax", "malibu", "equinox", "captiva", "cruze", "damas", "labo",
+        "lacetti", "nubira", "lanos", "nexia", "alpheon", "winstorm", "orlando",
+        "aveo", "tosca", "kalos", "rezzo", "matiz", "magnus", "leganza", "espero",
+        "gentra", "tico", "brougham", "statesman", "lemans", "ciero", "prince", "g2x",
+        "volt", "bolt_ev", "impala", "corvette", "camaro", "royal_salon", "maepsy",
+        "acadia", "imperial", "super_salon",
+    ],
+    "ssangyong": [
+        "tiboli", "korando", "rexton", "musso", "chairman", "rodius", "actyon",
+        "istana", "kyron", "new_family", "rocksta",
+    ],
+    "renault_samsung": ["sm3", "sm5_", "sm6", "sm7", "qm3", "qm5_", "qm6", "twizy"],
+    "genesis": ["g70", "g80", "g90", "gv70", "gv80", "gv90", "eq900"],
+    "bmw": [
+        "1_series", "2_series", "3_series", "4_series", "5_series", "6_series",
+        "7_series", "8_series", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
+        "m2", "m3", "m4", "m5", "m6", "i3", "i8", "z3", "z4", "z8", "gran_turismo",
+    ],
+    "mercedes_benz": [
+        "a_class", "b_class", "c_class", "e_class", "s_class", "cla_class", "cls_class",
+        "sl_class", "slk_class", "slc_class", "glc_class", "gle_class", "gls_class",
+        "gl_class", "glk_class", "g_class", "m_class", "r_class", "v_class",
+        "sls_amg", "amg_gt", "sel_sec", "190_class",
+    ],
+    "audi": [
+        "a1", "a3", "a4", "a5", "a6", "a7", "a8", "q3", "q5", "q7", "q8",
+        "tt", "tts", "ttrs", "r8", "s3", "s4", "s5", "s6", "s7", "s8",
+        "sq5", "rs3", "rs4", "rs5", "rs6", "rs7", "allroad_quattro",
+    ],
+    "volkswagen": [
+        "golf", "polo", "passat", "tiguan", "touareg", "phaeton", "scirocco",
+        "eos", "bora", "sharan", "vento", "cc",
+    ],
+    "porsche": ["911", "boxster", "cayman", "cayenne", "macan", "panamera", "carrera_gt"],
+    "toyota": [
+        "camry", "corolla", "prius", "rav4", "land_cruiser", "highlander", "sequoia",
+        "tundra", "tacoma", "sienna", "avalon", "venza", "4runner", "supra",
+        "crown", "harrier", "alphard", "vellfire", "yaris_vitz", "estima", "celica",
+        "celsior", "mark2", "markx", "soarer", "mr_2", "mr_s", "matrix", "will",
+        "allion", "premio", "noah", "wish", "ractis", "ist", "sienta", "passo",
+        "aqua", "fj_cruiser", "hj_cruiser",
+    ],
+    "honda": [
+        "accord", "civic", "cr_v", "pilot", "odyssey", "hr_v", "insight", "fit",
+        "legend", "s2000", "nsx", "element", "stream", "crossroad", "cr_z",
+        "ridgeline", "n_box", "n_one", "freed", "stepwgn", "s660",
+    ],
+    "lexus": ["es", "is", "gs", "ls", "rx", "nx", "gx", "lx", "rc", "lc", "sc", "ct200h"],
+    "nissan": [
+        "altima", "maxima", "sentra", "rogue", "murano", "pathfinder", "armada",
+        "frontier", "titan", "350z", "370z", "gt_r", "leaf", "juke", "cube",
+        "qashqai", "skyline", "march", "bluebird_sylphy", "teana", "fuga",
+        "elgrand", "nv", "180sx", "200sx", "240sx", "280zx", "300zx", "silvia",
+        "laurel", "cedric", "gloria", "prairie", "wingroad", "pulsar",
+    ],
+    "mazda": [
+        "mazda_3", "mazda_5", "mazda_6", "cx_5", "cx_7", "cx_9",
+        "rx_7", "rx_8", "mx_3", "mx_5_miata", "mx_6", "626", "demio",
+        "atenza", "axela", "tribute", "mpv", "az_1",
+    ],
+    "ford": [
+        "mustang", "explorer", "escape", "expedition", "f150", "f250", "f350",
+        "ranger", "bronco", "fusion", "focus", "taurus", "edge", "flex",
+        "five_hundred", "windstar", "transit", "e_series", "s_max", "mondeo",
+        "fiesta", "puma", "kuga", "thunderbird", "explorer_spot_trac", "gt",
+    ],
+    "chevrolet": [
+        "camaro", "corvette", "equinox", "tahoe", "surburban", "silverado",
+        "blazer", "tracker", "venture", "astro_van", "chevy_van", "ssr",
+        "hhr", "colorado", "express_van",
+    ],
+    "jeep": ["wrangler", "cherokee", "compass", "rrnegade", "commander", "patriot", "cj"],
+    "tesla": ["model_s", "model3", "modelx", "modely"],
+    "land_rover": [
+        "range_rover", "range_rover_sport", "range_rover_evoque", "range_rover_velar",
+        "discovery", "discovery_sport", "defender", "freelander",
+    ],
+    "jaguar": ["xj", "xf", "xe", "f_type", "f_pace", "x_type", "s_type", "xjr", "xk", "xk8"],
+    "volvo": [
+        "s40", "s60", "s70", "s80", "s90", "v40", "v50", "v60", "v70", "v90",
+        "xc40", "xc60", "xc70", "xc90", "c30", "c70", "740", "850", "940", "960",
+    ],
+    "maserati": [
+        "ghibli", "quattroporte", "granturismo", "gran_cabrio", "gran_sport",
+        "levante", "mc12", "coupe", "spyder", "3200",
+    ],
+    "ferrari": [
+        "f40", "f50", "f355", "f430", "360", "458", "488", "550", "575m", "612",
+        "california", "portofino", "roma", "sf90", "enzo_ferrari", "f12_berlinetta",
+        "gtc4_lusso",
+    ],
+    "lamborghini": ["gallardo", "murcielago", "aventador", "huracan", "urus", "diablo", "reventon"],
+    "rolls_royce": ["phantom", "ghost", "wraith", "dawn", "cullinan", "silver_spur", "corniche"],
+    "bentley": ["continental", "bentayga", "mulsanne", "flying_spur", "arnage", "azure"],
+    "astonmartin": ["db7", "db9", "db11", "vantage", "dbs", "vanquish", "rapide", "virage"],
+    "mini": ["cooper", "clubman", "countryman", "paceman", "roadster", "coupe", "rover_mini"],
+    "mitsubishi": [
+        "lancer", "galant", "pajero", "outlander", "eclipse", "3000gt",
+        "lancer_evolution", "gto", "fto", "montero", "rvr", "i",
+    ],
+    "subaru": ["impreza", "legacy", "outback", "forester", "brz", "svx", "r1"],
+    "suzuki": [
+        "swift", "jimny", "grand_vitara", "alto", "wagon_r", "twin",
+        "cappucino", "x_90", "sidekick", "alto_lapin",
+    ],
+    "daihatsu": ["terios", "mira", "move", "copen", "tanto", "boon", "wake", "materia", "esse", "mira_gino"],
+    "dodge": [
+        "challenger", "charger", "viper", "durango", "avenger", "caravan",
+        "ram_pick_up", "ram_van", "nitro", "caliber", "magnum", "intrepid", "neon",
+    ],
+    "cadillac": [
+        "escalade", "cts", "ats", "xt5", "ct6", "dts", "cts_v", "ats_v",
+        "srx", "xlr", "bls", "deville", "seville", "eldorao", "fleetwood",
+    ],
+    "chrysler": [
+        "300c", "300m", "pt_crusier", "sebring", "voyager", "caravan",
+        "concorde", "pacifica", "lebaron", "new_yorker", "crossfire",
+    ],
+    "buick": ["regal", "lesable", "park_avenue", "riviera", "terraza", "lacrosse"],
+    "lincoln": ["continental", "town_car", "navigator", "mkz", "mkx", "mks", "mkt", "mkc", "ls"],
+    "pontiac": ["grand_am", "grand_prix", "bonneville", "firebird", "trans_am", "solstice", "torrent", "g6"],
+    "gmc": ["yukon", "canyon", "acadia", "terrain", "sierra", "savana", "vandura"],
+    "hummer": ["h1", "h2", "h3"],
+    "infinity": [
+        "q50", "q60", "q70", "qx50", "qx60", "qx70", "qx80", "fx",
+        "m", "ex", "jx", "g", "i", "j30",
+    ],
+    "acura": ["tl", "mdx", "rdx", "tsx", "integra", "nsx", "rl", "rsx", "ilx", "cl"],
+    "lotus": ["elise", "exige", "evora", "esprit", "europa", "2_eleven"],
+    "mclaren": ["720s", "650s", "675lt", "570s", "570gt", "mp4_12c"],
+    "peugeot": [
+        "208", "308", "508", "2008", "3008", "5008", "rcz",
+        "205", "206", "207", "405", "406", "407", "605", "607", "806", "807",
+        "1007", "ds3", "ds4", "ds5", "expert",
+    ],
+    "citroen": ["c2", "c3", "c4_picasso", "c5", "ds3", "ds4", "ds5", "xantia", "xm"],
+    "renault": ["clio", "megane", "laguna", "twizy"],
+    "alfa_romeo": ["147", "156", "159", "166", "brera", "spyder", "giulietta", "4c"],
+    "fiat": ["500", "500x", "punto", "coupe", "barchetta", "multipla", "panda", "lancia"],
+    "opel": ["astra", "corsa", "vectra", "tigra", "speedster", "vita"],
+    "saab": ["9_3", "9_5", "900", "9000", "bls"],
+    "smart": ["fortwo", "forfour", "roadster"],
+    "pagani": ["zonda", "huayra"],
+    "bugatti": ["veyron_16.4", "eb110"],
+    "koenigsegg": ["cc", "agera"],
+    "maybach": ["57", "57s", "62", "62s"],
+    "isuzu": ["trooper", "rodeo", "vehicross"],
+    "saturn": ["vue", "s_series", "astra", "sky"],
+    "mercury": ["sable", "cougar", "villager", "grand_marquis", "mystique"],
+    "oldsmoblie": ["alero", "aurora", "cutlass", "silhuette", "bravada"],
+    "scion": ["xa", "xb", "xd", "tc"],
+    "mitsuoka": ["galue", "orochi", "le_seyde", "nouera", "viewt", "himiko"],
+    "foton": ["tunland"],
+    "baic_yinxiang": ["kenbo_600"],
+    "etc": ["others"],
+    "others": ["others"],
+}
