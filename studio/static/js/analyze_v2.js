@@ -2416,8 +2416,10 @@ async function processBatchQueue() {
                     const s = state.images.get(id);
                     if (s) await analyzeImageSimple(id, s);
                     // 분석 완료 직후 즉시 저장 (카드 자동 제거 타이머 전에)
+                    // confidence_score >= 0.75 이상만 자동 저장 (낮은 신뢰도는 검수 대기)
                     const current = state.images.get(id);
-                    if (current?.status === 'completed' && current.result?.id) {
+                    if (current?.status === 'completed' && current.result?.id
+                        && (current.result.confidence_score ?? 0) >= 0.75) {
                         await saveImageToVectorDB(id, { silent: true });
                     }
                 } catch (e) {
