@@ -24,6 +24,8 @@
         #batchResultTable thead th { white-space: nowrap; }
         #batchResultTable td { vertical-align: middle; }
         .batch-status-badge { font-size: 0.75rem; }
+        .batch-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 4px; cursor: pointer; }
+        .batch-thumb:hover { opacity: 0.85; }
         #batchProgressBar { transition: width 0.3s; }
         .filename-cell {
             max-width: 220px;
@@ -193,6 +195,7 @@
                     <thead class="table-light">
                         <tr>
                             <th>#</th>
+                            <th>이미지</th>
                             <th>파일명</th>
                             <th>제조사</th>
                             <th>모델</th>
@@ -207,6 +210,21 @@
 
     </div><!-- /tabBatch -->
 
+</div>
+
+<!-- 이미지 확대 모달 -->
+<div class="modal fade" id="imgModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-0 pb-0">
+                <small class="text-muted" id="imgModalFilename"></small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-2">
+                <img id="imgModalSrc" src="" alt="" style="max-width:100%; max-height:80vh; object-fit:contain; border-radius:4px;">
+            </div>
+        </div>
+    </div>
 </div>
 
 <footer class="text-center text-muted py-4 small">
@@ -571,7 +589,6 @@ function updateStatus(type, text) {
 // ══════════════════════════════════════════════
 // 배치 탭
 // ══════════════════════════════════════════════
-const BATCH_SIZE = 100;
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 
 const folderInput      = document.getElementById('folderInput');
@@ -596,6 +613,7 @@ const batchDownloadBtn = document.getElementById('batchDownloadBtn');
 let batchFiles = [];
 let batchResults = [];
 let batchStopped = false;
+let batchReader = null;
 
 batchDropArea.addEventListener('click', () => folderInput.click());
 folderInput.addEventListener('change', (e) => loadBatchFiles(e.target.files));
@@ -649,17 +667,87 @@ batchClearBtn.addEventListener('click', () => {
 
 batchStartBtn.addEventListener('click', () => runBatch());
 
-batchStopBtn.addEventListener('click', () => {
+batchStopBtn.addEventListener('click', async () => {
     batchStopped = true;
     batchStopBtn.disabled = true;
     batchProgressLabel.textContent = '중지 중...';
+    if (batchReader) {
+        try { await batchReader.cancel(); } catch (_) {}
+        batchReader = null;
+    }
 });
+
+const BATCH_CONCURRENCY = 20; // 동시 요청 수
+
+let imgModal = null;
+function openImgModal(src, filename) {
+    document.getElementById('imgModalSrc').src = src;
+    document.getElementById('imgModalFilename').textContent = filename || '';
+    if (!imgModal) imgModal = new bootstrap.Modal(document.getElementById('imgModal'));
+    imgModal.show();
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+    });
+}
+
+const rowElements = []; // 인덱스별 TR 요소
+
+function createPlaceholderRow(i, b64) {
+    const tr = document.createElement('tr');
+    tr.dataset.index = i;
+    const filename = escHtml(batchFiles[i]?.name || '');
+    const imgHtml = b64
+        ? `<img class="batch-thumb" src="${b64}" alt="${filename}" onclick="openImgModal(this.src, this.alt)">`
+        : '';
+    tr.innerHTML = `
+        <td class="text-muted small">${i + 1}</td>
+        <td class="thumb-cell">${imgHtml}</td>
+        <td class="filename-cell" title="${escHtml(batchFiles[i]?.name || '')}">${escHtml(batchFiles[i]?.name || '-')}</td>
+        <td class="col-mfr">-</td>
+        <td class="col-model">-</td>
+        <td class="col-conf">-</td>
+        <td class="col-status"><span class="badge batch-status-badge" style="background:#adb5bd">대기중</span></td>
+    `;
+    return tr;
+}
+
+function updateRowStage(i, stage) {
+    const tr = rowElements[i];
+    if (!tr) return;
+    const stageMap = {
+        detecting:   '<span class="badge batch-status-badge" style="background:#0dcaf0;color:#000">감지 중</span>',
+        classifying: '<span class="badge batch-status-badge" style="background:#6f42c1">분류 중</span>',
+    };
+    if (stageMap[stage]) tr.querySelector('.col-status').innerHTML = stageMap[stage];
+}
+
+function updateRowResult(i, item) {
+    const tr = rowElements[i];
+    if (!tr) return;
+    const isError = !!item.error;
+    const confidence = (!isError && item.confidence != null)
+        ? `${(item.confidence * 100).toFixed(1)}%` : '-';
+    tr.querySelector('.col-mfr').textContent   = isError ? '-' : (item.manufacturer_korean || '-');
+    tr.querySelector('.col-model').textContent = isError ? '-' : (item.model_korean || '-');
+    tr.querySelector('.col-conf').textContent  = confidence;
+    tr.querySelector('.col-status').innerHTML  = isError
+        ? `<span class="text-danger small">${escHtml(item.error)}</span>`
+        : getStatusBadge(item);
+}
 
 async function runBatch() {
     if (batchFiles.length === 0) return;
 
     batchStopped = false;
+    batchReader = null;
     batchResults = [];
+    rowElements.length = 0;
     batchResultBody.innerHTML = '';
     batchStartBtn.disabled = true;
     batchClearBtn.disabled = true;
@@ -668,6 +756,8 @@ async function runBatch() {
     batchResultCard.classList.remove('d-none');
     batchSuccessCount.textContent = '성공 0';
     batchErrorCount.textContent = '실패 0';
+    batchProgressLabel.textContent = '처리 중...';
+    batchProgressBar.classList.add('progress-bar-animated');
 
     const total = batchFiles.length;
     let processed = 0;
@@ -675,96 +765,146 @@ async function runBatch() {
     let errorCount = 0;
     const startTime = Date.now();
 
-    for (let i = 0; i < total; i += BATCH_SIZE) {
-        if (batchStopped) break;
+    // 모든 썸네일을 base64로 먼저 로드 후 placeholder 행 생성
+    const thumbnails = await Promise.all(batchFiles.map(f => fileToBase64(f)));
+    for (let i = 0; i < total; i++) {
+        const tr = createPlaceholderRow(i, thumbnails[i]);
+        batchResultBody.appendChild(tr);
+        rowElements.push(tr);
+        batchResults.push(null);
+    }
 
-        const chunk = batchFiles.slice(i, i + BATCH_SIZE);
+    async function processFile(i) {
+        if (batchStopped) return;
+
+        const file = batchFiles[i];
         const formData = new FormData();
-        chunk.forEach(f => formData.append('files', f));
+        formData.append('file', file);
 
-        let chunkResults = [];
+        updateRowStage(i, 'detecting');
+
         try {
-            const response = await fetch('/identify/batch', { method: 'POST', body: formData });
+            const response = await fetch('/identify/stream', { method: 'POST', body: formData });
             if (!response.ok) {
                 const err = await response.json().catch(() => ({}));
                 throw new Error(err.detail || `HTTP ${response.status}`);
             }
-            const data = await response.json();
-            chunkResults = data.items || [];
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop();
+
+                for (const part of parts) {
+                    const line = part.trim();
+                    if (!line.startsWith('data: ')) continue;
+                    let data;
+                    try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+                    if (data.stage === 'detecting' || data.stage === 'classifying') {
+                        updateRowStage(i, data.stage);
+                    } else if (data.stage === 'done') {
+                        const rowData = {
+                            index: i, image_path: file.name,
+                            status: data.status,
+                            manufacturer_korean: data.manufacturer_korean,
+                            model_korean: data.model_korean,
+                            confidence: data.confidence,
+                            message: data.message,
+                            yolo_detected: data.detection != null,
+                            error: null,
+                        };
+                        batchResults[i] = rowData;
+                        updateRowResult(i, rowData);
+                        processed++;
+                        successCount++;
+                    } else if (data.stage === 'error') {
+                        const rowData = { index: i, image_path: file.name, error: data.message };
+                        batchResults[i] = rowData;
+                        updateRowResult(i, rowData);
+                        processed++;
+                        errorCount++;
+                    }
+                }
+            }
         } catch (e) {
-            // 청크 전체 실패 시 각 파일을 error로 마킹
-            chunkResults = chunk.map(f => ({ image_path: f.name, error: e.message }));
+            const rowData = { index: i, image_path: file.name, error: e.message };
+            batchResults[i] = rowData;
+            updateRowResult(i, rowData);
+            processed++;
+            errorCount++;
         }
 
-        // 결과 병합 및 파일명 보정
-        chunkResults.forEach((item, idx) => {
-            if (idx < chunk.length) item.image_path = chunk[idx].name;
-            if (item.error) errorCount++; else successCount++;
-            batchResults.push(item);
-            appendBatchRow(batchResults.length, item);
-        });
-
-        processed = Math.min(i + BATCH_SIZE, total);
-
-        // 진행률 업데이트
         const pct = Math.round((processed / total) * 100);
         batchProgressBar.style.width = `${pct}%`;
         batchProgressCount.textContent = `${processed.toLocaleString()} / ${total.toLocaleString()}`;
+        batchSuccessCount.textContent = `성공 ${successCount.toLocaleString()}`;
+        batchErrorCount.textContent   = `실패 ${errorCount.toLocaleString()}`;
 
         const elapsed = (Date.now() - startTime) / 1000;
         if (processed > 0 && processed < total) {
             const eta = Math.round((elapsed / processed) * (total - processed));
             batchEta.textContent = `예상 남은 시간: ${formatSeconds(eta)}`;
-        } else {
-            batchEta.textContent = '';
         }
-
-        batchSuccessCount.textContent = `성공 ${successCount.toLocaleString()}`;
-        batchErrorCount.textContent   = `실패 ${errorCount.toLocaleString()}`;
     }
+
+    // concurrency pool: BATCH_CONCURRENCY개씩 병렬 처리
+    const queue = Array.from({ length: total }, (_, i) => i);
+    async function worker() {
+        while (queue.length > 0 && !batchStopped) {
+            await processFile(queue.shift());
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, total) }, () => worker()));
 
     // 완료
     batchProgressBar.classList.remove('progress-bar-animated');
     batchProgressLabel.textContent = batchStopped ? '중지됨' : '완료';
-    batchProgressBar.style.width = batchStopped ? batchProgressBar.style.width : '100%';
-    batchProgressCount.textContent = `${Math.min(processed, total).toLocaleString()} / ${total.toLocaleString()}`;
+    if (!batchStopped) batchProgressBar.style.width = '100%';
+    batchProgressCount.textContent = `${processed.toLocaleString()} / ${total.toLocaleString()}`;
     batchEta.textContent = `총 소요: ${formatSeconds(Math.round((Date.now() - startTime) / 1000))}`;
     batchStopBtn.disabled = true;
     batchStartBtn.disabled = false;
     batchClearBtn.disabled = false;
 }
 
-function appendBatchRow(rowNum, item) {
-    const tr = document.createElement('tr');
-    const isError = !!item.error;
-    const confidence = item.confidence ? `${(item.confidence * 100).toFixed(1)}%` : '-';
-    const statusBadgeHtml = isError
-        ? `<span class="badge bg-danger batch-status-badge">실패</span>`
-        : `<span class="badge bg-success batch-status-badge">성공</span>`;
-
-    tr.innerHTML = `
-        <td class="text-muted small">${rowNum}</td>
-        <td class="filename-cell" title="${escHtml(item.image_path || '')}">${escHtml(item.image_path || '-')}</td>
-        <td>${escHtml(isError ? '-' : (item.manufacturer_korean || '-'))}</td>
-        <td>${escHtml(isError ? '-' : (item.model_korean || '-'))}</td>
-        <td>${isError ? '-' : confidence}</td>
-        <td>${isError ? `<span class="text-danger small">${escHtml(item.error)}</span>` : statusBadgeHtml}</td>
-    `;
-    batchResultBody.appendChild(tr);
-    // 자동 스크롤 (마지막 행이 보이도록)
-    tr.scrollIntoView({ block: 'nearest' });
+function getStatusBadge(item) {
+    if (item.error)
+        return `<span class="badge batch-status-badge" style="background:#dc3545" title="${escHtml(item.error)}">실패</span>`;
+    const tip = item.message ? ` title="${escHtml(item.message)}"` : '';
+    if (item.status === 'identified')
+        return `<span class="badge batch-status-badge" style="background:#198754"${tip}>판별완료</span>`;
+    if (item.status === 'low_confidence') {
+        if (item.yolo_detected === false)
+            return `<span class="badge batch-status-badge" style="background:#fd7e14"${tip}>감지실패</span>`;
+        return `<span class="badge batch-status-badge" style="background:#ffc107;color:#000"${tip}>저신뢰도</span>`;
+    }
+    if (item.status === 'no_match')
+        return `<span class="badge batch-status-badge" style="background:#6c757d"${tip}>미매칭</span>`;
+    if (item.status === 'yolo_failed')
+        return `<span class="badge batch-status-badge" style="background:#343a40"${tip}>YOLO탐지실패</span>`;
+    return `<span class="badge batch-status-badge" style="background:#6c757d"${tip}>${escHtml(item.status || '-')}</span>`;
 }
 
+
 batchDownloadBtn.addEventListener('click', () => {
-    if (batchResults.length === 0) return;
+    const validResults = batchResults.filter(Boolean);
+    if (validResults.length === 0) return;
     const header = ['번호', '파일명', '제조사', '모델', '신뢰도', '상태'];
-    const rows = batchResults.map((item, i) => [
+    const rows = validResults.map((item, i) => [
         i + 1,
         item.image_path || '',
         item.error ? '' : (item.manufacturer_korean || ''),
         item.error ? '' : (item.model_korean || ''),
         item.error ? '' : (item.confidence ? `${(item.confidence * 100).toFixed(1)}%` : ''),
-        item.error ? `실패: ${item.error}` : '성공',
+        item.error ? `실패: ${item.error}` : (item.status || ''),
     ]);
     const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });

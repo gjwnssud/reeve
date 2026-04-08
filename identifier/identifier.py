@@ -410,25 +410,43 @@ class VehicleIdentifier:
             )
         else:
             crop, detection = self._detect_and_crop(image)
+            if detection is None:
+                return IdentificationResult(
+                    status="yolo_failed",
+                    confidence=0.0,
+                    message="차량이 감지되지 않았습니다. 차량이 포함된 이미지를 사용해 주세요.",
+                    detection=None,
+                    image_width=img_w,
+                    image_height=img_h,
+                )
 
         # 1. EfficientNetV2-M 분류기 시도
         if self.classifier and self.classifier.has_classification_head:
             try:
                 results = self.classifier.classify([crop])
                 class_idx, confidence = results[0]
-                # 동적 임계값: CLASSIFIER_CONFIDENCE_THRESHOLD가 0이면 k / num_classes 계산
-                if settings.classifier_confidence_threshold > 0:
-                    clf_threshold = settings.classifier_confidence_threshold
-                else:
-                    clf_threshold = settings.classifier_confidence_k / self.classifier.num_classes
-                if confidence >= clf_threshold:
-                    entry = self.classifier.class_mapping["classes"][str(class_idx)]
-                    result_status = "identified"
-                    # YOLO 미감지 시 신뢰도 하향
+                entry = self.classifier.class_mapping["classes"][str(class_idx)]
+
+                # identified 기준: 고정값 > 0이면 사용, 아니면 confidence_threshold (0.80)
+                clf_identified = (
+                    settings.classifier_confidence_threshold
+                    if settings.classifier_confidence_threshold > 0
+                    else settings.confidence_threshold
+                )
+                # VLM 폴백 기준
+                clf_vlm_fallback = settings.classifier_low_confidence_threshold
+
+                if confidence >= clf_identified:
+                    # 충분한 신뢰도 → identified (YOLO 미감지 or 모델정보 누락 시 low_confidence 다운그레이드)
+                    model_korean_val = entry.get("model_korean")
                     if detection is None:
                         result_status = "low_confidence"
                         message = "차량 자동 감지 실패 - 분류기 결과이지만 신뢰도를 낮춥니다."
+                    elif not model_korean_val:
+                        result_status = "low_confidence"
+                        message = "모델 정보가 없는 학습 데이터로 판별되었습니다. 학습 데이터를 확인해 주세요."
                     else:
+                        result_status = "identified"
                         message = "EfficientNetV2-M이 차량을 판별하였습니다."
                     return IdentificationResult(
                         status=result_status,
@@ -442,35 +460,62 @@ class VehicleIdentifier:
                         image_width=img_w,
                         image_height=img_h,
                     )
-                # 신뢰도 낮음 → VLM 폴백
-                logger.info(f"분류기 신뢰도 낮음 ({confidence:.3f} < {clf_threshold:.4f}), VLM 폴백")
-            except Exception as e:
-                logger.warning(f"EfficientNet 분류 실패, VLM 폴백: {e}")
 
-        # 2. VLM 폴백
-        if self.vlm_service is not None:
-            try:
-                vlm_result = self.vlm_service.identify_freeform(crop)
-                return self._build_vlm_result(vlm_result, detection, img_w, img_h, [])
-            except Exception as e:
-                logger.error(f"VLM 폴백 실패: {e}")
+                elif confidence >= clf_vlm_fallback:
+                    # 중간 신뢰도 → 분류기 결과를 low_confidence로 반환 (VLM 없음)
+                    logger.info(
+                        f"분류기 중간 신뢰도 ({confidence*100:.1f}%), "
+                        f"low_confidence 반환 (VLM 없음)"
+                    )
+                    return IdentificationResult(
+                        status="low_confidence",
+                        manufacturer_korean=entry.get("manufacturer_korean"),
+                        manufacturer_english=entry.get("manufacturer_english"),
+                        model_korean=entry.get("model_korean"),
+                        model_english=entry.get("model_english"),
+                        confidence=round(confidence, 4),
+                        message=f"분류기 신뢰도 낮음 ({confidence*100:.1f}%) - 가장 유사한 후보를 표시합니다.",
+                        detection=detection,
+                        image_width=img_w,
+                        image_height=img_h,
+                    )
 
-        # 3. Qdrant 검색 최후 폴백 (부트스트랩 단계에서 VLM 없을 때)
-        try:
-            feats = self.classifier.extract_features([crop])
-            embedding = feats[0].tolist()
-            search_results = self._search_qdrant(embedding)
-            return self._build_identification_result(search_results, detection, img_w, img_h)
-        except Exception as e:
-            logger.error(f"Qdrant 폴백도 실패: {e}")
-            return IdentificationResult(
-                status="low_confidence",
-                confidence=0.0,
-                message="판별에 실패했습니다.",
-                detection=detection,
-                image_width=img_w,
-                image_height=img_h,
-            )
+                # confidence < clf_vlm_fallback → low_confidence로 직접 반환 (VLM 폴백 비활성화)
+                logger.info(
+                    f"분류기 신뢰도 미달 ({confidence*100:.1f}% < "
+                    f"{clf_vlm_fallback*100:.0f}%), low_confidence 반환"
+                )
+                return IdentificationResult(
+                    status="low_confidence",
+                    manufacturer_korean=entry.get("manufacturer_korean"),
+                    manufacturer_english=entry.get("manufacturer_english"),
+                    model_korean=entry.get("model_korean"),
+                    model_english=entry.get("model_english"),
+                    confidence=round(confidence, 4),
+                    message=f"분류기 신뢰도 부족 ({confidence*100:.1f}%) - 가장 유사한 후보를 표시합니다.",
+                    detection=detection,
+                    image_width=img_w,
+                    image_height=img_h,
+                )
+            except Exception as e:
+                logger.warning(f"EfficientNet 분류 실패: {e}")
+                return IdentificationResult(
+                    status="no_match",
+                    confidence=0.0,
+                    message="분류기 오류가 발생했습니다.",
+                    detection=detection,
+                    image_width=img_w,
+                    image_height=img_h,
+                )
+
+        return IdentificationResult(
+            status="no_match",
+            confidence=0.0,
+            message="분류기가 로드되지 않았습니다.",
+            detection=detection,
+            image_width=img_w,
+            image_height=img_h,
+        )
 
     def _identify_visual_rag(
         self,
@@ -589,13 +634,13 @@ class VehicleIdentifier:
             status = "low_confidence"
             message = f"VLM 판별 신뢰도 낮음 ({vlm.confidence:.0%}). 가장 유사한 후보를 표시합니다."
         else:
-            status = "low_confidence"
+            status = "no_match"
             message = "VLM이 차량을 판별하지 못했습니다."
 
         # YOLO 미감지 패널티 (기존 safeguard 유지)
         if detection is None and status == "identified":
             status = "low_confidence"
-            message = "차량 자동 감지 실패 - VLM 판별 결과이지만 신뢰도가 낮습니다."
+            message = "차량이 자동 감지되지 않아 전체 이미지로 판별하였습니다. 결과를 확인해 주세요."
 
         return IdentificationResult(
             status=status,
@@ -910,7 +955,13 @@ class VehicleIdentifier:
                 f"count={best.count}/{len(search_results)}"
             )
 
-        # ── 보정 2: YOLO 미감지 패널티 ──
+        # ── 보정 2: 모델 정보 누락 패널티 ──
+        # Qdrant payload에 model_korean이 없으면 불완전한 학습 데이터 → identified 차단
+        if not best.model_korean and status == "identified":
+            status = "low_confidence"
+            message = "모델 정보가 없는 학습 데이터로 판별되었습니다. 학습 데이터를 확인해 주세요."
+
+        # ── 보정 3: YOLO 미감지 패널티 ──
         # detection이 None이면 전체 이미지(배경 포함)로 임베딩한 상태 → identified 차단
         if detection is None and status == "identified":
             status = "low_confidence"
@@ -978,9 +1029,12 @@ class VehicleIdentifier:
 
     def _process_batch(self, image_paths: List[str]) -> List[BatchImageResult]:
         """
-        한 배치(N장)를 파이프라인으로 처리.
+        한 배치(N장)를 파이프라인으로 처리. 모드별 파이프라인:
 
-        Pipeline: 이미지 로드 → YOLO 배치 감지 → EfficientNet 배치 임베딩 → Qdrant 배치 검색 → 투표
+        - efficientnet:   YOLO → EfficientNet 분류 → VLM 폴백 → Qdrant 폴백
+        - visual_rag:     YOLO → EfficientNet 임베딩 → Qdrant 검색 → VLM 최종 판별
+        - embedding_only: YOLO → EfficientNet 임베딩 → Qdrant 검색 → 투표
+        - vlm_only:       YOLO → VLM 직접 판별 → Qdrant 폴백
         """
         n = len(image_paths)
 
@@ -1038,6 +1092,274 @@ class VehicleIdentifier:
             for idx in valid_indices:
                 cropped_images[idx] = images[idx]
 
+        mode = settings.identifier_mode
+
+        # ──────────────────────────────────────────
+        # efficientnet 모드: 분류기 → VLM 폴백 → Qdrant 폴백
+        # ──────────────────────────────────────────
+        if mode == "efficientnet":
+            classify_indices = [
+                i for i in valid_indices
+                if cropped_images[i] is not None and errors[i] is None
+            ]
+            result_map: Dict[int, IdentificationResult] = {}
+            vlm_fallback_indices: List[int] = []
+
+            # 3a. EfficientNet 배치 분류
+            if classify_indices and self.classifier and self.classifier.has_classification_head:
+                clf_identified = (
+                    settings.classifier_confidence_threshold
+                    if settings.classifier_confidence_threshold > 0
+                    else settings.confidence_threshold
+                )
+                clf_vlm_fallback = settings.classifier_low_confidence_threshold
+                try:
+                    clf_results = self.classifier.classify(
+                        [cropped_images[i] for i in classify_indices]
+                    )
+                    for batch_idx, orig_idx in enumerate(classify_indices):
+                        class_idx, confidence = clf_results[batch_idx]
+                        entry = self.classifier.class_mapping["classes"][str(class_idx)]
+                        detection = detections[orig_idx]
+                        w, h = sizes[orig_idx]
+
+                        if confidence >= clf_identified:
+                            # 충분한 신뢰도 → identified
+                            status = "identified" if detection is not None else "low_confidence"
+                            message = (
+                                "EfficientNetV2-M이 차량을 판별하였습니다."
+                                if detection is not None
+                                else "차량 자동 감지 실패 - 분류기 결과이지만 신뢰도를 낮춥니다."
+                            )
+                            result_map[orig_idx] = IdentificationResult(
+                                status=status,
+                                manufacturer_korean=entry.get("manufacturer_korean"),
+                                manufacturer_english=entry.get("manufacturer_english"),
+                                model_korean=entry.get("model_korean"),
+                                model_english=entry.get("model_english"),
+                                confidence=round(confidence, 4),
+                                message=message,
+                                detection=detection,
+                                image_width=w,
+                                image_height=h,
+                            )
+                        elif confidence >= clf_vlm_fallback:
+                            # 중간 신뢰도 → low_confidence 반환 (VLM 없음)
+                            result_map[orig_idx] = IdentificationResult(
+                                status="low_confidence",
+                                manufacturer_korean=entry.get("manufacturer_korean"),
+                                manufacturer_english=entry.get("manufacturer_english"),
+                                model_korean=entry.get("model_korean"),
+                                model_english=entry.get("model_english"),
+                                confidence=round(confidence, 4),
+                                message=f"분류기 신뢰도 낮음 ({confidence*100:.1f}%) - 가장 유사한 후보를 표시합니다.",
+                                detection=detection,
+                                image_width=w,
+                                image_height=h,
+                            )
+                        else:
+                            # 신뢰도 미달 → VLM 폴백
+                            vlm_fallback_indices.append(orig_idx)
+                except Exception as e:
+                    logger.warning(f"EfficientNet 배치 분류 실패, VLM 폴백: {e}")
+                    vlm_fallback_indices = classify_indices[:]
+            else:
+                vlm_fallback_indices = classify_indices[:]
+
+            # 3b. VLM 폴백 (concurrent)
+            qdrant_fallback_indices: List[int] = []
+            if vlm_fallback_indices and self.vlm_service is not None:
+                from concurrent.futures import ThreadPoolExecutor
+
+                def _run_vlm_freeform(idx: int):
+                    try:
+                        vlm_res = self.vlm_service.identify_freeform(cropped_images[idx])
+                        return idx, vlm_res
+                    except Exception as e:
+                        logger.warning(f"VLM 폴백 실패 idx={idx}: {e}")
+                        return idx, None
+
+                with ThreadPoolExecutor(max_workers=settings.vlm_batch_concurrency) as executor:
+                    futures = {executor.submit(_run_vlm_freeform, idx): idx for idx in vlm_fallback_indices}
+                    for future in futures:
+                        idx, vlm_res = future.result()
+                        if vlm_res is not None:
+                            w, h = sizes[idx]
+                            result_map[idx] = self._build_vlm_result(
+                                vlm_res, detections[idx], w, h, []
+                            )
+                        else:
+                            qdrant_fallback_indices.append(idx)
+            else:
+                qdrant_fallback_indices = vlm_fallback_indices[:]
+
+            # 3c. Qdrant 최후 폴백
+            if qdrant_fallback_indices:
+                try:
+                    from qdrant_client.models import SearchRequest
+
+                    fallback_inputs = [
+                        self._optimize_image_for_embedding(cropped_images[i])
+                        for i in qdrant_fallback_indices
+                    ]
+                    fallback_embeddings = self._encode_images(fallback_inputs)
+                    requests = [
+                        SearchRequest(vector=fallback_embeddings[bi].tolist(), limit=settings.top_k)
+                        for bi in range(len(qdrant_fallback_indices))
+                    ]
+                    batch_results = self.qdrant.search_batch(
+                        collection_name=self.COLLECTION_NAME,
+                        requests=requests,
+                    )
+                    for bi, orig_idx in enumerate(qdrant_fallback_indices):
+                        w, h = sizes[orig_idx]
+                        search_results = [
+                            (point.payload, point.score)
+                            for point in batch_results[bi]
+                            if point.payload is not None
+                        ]
+                        result_map[orig_idx] = self._build_identification_result(
+                            search_results, detections[orig_idx], w, h
+                        )
+                except Exception as e:
+                    logger.error(f"Qdrant 배치 폴백 실패: {e}")
+                    for orig_idx in qdrant_fallback_indices:
+                        w, h = sizes[orig_idx]
+                        result_map[orig_idx] = IdentificationResult(
+                            status="low_confidence",
+                            confidence=0.0,
+                            message="판별에 실패했습니다.",
+                            detection=detections[orig_idx],
+                            image_width=w,
+                            image_height=h,
+                        )
+
+            items: List[BatchImageResult] = []
+            for idx in range(n):
+                if errors[idx]:
+                    items.append(BatchImageResult(image_path=image_paths[idx], error=errors[idx]))
+                    continue
+                result = result_map.get(idx)
+                if result is None:
+                    w, h = sizes[idx]
+                    result = IdentificationResult(
+                        status="low_confidence",
+                        confidence=0.0,
+                        message="판별에 실패했습니다.",
+                        detection=detections[idx],
+                        image_width=w,
+                        image_height=h,
+                    )
+                items.append(BatchImageResult(image_path=image_paths[idx], result=result))
+            return items
+
+        # ──────────────────────────────────────────
+        # vlm_only 모드: VLM 직접 판별 → Qdrant 폴백
+        # ──────────────────────────────────────────
+        if mode == "vlm_only":
+            vlm_indices = [
+                i for i in valid_indices
+                if cropped_images[i] is not None and errors[i] is None
+            ]
+            result_map: Dict[int, IdentificationResult] = {}
+            qdrant_fallback_indices: List[int] = []
+
+            if vlm_indices and self.vlm_service is not None:
+                from concurrent.futures import ThreadPoolExecutor
+
+                def _run_vlm_only(idx: int):
+                    try:
+                        vlm_res = self.vlm_service.identify_freeform(cropped_images[idx])
+                        return idx, vlm_res
+                    except Exception as e:
+                        logger.warning(f"VLM 판별 실패 idx={idx}: {e}")
+                        return idx, None
+
+                with ThreadPoolExecutor(max_workers=settings.vlm_batch_concurrency) as executor:
+                    futures = {executor.submit(_run_vlm_only, idx): idx for idx in vlm_indices}
+                    for future in futures:
+                        idx, vlm_res = future.result()
+                        if vlm_res is not None:
+                            w, h = sizes[idx]
+                            result_map[idx] = self._build_vlm_result(
+                                vlm_res, detections[idx], w, h, []
+                            )
+                        elif settings.vlm_fallback_to_embedding:
+                            qdrant_fallback_indices.append(idx)
+                        else:
+                            w, h = sizes[idx]
+                            result_map[idx] = IdentificationResult(
+                                status="low_confidence",
+                                confidence=0.0,
+                                message="VLM 판별에 실패했습니다.",
+                                detection=detections[idx],
+                                image_width=w,
+                                image_height=h,
+                            )
+
+            if qdrant_fallback_indices:
+                try:
+                    from qdrant_client.models import SearchRequest
+
+                    fallback_inputs = [
+                        self._optimize_image_for_embedding(cropped_images[i])
+                        for i in qdrant_fallback_indices
+                    ]
+                    fallback_embeddings = self._encode_images(fallback_inputs)
+                    requests = [
+                        SearchRequest(vector=fallback_embeddings[bi].tolist(), limit=settings.top_k)
+                        for bi in range(len(qdrant_fallback_indices))
+                    ]
+                    batch_results = self.qdrant.search_batch(
+                        collection_name=self.COLLECTION_NAME,
+                        requests=requests,
+                    )
+                    for bi, orig_idx in enumerate(qdrant_fallback_indices):
+                        w, h = sizes[orig_idx]
+                        search_results = [
+                            (point.payload, point.score)
+                            for point in batch_results[bi]
+                            if point.payload is not None
+                        ]
+                        result_map[orig_idx] = self._build_identification_result(
+                            search_results, detections[orig_idx], w, h
+                        )
+                except Exception as e:
+                    logger.error(f"Qdrant 배치 폴백 실패 (vlm_only): {e}")
+                    for orig_idx in qdrant_fallback_indices:
+                        w, h = sizes[orig_idx]
+                        result_map[orig_idx] = IdentificationResult(
+                            status="low_confidence",
+                            confidence=0.0,
+                            message="판별에 실패했습니다.",
+                            detection=detections[orig_idx],
+                            image_width=w,
+                            image_height=h,
+                        )
+
+            items: List[BatchImageResult] = []
+            for idx in range(n):
+                if errors[idx]:
+                    items.append(BatchImageResult(image_path=image_paths[idx], error=errors[idx]))
+                    continue
+                result = result_map.get(idx)
+                if result is None:
+                    w, h = sizes[idx]
+                    result = IdentificationResult(
+                        status="low_confidence",
+                        confidence=0.0,
+                        message="판별에 실패했습니다.",
+                        detection=detections[idx],
+                        image_width=w,
+                        image_height=h,
+                    )
+                items.append(BatchImageResult(image_path=image_paths[idx], result=result))
+            return items
+
+        # ──────────────────────────────────────────
+        # embedding_only / visual_rag 모드
+        # ──────────────────────────────────────────
+
         # ── 3. EfficientNet 배치 임베딩 ──
         embedding_indices = [
             i for i in valid_indices
@@ -1046,7 +1368,6 @@ class VehicleIdentifier:
         embeddings_map: Dict[int, List[float]] = {}
 
         if embedding_indices:
-            # 이미지 최적화 (고해상도 불필요 연산 제거)
             embedding_inputs = [
                 self._optimize_image_for_embedding(cropped_images[i])
                 for i in embedding_indices
@@ -1078,6 +1399,7 @@ class VehicleIdentifier:
                     search_map[orig_idx] = [
                         (point.payload, point.score)
                         for point in batch_results[batch_idx]
+                        if point.payload is not None
                     ]
             except Exception as e:
                 logger.error(f"Batch Qdrant search failed: {e}")
@@ -1086,7 +1408,7 @@ class VehicleIdentifier:
         vlm_result_map: Dict[int, object] = {}
 
         if (
-            settings.identifier_mode == "visual_rag"
+            mode == "visual_rag"
             and self.vlm_service is not None
             and embeddings_map
         ):

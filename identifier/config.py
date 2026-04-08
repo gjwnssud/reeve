@@ -66,11 +66,18 @@ class IdentifierSettings(BaseSettings):
     )
     classifier_confidence_threshold: float = Field(
         default=0.0, alias="CLASSIFIER_CONFIDENCE_THRESHOLD",
-        description="EfficientNetV2-M 직접 분류 최소 신뢰도 (0이면 classifier_confidence_k / num_classes 동적 계산)"
+        description=(
+            "EfficientNetV2-M 분류기 'identified' 판정 최소 신뢰도. "
+            "0이면 confidence_threshold (IDENTIFIER_CONFIDENCE_THRESHOLD) 값을 자동 사용."
+        )
     )
-    classifier_confidence_k: float = Field(
-        default=50.0, alias="CLASSIFIER_CONFIDENCE_K",
-        description="동적 신뢰도 임계값 계산용 배수 (threshold = k / num_classes). CLASSIFIER_CONFIDENCE_THRESHOLD가 0일 때 사용"
+    classifier_low_confidence_threshold: float = Field(
+        default=0.40, alias="CLASSIFIER_LOW_CONFIDENCE_THRESHOLD",
+        description=(
+            "EfficientNetV2-M 분류기에서 VLM 폴백으로 내려가는 최소 신뢰도. "
+            "이 값 이상이면 분류기 결과를 low_confidence로 반환 (VLM 없음). "
+            "이 값 미만이면 VLM 폴백 실행."
+        )
     )
 
     # VLM (Ollama) 설정

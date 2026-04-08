@@ -3,6 +3,7 @@
 이미지 업로드 → Qdrant 벡터 검색 → 제조사/모델 판별
 """
 import asyncio
+import gc
 import logging
 import logging.handlers
 import os
@@ -19,7 +20,8 @@ os.environ["MKL_NUM_THREADS"] = str(settings.torch_threads)
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+import json
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field as PydanticField
 
@@ -426,6 +428,82 @@ async def identify_vehicle(
             os.unlink(tmp_path)
         except OSError:
             pass
+        del content
+        gc.collect()
+
+
+@app.post(
+    "/identify/stream",
+    tags=["Identification"],
+    include_in_schema=False,
+    summary="차량 판별 (단건, SSE 스트리밍)",
+)
+async def identify_stream(
+    file: UploadFile = File(...),
+    bbox: Optional[str] = Form(None),
+):
+    """YOLO 감지 → EfficientNet 분류 단계를 SSE로 스트리밍합니다."""
+    filename = file.filename or "unknown.jpg"
+    file_ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if file_ext not in settings.allowed_extensions_list:
+        raise HTTPException(400, f"지원하지 않는 파일 형식입니다. 허용: {settings.allowed_extensions}")
+
+    content = await file.read()
+    if len(content) > settings.max_upload_size:
+        raise HTTPException(400, f"파일 크기가 {settings.max_upload_size // 1024 // 1024}MB를 초과합니다.")
+
+    bbox_list = None
+    if bbox:
+        try:
+            bbox_list = [int(x.strip()) for x in bbox.split(",")]
+            if len(bbox_list) != 4:
+                raise ValueError("bbox must have 4 values")
+        except ValueError as e:
+            raise HTTPException(400, f"잘못된 bbox 형식입니다: {e}")
+
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=f".{file_ext}")
+    with os.fdopen(tmp_fd, "wb") as tmp_file:
+        tmp_file.write(content)
+
+    async def generate():
+        identifier: VehicleIdentifier = app.state.identifier
+        loop = asyncio.get_event_loop()
+        try:
+            # Stage 1: YOLO 감지
+            yield f"data: {json.dumps({'stage': 'detecting', 'message': '차량 감지 중...'}, ensure_ascii=False)}\n\n"
+
+            detection_result = await loop.run_in_executor(None, identifier.detect_vehicles, tmp_path)
+
+            detect_bbox = bbox_list
+            detection_info = None
+            if not detect_bbox and detection_result.detections:
+                det = detection_result.detections[0]
+                detect_bbox = det.bbox
+                detection_info = det.model_dump()
+
+            # Stage 2: 분류
+            yield f"data: {json.dumps({'stage': 'classifying', 'message': '분류 중...', 'detection': detection_info}, ensure_ascii=False)}\n\n"
+
+            result = await loop.run_in_executor(None, identifier.identify, tmp_path, detect_bbox)
+            event = {"stage": "done"}
+            event.update(result.model_dump())
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.error(f"Stream identify failed: {e}", exc_info=True)
+            yield f"data: {json.dumps({'stage': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            gc.collect()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post(
@@ -535,6 +613,8 @@ async def identify_batch(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
 
 
 # ──────────────────────────────────────────────
