@@ -98,45 +98,76 @@ class OpenAIVisionService:
             # 오류 시 기본값 반환 (위의 기본값 사용)
             return self._get_manufacturers_from_db()
 
-    def _get_popular_models_from_db(self, limit: int = 30) -> List[Dict[str, str]]:
-        """DB에서 인기 모델 목록을 가져오기 (code 포함)"""
+    def _get_all_models_by_manufacturer(self) -> Dict[str, List[str]]:
+        """DB에서 전체 모델 코드를 제조사별로 그룹핑하여 반환"""
         if self._model_cache:
             return self._model_cache
 
+        # sql/user_provided_dml.sql 기반 fallback
+        fallback: Dict[str, List[str]] = {
+            "hyundai": ["avante", "sonata", "grandeur", "tucson", "santafe", "casper", "veloster", "ioniq", "nexo", "staria", "starex", "porter", "galloper", "accent", "verna", "terracan", "veracruz", "i30", "i40", "aslan", "maxcruz", "genesis", "equus", "pony", "excel", "elantra", "scoupe", "tiburon", "tuscani", "xg", "dynasty", "lavita", "matrix", "click", "getz", "ix35"],
+            "kia": ["k3", "k5", "k7", "k8", "k9", "sportage", "sorento", "carnival", "stinger", "niro", "stonic", "morning", "ray", "soul", "mohave", "bongo", "opirus", "lotze", "carens", "cerato", "rio", "pride", "retona", "brisa", "pregio", "visto", "spectra", "shuma", "sephia", "optima", "ceres"],
+            "chevrolet_gmdeawoo": ["spark", "trax", "malibu", "equinox", "captiva", "colorado", "damas", "labo", "lacetti", "nubira", "lanos", "nexia", "alpheon", "winstorm", "orlando", "cruze", "aveo", "tosca", "kalos", "rezzo", "matiz", "magnus"],
+            "ssangyong": ["tiboli", "korando", "rexton", "musso", "chairman", "rodius", "actyon", "istana", "kyron", "new_family", "rocksta"],
+            "renault_samsung": ["sm3", "sm5_", "sm6", "sm7", "qm3", "qm5_", "qm6", "twizy"],
+            "genesis": ["g70", "g80", "g90", "gv70", "gv80", "gv90", "eq900"],
+            "bmw": ["1_series", "2_series", "3_series", "4_series", "5_series", "6_series", "7_series", "8_series", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "m2", "m3", "m4", "m5", "m6", "i3", "i8", "z3", "z4", "z8"],
+            "mercedes_benz": ["a_class", "b_class", "c_class", "e_class", "s_class", "cla_class", "cls_class", "sl_class", "slk_class", "slc_class", "glc_class", "gle_class", "gls_class", "gl_class", "glk_class", "g_class", "m_class", "r_class", "v_class", "sls_amg", "amg_gt", "sel_sec"],
+            "audi": ["a1", "a3", "a4", "a5", "a6", "a7", "a8", "q3", "q5", "q7", "q8", "tt", "tts", "ttrs", "r8", "s3", "s4", "s5", "s6", "s7", "s8", "sq5", "rs3", "rs4", "rs5", "rs6", "rs7"],
+            "volkswagen": ["golf", "polo", "passat", "tiguan", "touareg", "phaeton", "scirocco", "eos", "bora", "sharan", "vento", "cc", "t_roc", "arteon"],
+            "porsche": ["911", "boxster", "cayman", "cayenne", "macan", "panamera", "918", "taycan", "carrera_gt"],
+            "toyota": ["camry", "corolla", "prius", "rav4", "land_cruiser", "highlander", "sequoia", "tundra", "tacoma", "sienna", "avalon", "venza", "4runner", "supra", "gr86", "crown", "harrier", "alphard", "vellfire", "yaris_vitz"],
+            "honda": ["accord", "civic", "cr_v", "pilot", "odyssey", "hr_v", "ridgeline", "passport", "insight", "fit", "legend", "s2000", "nsx", "element", "stream", "freed"],
+            "lexus": ["es", "is", "gs", "ls", "rx", "nx", "gx", "lx", "ux", "rc", "lc", "sc", "ct200h"],
+            "nissan": ["altima", "maxima", "sentra", "versa", "rogue", "murano", "pathfinder", "armada", "frontier", "titan", "350z", "370z", "gt_r", "leaf", "juke", "cube", "qashqai", "skyline", "march"],
+            "mazda": ["mazda_3", "mazda_5", "mazda_6", "cx_5", "cx_7", "cx_9", "rx_7", "rx_8", "mx_5_miata"],
+            "ford": ["mustang", "explorer", "escape", "expedition", "f150", "f250", "f350", "ranger", "bronco", "fusion", "focus", "taurus", "edge", "flex"],
+            "chevrolet": ["camaro", "corvette", "equinox", "tahoe", "suburban", "silverado", "colorado", "blazer", "tracker"],
+            "jeep": ["wrangler", "cherokee", "compass", "renegade", "commander", "patriot", "cj"],
+            "tesla": ["model_s", "model3", "modelx", "modely"],
+            "land_rover": ["range_rover", "range_rover_sport", "range_rover_evoque", "range_rover_velar", "discovery", "discovery_sport", "defender", "freelander"],
+            "jaguar": ["xj", "xf", "xe", "f_type", "f_pace", "e_pace", "i_pace"],
+            "volvo": ["s40", "s60", "s80", "s90", "v40", "v50", "v60", "v70", "v90", "xc40", "xc60", "xc70", "xc90", "c30", "c70"],
+            "maserati": ["ghibli", "quattroporte", "granturismo", "gran_cabrio", "levante", "mc12"],
+            "ferrari": ["f40", "f50", "f355", "f430", "360", "458", "488", "550", "575m", "612", "california", "portofino", "roma", "sf90"],
+            "lamborghini": ["gallardo", "murcielago", "aventador", "huracan", "urus"],
+            "rolls_royce": ["phantom", "ghost", "wraith", "dawn", "cullinan"],
+            "bentley": ["continental", "bentayga", "mulsanne", "flying_spur"],
+            "mini": ["cooper", "clubman", "countryman", "paceman", "roadster", "coupe"],
+            "mitsubishi": ["lancer", "galant", "pajero", "outlander", "eclipse", "3000gt"],
+            "subaru": ["impreza", "legacy", "outback", "forester", "brz", "wrx"],
+            "suzuki": ["swift", "jimny", "grand_vitara", "alto", "wagon_r"],
+            "dodge": ["challenger", "charger", "viper", "durango", "avenger", "caravan"],
+            "cadillac": ["escalade", "cts", "ats", "xt5", "ct6", "dts"],
+        }
+
         if not self.db:
-            # DB 없으면 기본값 반환
-            return [
-                {"code": "sonata", "korean_name": "쏘나타", "english_name": "Sonata"},
-                {"code": "k5", "korean_name": "K5", "english_name": "K5"},
-                {"code": "spark", "korean_name": "스파크", "english_name": "Spark"},
-                {"code": "avante", "korean_name": "아반떼", "english_name": "Avante"},
-                {"code": "grandeur", "korean_name": "그랜저", "english_name": "Grandeur"},
-                {"code": "carnival", "korean_name": "카니발", "english_name": "Carnival"},
-                {"code": "3series", "korean_name": "3시리즈", "english_name": "3 Series"},
-                {"code": "sclass", "korean_name": "S클래스", "english_name": "S-Class"},
-                {"code": "a6", "korean_name": "A6", "english_name": "A6"},
-                {"code": "golf", "korean_name": "골프", "english_name": "Golf"}
-            ]
+            return fallback
 
         try:
             from studio.models.vehicle_model import VehicleModel
 
-            # DB에서 모델 조회 (최근 등록순 또는 이름순)
-            models = self.db.query(VehicleModel).order_by(VehicleModel.id.desc()).limit(limit).all()
+            models = self.db.query(VehicleModel).order_by(
+                VehicleModel.manufacturer_code, VehicleModel.code
+            ).all()
 
-            result = [{
-                "code": m.code.lower(),  # 소문자 코드
-                "korean_name": m.korean_name,
-                "english_name": m.english_name
-            } for m in models if m.code and (m.korean_name or m.english_name)]
+            result: Dict[str, List[str]] = {}
+            for m in models:
+                if not m.code or not m.manufacturer_code:
+                    continue
+                mf = m.manufacturer_code.lower()
+                code = m.code.lower()
+                if mf not in result:
+                    result[mf] = []
+                if code not in result[mf]:
+                    result[mf].append(code)
 
             self._model_cache = result
             return result
 
         except Exception as e:
             logger.warning(f"Failed to load models from DB: {e}")
-            # 오류 시 기본값 사용
-            return self._get_popular_models_from_db.__defaults__[0]
+            return fallback
 
     async def analyze_vehicle_image(
         self,
@@ -240,136 +271,158 @@ class OpenAIVisionService:
             raise
 
     def _build_prompt(self, additional_context: Optional[str] = None) -> str:
-        """분석용 프롬프트 생성 (DB 데이터 기반)"""
-        # DB에서 제조사/모델 목록 가져오기
+        """분석용 프롬프트 생성 (DB 전체 코드 주입, 시각적 근거 기반 chain-of-thought)"""
         manufacturers = self._get_manufacturers_from_db()
-        popular_models = self._get_popular_models_from_db(limit=20)
+        models_by_mf = self._get_all_models_by_manufacturer()
 
-        # 제조사 목록 포맷팅 (code 포함, 설명 추가)
-        manufacturer_lines = []
-        for category, brands in manufacturers.items():
-            manufacturer_lines.append(f'\n**{category}**:')
+        # 제조사 코드 목록 (code: 한글명 형식)
+        mf_lines = []
+        for brands in manufacturers.values():
             for b in brands:
-                manufacturer_lines.append(f'   - code: "{b["code"]}" | {b["description"]}')
-        manufacturer_text = '\n'.join(manufacturer_lines)
+                mf_lines.append(f'  "{b["code"]}": {b["korean_name"]} ({b["english_name"]})')
+        manufacturer_list = "\n".join(mf_lines)
 
-        # 모델 예시 포맷팅 (code 포함)
-        model_items = [f'{{code: "{m["code"]}", name: "{m["korean_name"]}"}}' for m in popular_models[:20]]
-        model_examples = ', '.join(model_items)
+        # 모델 코드 목록 (제조사별 그룹핑)
+        model_lines = []
+        for mf_code, model_codes in sorted(models_by_mf.items()):
+            codes_str = ", ".join(f'"{c}"' for c in model_codes)
+            model_lines.append(f'  {mf_code}: [{codes_str}]')
+        model_list = "\n".join(model_lines)
 
-        base_prompt = f"""이미지에서 차량의 제조사와 모델을 정확하게 식별해주세요.
+        prompt = f"""Identify the vehicle manufacturer and model from the image.
 
-**매우 중요**: 반드시 아래의 정확한 JSON 형식으로만 답변해주세요. 다른 텍스트는 포함하지 마세요.
+## Step 1 — Visual Evidence (required)
+Before classifying, briefly note what you can observe:
+- Any logos, emblems, or badges (exact text or shape)
+- Distinctive design features (grille, headlights, body shape, DRL pattern)
+- Any model name lettering on the vehicle
 
+## Step 2 — Select from the official code list
+
+### Manufacturer codes (use EXACTLY as listed):
+{manufacturer_list}
+
+Note: Korean-market GM vehicles (Spark, Trax, Malibu, etc.) → "chevrolet_gmdeawoo"
+      Imported Chevrolet (Camaro, Corvette, etc.) → "chevrolet"
+
+### Model codes by manufacturer (use EXACTLY as listed):
+{model_list}
+
+If the exact model is not in the list: convert English model name to lowercase without spaces
+  e.g. "Palisade" → "palisade", "EV6" → "ev6"
+
+## Output — JSON only, no other text:
 {{
-  "manufacturer_code": "hyundai",
-  "model_code": "casper",
-  "confidence": 0.95
+  "visual_evidence": "<what you observed: logos/badges/design features>",
+  "manufacturer_code": "<exact code from list>",
+  "model_code": "<exact code from list>",
+  "confidence": <0.0–1.0>
 }}
 
-**식별 규칙**:
-1. manufacturer_code: 아래 목록에서 정확한 **code 값(소문자 영문)**을 사용하세요.
-{manufacturer_text}
+## Confidence guide:
+- 0.90–1.0:  Logo/badge clearly visible and model confirmed
+- 0.75–0.89: Distinctive design features allow confident identification
+- 0.55–0.74: Partial view or minor uncertainty
+- 0.30–0.54: Manufacturer identifiable but model uncertain
+- 0.0–0.29:  Cannot reliably identify
 
-**중요**: 동일 브랜드에 국산/수입 구분이 있는 경우 (예: 쉐보레):
-- 국내 생산 차량 (스파크, 트랙스, 말리부 등) → "chevrolet_gmdaewoo"
-- 수입 차량 (카마로, 콜벳 등) → "chevrolet"
-차량의 생산지를 고려하여 올바른 코드를 선택하세요.
+## Few-shot examples:
+Image: clear front view, "H" emblem on grille, round DRL pattern, small crossover
+→ {{"visual_evidence": "H emblem visible on grille, circular DRL pattern distinctive of Casper", "manufacturer_code": "hyundai", "model_code": "casper", "confidence": 0.93}}
 
-2. model_code: 구체적인 모델의 **code 값(소문자 영문)**을 사용하세요.
-   - 예시: {model_examples}
-   - 목록에 없는 모델인 경우: 영문 모델명을 소문자로 변환하여 사용 (공백 제거)
-     예) "Model 3" → "model3", "Palisade" → "palisade"
+Image: rear view, blue/white roundel badge on trunk, sedan body
+→ {{"visual_evidence": "BMW roundel emblem on trunk lid, four-door sedan silhouette", "manufacturer_code": "bmw", "model_code": "3_series", "confidence": 0.82}}
 
-3. confidence: 제조사와 모델 식별의 확실성 정도 (0.0~1.0)
+Image: side view only, no visible badges, boxy SUV shape
+→ {{"visual_evidence": "No badges visible, boxy SUV profile, rear styling resembles SsangYong Rexton", "manufacturer_code": "ssangyong", "model_code": "rexton", "confidence": 0.55}}
 
-**신뢰도(confidence) 기준**:
-- 0.95~1.0: 로고/엠블럼이 선명하고 차량 디자인이 매우 명확함
-- 0.85~0.94: 차량의 주요 특징(그릴, 헤드라이트, 전체 디자인)으로 확실하게 식별 가능
-- 0.70~0.84: 차량 디자인 특징으로 식별 가능하나 약간의 불확실성 있음
-- 0.50~0.69: 일부 특징으로 추정 가능하지만 확신 부족
-- 0.30~0.49: 제조사는 추정 가능하나 모델은 불확실
-- 0.0~0.29: 식별이 거의 불가능하거나 차량이 명확히 보이지 않음
-
-**식별 불가능한 경우**:
-{{
-  "manufacturer_code": "unknown",
-  "model_code": "unknown",
-  "confidence": 0.1
-}}
-
-**좋은 예시**:
-- 로고와 디자인이 명확한 현대 캐스퍼: {{"manufacturer_code": "hyundai", "model_code": "casper", "confidence": 0.95}}
-- 한국GM 스파크(국내 생산): {{"manufacturer_code": "chevrolet_gmdaewoo", "model_code": "spark", "confidence": 0.92}}
-- 쉐보레 카마로(수입): {{"manufacturer_code": "chevrolet", "model_code": "camaro", "confidence": 0.90}}
-- BMW 3시리즈로 확실: {{"manufacturer_code": "bmw", "model_code": "3series", "confidence": 0.90}}
-- 기아 K5로 확실: {{"manufacturer_code": "kia", "model_code": "k5", "confidence": 0.88}}
-- 차량이 흐릿하거나 각도가 나쁨: {{"manufacturer_code": "unknown", "model_code": "unknown", "confidence": 0.15}}
-
-**중요**: manufacturer_code와 model_code는 반드시 소문자 영문으로만 작성하세요. 한글이나 대문자를 사용하지 마세요.
-"""
+Image: blurry or vehicle not clearly visible
+→ {{"visual_evidence": "Image too blurry to identify any logos or distinctive features", "manufacturer_code": "unknown", "model_code": "unknown", "confidence": 0.10}}"""
 
         if additional_context:
-            base_prompt += f"\n\n**추가 컨텍스트**:\n{additional_context}"
+            prompt += f"\n\n## Additional context:\n{additional_context}"
 
-        return base_prompt
+        return prompt
+
+    def _calibrate_confidence(self, confidence: float, visual_evidence: str) -> float:
+        """시각적 근거의 강도에 따라 self-reported confidence 보정"""
+        ev = visual_evidence.lower()
+        badge_keywords = ["emblem", "logo", "badge", "lettering", "nameplate", "roundel"]
+        design_keywords = ["grille", "headlight", "drl", "taillight", "bumper", "silhouette", "shape", "body"]
+        weak_keywords = ["blurry", "unclear", "partial", "cannot", "no badge", "no logo", "not visible"]
+
+        if any(k in ev for k in weak_keywords):
+            multiplier = 0.60
+        elif any(k in ev for k in badge_keywords):
+            multiplier = 1.0   # 로고/배지 확인 → 그대로
+        elif any(k in ev for k in design_keywords):
+            multiplier = 0.88  # 디자인 특징만 → 소폭 하향
+        else:
+            multiplier = 0.75  # 근거 불명확 → 하향
+
+        return round(min(confidence * multiplier, 1.0), 3)
 
     def _parse_response(self, response) -> Dict:
-        """OpenAI 응답 파싱 (JSON 우선, 폴백으로 텍스트 파싱)"""
+        """OpenAI 응답 파싱 — visual_evidence 추출 및 근거 기반 confidence 보정"""
         try:
             content = response.choices[0].message.content.strip()
 
-            # 기본 값
             result = {
                 "manufacturer_code": None,
                 "model_code": None,
+                "visual_evidence": "",
                 "confidence": 0.0,
-                "raw_response": content
+                "raw_response": content,
             }
 
             # 1차 시도: JSON 파싱
             try:
-                # JSON 코드 블록 제거 (```json ... ``` 형식 대응)
                 json_content = content
                 if "```json" in json_content:
                     json_content = json_content.split("```json")[1].split("```")[0].strip()
                 elif "```" in json_content:
                     json_content = json_content.split("```")[1].split("```")[0].strip()
 
-                # JSON 파싱
                 data = json.loads(json_content)
 
                 manufacturer_code = data.get("manufacturer_code", "").lower()
                 model_code = data.get("model_code", "").lower()
+                visual_evidence = data.get("visual_evidence", "")
+                raw_confidence = float(data.get("confidence", 0.0))
 
-                result["manufacturer_code"] = manufacturer_code if manufacturer_code not in ["", "unknown", "알 수 없음"] else None
-                result["model_code"] = model_code if model_code not in ["", "unknown", "알 수 없음"] else None
-                result["confidence"] = float(data.get("confidence", 0.0))
+                result["manufacturer_code"] = manufacturer_code if manufacturer_code not in ["", "unknown"] else None
+                result["model_code"] = model_code if model_code not in ["", "unknown"] else None
+                result["visual_evidence"] = visual_evidence
+                result["confidence"] = self._calibrate_confidence(raw_confidence, visual_evidence)
 
-                logger.info(f"JSON 파싱 성공: {result}")
+                logger.info(f"JSON 파싱 성공: mf={result['manufacturer_code']} model={result['model_code']} conf={result['confidence']} (raw={raw_confidence})")
                 return result
 
             except (json.JSONDecodeError, KeyError, ValueError) as json_error:
                 logger.warning(f"JSON 파싱 실패, 텍스트 파싱 시도: {json_error}")
 
                 # 2차 시도: 텍스트 라인 파싱 (폴백)
-                lines = content.split('\n')
-                for line in lines:
-                    if ':' in line:
-                        key, value = line.split(':', 1)
-                        key = key.strip()
-                        value = value.strip().strip('"').strip(',').lower()
+                raw_confidence = 0.0
+                for line in content.split('\n'):
+                    if ':' not in line:
+                        continue
+                    key, value = line.split(':', 1)
+                    key = key.strip().lower()
+                    value = value.strip().strip('"').strip(',')
 
-                        if "manufacturer_code" in key.lower():
-                            result["manufacturer_code"] = value if value not in ["unknown", "알 수 없음"] else None
-                        elif "model_code" in key.lower():
-                            result["model_code"] = value if value not in ["unknown", "알 수 없음"] else None
-                        elif any(keyword in key.lower() for keyword in ['신뢰도', 'confidence']):
-                            try:
-                                result["confidence"] = float(value)
-                            except ValueError:
-                                result["confidence"] = 0.0
+                    if "manufacturer_code" in key:
+                        result["manufacturer_code"] = value.lower() if value.lower() not in ["unknown"] else None
+                    elif "model_code" in key:
+                        result["model_code"] = value.lower() if value.lower() not in ["unknown"] else None
+                    elif "visual_evidence" in key:
+                        result["visual_evidence"] = value
+                    elif "confidence" in key:
+                        try:
+                            raw_confidence = float(value)
+                        except ValueError:
+                            pass
 
+                result["confidence"] = self._calibrate_confidence(raw_confidence, result["visual_evidence"])
                 logger.info(f"텍스트 파싱 결과: {result}")
                 return result
 
@@ -378,9 +431,10 @@ class OpenAIVisionService:
             return {
                 "manufacturer_code": None,
                 "model_code": None,
+                "visual_evidence": "",
                 "confidence": 0.0,
                 "raw_response": str(response),
-                "error": str(e)
+                "error": str(e),
             }
 
     async def batch_analyze(
@@ -425,7 +479,7 @@ class OpenAIVisionService:
         """Vision 프롬프트용 DB 데이터를 캐싱 (커넥션 반환 전 호출)"""
         self.db = db
         self._get_manufacturers_from_db()
-        self._get_popular_models_from_db()
+        self._get_all_models_by_manufacturer()
         self.db = None
 
 

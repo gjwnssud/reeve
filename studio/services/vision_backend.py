@@ -78,14 +78,19 @@ class DualVisionService:
             )
 
         logger.info(f"교차 검증 성공: {openai_mf}/{openai_mdl}")
-        # OpenAI 결과를 기반으로 반환 (confidence 평균 적용)
-        avg_confidence = (
+        # OpenAI 결과를 기반으로 반환 (calibrated confidence 평균 적용)
+        avg_confidence = round((
             float(openai_result.get("confidence") or 0.0) +
             float(gemini_result.get("confidence") or 0.0)
-        ) / 2
+        ) / 2, 3)
+        combined_evidence = " | ".join(filter(None, [
+            openai_result.get("visual_evidence", ""),
+            gemini_result.get("visual_evidence", ""),
+        ]))
         return {
             **openai_result,
             "confidence": avg_confidence,
+            "visual_evidence": combined_evidence,
             "gemini_confidence": gemini_result.get("confidence"),
             "dual_verified": True,
         }

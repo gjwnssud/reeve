@@ -110,7 +110,7 @@ async def analyze_vehicle_image(
                     raw_result=vision_result,
                     manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
                     model=match_result["model"].korean_name if match_result["model"] else None,
-                    year=vision_result.get("year"),
+                    year=None,  # 연식 분석 제외
                     matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
                     matched_model_id=match_result["model"].id if match_result["model"] else None,
                     confidence_score=match_result["overall_confidence"],
@@ -378,7 +378,7 @@ async def stream_analysis_progress(
                     analyzed.raw_result = new_raw_result
                     analyzed.manufacturer = new_manufacturer
                     analyzed.model = new_model
-                    analyzed.year = vision_result.get("year")
+                    analyzed.year = None  # 연식 분석 제외
                     analyzed.matched_manufacturer_id = new_mf_id
                     analyzed.matched_model_id = new_model_id
                     analyzed.confidence_score = new_confidence
@@ -392,7 +392,7 @@ async def stream_analysis_progress(
                         raw_result=new_raw_result,
                         manufacturer=new_manufacturer,
                         model=new_model,
-                        year=vision_result.get("year"),
+                        year=None,  # 연식 분석 제외
                         matched_manufacturer_id=new_mf_id,
                         matched_model_id=new_model_id,
                         confidence_score=new_confidence,
