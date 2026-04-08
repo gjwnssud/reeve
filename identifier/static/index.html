@@ -8,6 +8,30 @@
     <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="/static/css/reeve-theme.css" rel="stylesheet">
+    <style>
+        .batch-drop-area {
+            border: 2px dashed var(--bs-border-color);
+            border-radius: 8px;
+            padding: 2.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .batch-drop-area:hover, .batch-drop-area.dragging {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+        #batchResultTable thead th { white-space: nowrap; }
+        #batchResultTable td { vertical-align: middle; }
+        .batch-status-badge { font-size: 0.75rem; }
+        #batchProgressBar { transition: width 0.3s; }
+        .filename-cell {
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
 </head>
 <body>
 
@@ -20,75 +44,168 @@
   </div>
 </nav>
 
-<div class="container py-4" style="max-width: 800px;">
+<div class="container py-4" style="max-width: 900px;">
 
-    <!-- 업로드 섹션 -->
-    <div class="card mb-4"><div class="card-body">
-        <h5 class="card-title mb-3">📤 이미지 업로드</h5>
-        <div id="uploadArea" class="upload-area bg-body-secondary">
-            <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;">
-            <div class="upload-icon">📷</div>
-            <div class="upload-title">이미지를 드래그하거나 클릭하여 선택</div>
-            <div class="upload-desc">JPG, PNG, WebP 지원 · 최대 10MB</div>
-        </div>
-    </div></div>
+    <!-- 탭 -->
+    <ul class="nav nav-tabs mb-4" id="mainTabs">
+        <li class="nav-item">
+            <button class="nav-link active" data-tab="single">
+                <i class="bi bi-image"></i> 단건 판별
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-tab="batch">
+                <i class="bi bi-folder2-open"></i> 폴더 배치
+            </button>
+        </li>
+    </ul>
 
-    <!-- 이미지 카드 -->
-    <div class="card mb-4"><div class="card-body">
-        <h5 class="card-title mb-3">🖼️ 업로드된 이미지</h5>
+    <!-- ───────────── 단건 탭 ───────────── -->
+    <div id="tabSingle">
 
-        <div id="imageCard" class="card d-none">
-            <!-- 이미지 컨테이너 -->
-            <div id="imageContainer" class="image-container">
-                <img id="previewImage" alt="업로드 이미지">
-                <div id="bboxOverlayContainer"></div>
+        <!-- 업로드 섹션 -->
+        <div class="card mb-4"><div class="card-body">
+            <h5 class="card-title mb-3">📤 이미지 업로드</h5>
+            <div id="uploadArea" class="upload-area bg-body-secondary">
+                <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;">
+                <div class="upload-icon">📷</div>
+                <div class="upload-title">이미지를 드래그하거나 클릭하여 선택</div>
+                <div class="upload-desc">JPG, PNG, WebP 지원 · 최대 10MB</div>
+            </div>
+        </div></div>
+
+        <!-- 이미지 카드 -->
+        <div class="card mb-4"><div class="card-body">
+            <h5 class="card-title mb-3">🖼️ 업로드된 이미지</h5>
+
+            <div id="imageCard" class="card d-none">
+                <div id="imageContainer" class="image-container">
+                    <img id="previewImage" alt="업로드 이미지">
+                    <div id="bboxOverlayContainer"></div>
+                </div>
+
+                <div class="image-info p-3">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <h4 id="fileName">파일명</h4>
+                        <span id="statusBadge" class="badge rounded-pill bg-info">준비</span>
+                    </div>
+
+                    <div id="detectionList" class="list-group list-group-flush my-2"></div>
+
+                    <div id="resultSection" class="card bg-body-secondary p-3 mt-3 d-none">
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="result-label">제조사:</span>
+                            <span id="resultManufacturer" class="result-value">-</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="result-label">모델:</span>
+                            <span id="resultModel" class="result-value">-</span>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 small">
+                            <span class="result-label">식별 신뢰도:</span>
+                            <span id="resultConfidence" class="result-value">-</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button id="identifyBtn" class="btn btn-primary" disabled>판별하기</button>
+                        <button id="deleteBtn" class="btn btn-danger">삭제</button>
+                    </div>
+                </div>
             </div>
 
-            <!-- 이미지 정보 -->
-            <div class="image-info p-3">
-                <div class="d-flex align-items-center gap-2 mb-3">
-                    <h4 id="fileName">파일명</h4>
-                    <span id="statusBadge" class="badge rounded-pill bg-info">준비</span>
-                </div>
+            <div class="text-center p-4 d-none" id="loadingSpinner">
+                <div class="spinner-border text-primary"></div>
+                <div id="loadingText" class="mt-2">처리 중...</div>
+            </div>
 
-                <!-- 감지 목록 -->
-                <div id="detectionList" class="list-group list-group-flush my-2"></div>
+            <div id="emptyState" class="text-center text-muted py-5">
+                이미지를 업로드하세요
+            </div>
+        </div></div>
 
-                <!-- 결과 영역 -->
-                <div id="resultSection" class="card bg-body-secondary p-3 mt-3 d-none">
-                    <div class="d-flex justify-content-between py-1 small">
-                        <span class="result-label">제조사:</span>
-                        <span id="resultManufacturer" class="result-value">-</span>
-                    </div>
-                    <div class="d-flex justify-content-between py-1 small">
-                        <span class="result-label">모델:</span>
-                        <span id="resultModel" class="result-value">-</span>
-                    </div>
-                    <div class="d-flex justify-content-between py-1 small">
-                        <span class="result-label">식별 신뢰도:</span>
-                        <span id="resultConfidence" class="result-value">-</span>
-                    </div>
-                </div>
+    </div><!-- /tabSingle -->
 
-                <!-- 버튼 -->
-                <div class="d-flex gap-2 mt-3">
-                    <button id="identifyBtn" class="btn btn-primary" disabled>판별하기</button>
-                    <button id="deleteBtn" class="btn btn-danger">삭제</button>
+    <!-- ───────────── 배치 탭 ───────────── -->
+    <div id="tabBatch" class="d-none">
+
+        <!-- 폴더 선택 -->
+        <div class="card mb-4"><div class="card-body">
+            <h5 class="card-title mb-3">📁 폴더 선택</h5>
+            <div id="batchDropArea" class="batch-drop-area">
+                <input type="file" id="folderInput" webkitdirectory accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none;" multiple>
+                <div style="font-size: 2rem;">🗂️</div>
+                <div class="fw-semibold mt-2">폴더를 드래그하거나 클릭하여 선택</div>
+                <div class="text-muted small mt-1">폴더 내 JPG, PNG, WebP 이미지를 100개씩 배치 처리합니다</div>
+            </div>
+
+            <!-- 파일 목록 정보 -->
+            <div id="batchFileInfo" class="d-none mt-3">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                        <span id="batchFileCount" class="fw-semibold"></span>
+                        <span class="text-muted small ms-2" id="batchFolderName"></span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button id="batchStartBtn" class="btn btn-primary btn-sm">
+                            <i class="bi bi-play-fill"></i> 배치 시작
+                        </button>
+                        <button id="batchClearBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-x"></i> 초기화
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </div></div>
 
-        <!-- 로딩 -->
-        <div class="text-center p-4 d-none" id="loadingSpinner">
-            <div class="spinner-border text-primary"></div>
-            <div id="loadingText" class="mt-2">처리 중...</div>
-        </div>
+        <!-- 진행 상태 -->
+        <div id="batchProgress" class="card mb-4 d-none"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold small" id="batchProgressLabel">처리 중...</span>
+                <span class="text-muted small" id="batchProgressCount">0 / 0</span>
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div id="batchProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar" style="width: 0%"></div>
+            </div>
+            <div class="d-flex justify-content-between mt-2">
+                <span class="text-muted small" id="batchEta"></span>
+                <button id="batchStopBtn" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-stop-fill"></i> 중지
+                </button>
+            </div>
+        </div></div>
 
-        <!-- 빈 상태 -->
-        <div id="emptyState" class="text-center text-muted py-5">
-            이미지를 업로드하세요
-        </div>
-    </div></div>
+        <!-- 결과 테이블 -->
+        <div id="batchResultCard" class="card d-none"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h5 class="card-title mb-0">📊 판별 결과</h5>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="badge bg-success" id="batchSuccessCount">성공 0</span>
+                    <span class="badge bg-danger" id="batchErrorCount">실패 0</span>
+                    <button id="batchDownloadBtn" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download"></i> CSV 다운로드
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover" id="batchResultTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>파일명</th>
+                            <th>제조사</th>
+                            <th>모델</th>
+                            <th>신뢰도</th>
+                            <th>상태</th>
+                        </tr>
+                    </thead>
+                    <tbody id="batchResultBody"></tbody>
+                </table>
+            </div>
+        </div></div>
+
+    </div><!-- /tabBatch -->
 
 </div>
 
@@ -99,486 +216,590 @@
 <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/theme-toggle.js"></script>
 <script>
-    // ──────────────────────────────────────
-    // State
-    // ──────────────────────────────────────
-    let selectedFile = null;
-    let detections = [];
-    let selectedIndex = null;
-    let imageWidth = 0;
-    let imageHeight = 0;
-    let currentBbox = null;
-
-    // ──────────────────────────────────────
-    // DOM
-    // ──────────────────────────────────────
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    const imageCard = document.getElementById('imageCard');
-    const imageContainer = document.getElementById('imageContainer');
-    const previewImage = document.getElementById('previewImage');
-    const bboxOverlayContainer = document.getElementById('bboxOverlayContainer');
-    const fileName = document.getElementById('fileName');
-    const statusBadge = document.getElementById('statusBadge');
-    const detectionList = document.getElementById('detectionList');
-    const resultSection = document.getElementById('resultSection');
-    const resultManufacturer = document.getElementById('resultManufacturer');
-    const resultModel = document.getElementById('resultModel');
-    const resultConfidence = document.getElementById('resultConfidence');
-    const identifyBtn = document.getElementById('identifyBtn');
-    const deleteBtn = document.getElementById('deleteBtn');
-    const loadingSpinner = document.getElementById('loadingSpinner');
-    const loadingText = document.getElementById('loadingText');
-    const emptyState = document.getElementById('emptyState');
-
-    // ──────────────────────────────────────
-    // 화면 크기 변경 시 바운딩 박스 재조정
-    // ──────────────────────────────────────
-    let resizeTimeout;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-            if (currentBbox && selectedIndex !== null && selectedIndex >= 0) {
-                createBboxOverlay(currentBbox);
-            }
-        }, 250);
+// ══════════════════════════════════════════════
+// 탭 전환
+// ══════════════════════════════════════════════
+document.querySelectorAll('#mainTabs .nav-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('#mainTabs .nav-link').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.getElementById('tabSingle').classList.toggle('d-none', tab !== 'single');
+        document.getElementById('tabBatch').classList.toggle('d-none', tab !== 'batch');
     });
+});
 
-    // ──────────────────────────────────────
-    // 업로드 핸들러
-    // ──────────────────────────────────────
-    uploadArea.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+// ══════════════════════════════════════════════
+// 단건 탭
+// ══════════════════════════════════════════════
+let selectedFile = null;
+let detections = [];
+let selectedIndex = null;
+let imageWidth = 0;
+let imageHeight = 0;
+let currentBbox = null;
 
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.classList.add('dragging');
-    });
+const uploadArea    = document.getElementById('uploadArea');
+const fileInput     = document.getElementById('fileInput');
+const imageCard     = document.getElementById('imageCard');
+const imageContainer = document.getElementById('imageContainer');
+const previewImage  = document.getElementById('previewImage');
+const bboxOverlayContainer = document.getElementById('bboxOverlayContainer');
+const fileName      = document.getElementById('fileName');
+const statusBadge   = document.getElementById('statusBadge');
+const detectionList = document.getElementById('detectionList');
+const resultSection = document.getElementById('resultSection');
+const resultManufacturer = document.getElementById('resultManufacturer');
+const resultModel   = document.getElementById('resultModel');
+const resultConfidence = document.getElementById('resultConfidence');
+const identifyBtn   = document.getElementById('identifyBtn');
+const deleteBtn     = document.getElementById('deleteBtn');
+const loadingSpinner = document.getElementById('loadingSpinner');
+const loadingText   = document.getElementById('loadingText');
+const emptyState    = document.getElementById('emptyState');
 
-    uploadArea.addEventListener('dragleave', () => {
-        uploadArea.classList.remove('dragging');
-    });
-
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.classList.remove('dragging');
-        if (e.dataTransfer.files.length > 0) {
-            handleFile(e.dataTransfer.files[0]);
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (currentBbox && selectedIndex !== null && selectedIndex >= 0) {
+            createBboxOverlay(currentBbox);
         }
-    });
+    }, 250);
+});
 
-    function handleFile(file) {
-        if (!file) return;
+uploadArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
 
-        if (!file.type.startsWith('image/')) {
-            showToast('이미지 파일만 업로드 가능합니다', 'error');
-            return;
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragging');
+});
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragging'));
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragging');
+    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { showToast('이미지 파일만 업로드 가능합니다', 'error'); return; }
+    if (file.size > 10 * 1024 * 1024) { showToast('파일 크기가 10MB를 초과합니다', 'error'); return; }
+
+    selectedFile = file;
+    resetState();
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        previewImage.src = e.target.result;
+        previewImage.onload = () => detectVehicles();
+    };
+    reader.readAsDataURL(file);
+
+    fileName.textContent = file.name;
+    emptyState.classList.add('d-none');
+    imageCard.classList.remove('d-none');
+    updateStatus('detecting', '감지 중');
+}
+
+function resetState() {
+    detections = [];
+    selectedIndex = null;
+    currentBbox = null;
+    detectionList.innerHTML = '';
+    bboxOverlayContainer.innerHTML = '';
+    resultSection.classList.add('d-none');
+    identifyBtn.disabled = true;
+    identifyBtn.textContent = '판별하기';
+}
+
+async function detectVehicles() {
+    loadingSpinner.classList.remove('d-none');
+    loadingText.textContent = '차량을 감지하고 있습니다...';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const response = await fetch('/detect', { method: 'POST', body: formData });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${response.status}`);
         }
-
-        if (file.size > 10 * 1024 * 1024) {
-            showToast('파일 크기가 10MB를 초과합니다', 'error');
-            return;
-        }
-
-        selectedFile = file;
-        resetState();
-
-        // 미리보기
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            previewImage.src = e.target.result;
-            previewImage.onload = () => {
-                // 차량 감지 시작
-                detectVehicles();
-            };
-        };
-        reader.readAsDataURL(file);
-
-        fileName.textContent = file.name;
-        emptyState.classList.add('d-none');
-        imageCard.classList.remove('d-none');
-        updateStatus('detecting', '감지 중');
+        handleDetectionResult(await response.json());
+    } catch (e) {
+        showToast(`감지 실패: ${e.message}`, 'error');
+        updateStatus('error', '감지 실패');
+    } finally {
+        loadingSpinner.classList.add('d-none');
     }
+}
 
-    function resetState() {
-        detections = [];
-        selectedIndex = null;
+function handleDetectionResult(result) {
+    detections = result.detections || [];
+    imageWidth = result.image_width;
+    imageHeight = result.image_height;
+
+    if (detections.length === 0) {
+        detectionList.innerHTML = '<p style="color: #999; font-size: 13px;">차량이 감지되지 않았습니다. 이미지 전체로 판별합니다.</p>';
+        updateStatus('detected', '감지 완료');
+        selectedIndex = -1;
         currentBbox = null;
-        detectionList.innerHTML = '';
-        bboxOverlayContainer.innerHTML = '';
-        resultSection.classList.add('d-none');
-        identifyBtn.disabled = true;
+        identifyBtn.disabled = false;
+    } else {
+        displayDetectionList();
+        updateStatus('detected', `${detections.length}대 감지`);
+        selectDetection(0);
+    }
+}
+
+function displayDetectionList() {
+    detectionList.innerHTML = detections.map((det, idx) => `
+        <div class="list-group-item list-group-item-action" id="det-item-${idx}" onclick="selectDetection(${idx})">
+            <strong>${det.class_name}</strong> (신뢰도: ${(det.confidence * 100).toFixed(1)}%)
+            <br><small>면적: ${det.area.toLocaleString()} px²</small>
+        </div>
+    `).join('');
+}
+
+function selectDetection(index) {
+    selectedIndex = index;
+    currentBbox = [...detections[index].bbox];
+    document.querySelectorAll('.list-group-item').forEach((item, idx) => {
+        item.classList.toggle('active', idx === index);
+    });
+    createBboxOverlay(currentBbox);
+    identifyBtn.disabled = false;
+}
+
+function createBboxOverlay(bbox) {
+    bboxOverlayContainer.innerHTML = '';
+
+    const displayedW = previewImage.clientWidth;
+    const displayedH = previewImage.clientHeight;
+    const containerRect = imageContainer.getBoundingClientRect();
+    const imgRect = previewImage.getBoundingClientRect();
+    const offsetX = imgRect.left - containerRect.left;
+    const offsetY = imgRect.top - containerRect.top;
+
+    const scaleX = displayedW / imageWidth;
+    const scaleY = displayedH / imageHeight;
+
+    const [x1, y1, x2, y2] = bbox;
+    const overlay = document.createElement('div');
+    overlay.className = 'bbox-overlay';
+    overlay.id = 'activeBbox';
+    overlay.style.left   = `${x1 * scaleX + offsetX}px`;
+    overlay.style.top    = `${y1 * scaleY + offsetY}px`;
+    overlay.style.width  = `${(x2 - x1) * scaleX}px`;
+    overlay.style.height = `${(y2 - y1) * scaleY}px`;
+    overlay.innerHTML = `
+        <div class="bbox-label">드래그하여 조정 가능</div>
+        <div class="bbox-handle nw"></div>
+        <div class="bbox-handle ne"></div>
+        <div class="bbox-handle sw"></div>
+        <div class="bbox-handle se"></div>
+    `;
+    bboxOverlayContainer.appendChild(overlay);
+    makeBboxDraggable();
+}
+
+function makeBboxDraggable() {
+    const bboxElement = document.getElementById('activeBbox');
+    if (!bboxElement) return;
+
+    const imgRect = previewImage.getBoundingClientRect();
+    const containerRect = imageContainer.getBoundingClientRect();
+    const offsetX = imgRect.left - containerRect.left;
+    const offsetY = imgRect.top - containerRect.top;
+
+    let isDragging = false, startX, startY, startLeft, startTop;
+
+    bboxElement.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('bbox-handle')) return;
+        isDragging = true;
+        startX = e.clientX; startY = e.clientY;
+        startLeft = bboxElement.offsetLeft; startTop = bboxElement.offsetTop;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const minLeft = offsetX, minTop = offsetY;
+        const maxLeft = offsetX + previewImage.clientWidth - bboxElement.offsetWidth;
+        const maxTop = offsetY + previewImage.clientHeight - bboxElement.offsetHeight;
+        bboxElement.style.left = `${Math.max(minLeft, Math.min(maxLeft, startLeft + e.clientX - startX))}px`;
+        bboxElement.style.top  = `${Math.max(minTop,  Math.min(maxTop,  startTop  + e.clientY - startY))}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) { isDragging = false; updateBboxFromOverlay(); }
+    });
+
+    bboxElement.querySelectorAll('.bbox-handle').forEach(handle => {
+        handle.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            handleResize(handle.classList[1], e);
+        });
+    });
+}
+
+function handleResize(handleType, startEvent) {
+    const bboxElement = document.getElementById('activeBbox');
+    if (!bboxElement) return;
+
+    const imgRect = previewImage.getBoundingClientRect();
+    const containerRect = imageContainer.getBoundingClientRect();
+    const offsetX = imgRect.left - containerRect.left;
+    const offsetY = imgRect.top - containerRect.top;
+    const imgMaxX = offsetX + previewImage.clientWidth;
+    const imgMaxY = offsetY + previewImage.clientHeight;
+    const minSize = 50;
+
+    const sX = startEvent.clientX, sY = startEvent.clientY;
+    const sL = bboxElement.offsetLeft, sT = bboxElement.offsetTop;
+    const sW = bboxElement.offsetWidth, sH = bboxElement.offsetHeight;
+
+    const onMouseMove = (e) => {
+        const dx = e.clientX - sX, dy = e.clientY - sY;
+        if (handleType === 'se') {
+            bboxElement.style.width  = `${Math.max(minSize, Math.min(imgMaxX - sL, sW + dx))}px`;
+            bboxElement.style.height = `${Math.max(minSize, Math.min(imgMaxY - sT, sH + dy))}px`;
+        } else if (handleType === 'nw') {
+            const nW = sW - dx, nH = sH - dy, nL = sL + dx, nT = sT + dy;
+            if (nW >= minSize && nH >= minSize && nL >= offsetX && nT >= offsetY) {
+                bboxElement.style.left = `${nL}px`; bboxElement.style.top = `${nT}px`;
+                bboxElement.style.width = `${nW}px`; bboxElement.style.height = `${nH}px`;
+            }
+        } else if (handleType === 'ne') {
+            const nH = sH - dy, nT = sT + dy;
+            const nW = Math.max(minSize, Math.min(imgMaxX - sL, sW + dx));
+            if (nH >= minSize && nT >= offsetY) {
+                bboxElement.style.top = `${nT}px`;
+                bboxElement.style.width = `${nW}px`; bboxElement.style.height = `${nH}px`;
+            }
+        } else if (handleType === 'sw') {
+            const nW = sW - dx, nL = sL + dx;
+            const nH = Math.max(minSize, Math.min(imgMaxY - sT, sH + dy));
+            if (nW >= minSize && nL >= offsetX) {
+                bboxElement.style.left = `${nL}px`;
+                bboxElement.style.width = `${nW}px`; bboxElement.style.height = `${nH}px`;
+            }
+        }
+    };
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        updateBboxFromOverlay();
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    startEvent.preventDefault();
+}
+
+function updateBboxFromOverlay() {
+    const bboxElement = document.getElementById('activeBbox');
+    if (!bboxElement) return;
+    const imgRect = previewImage.getBoundingClientRect();
+    const containerRect = imageContainer.getBoundingClientRect();
+    const offsetX = imgRect.left - containerRect.left;
+    const offsetY = imgRect.top - containerRect.top;
+    const scaleX = imageWidth / previewImage.clientWidth;
+    const scaleY = imageHeight / previewImage.clientHeight;
+    currentBbox = [
+        Math.round((bboxElement.offsetLeft - offsetX) * scaleX),
+        Math.round((bboxElement.offsetTop  - offsetY) * scaleY),
+        Math.round((bboxElement.offsetLeft + bboxElement.offsetWidth  - offsetX) * scaleX),
+        Math.round((bboxElement.offsetTop  + bboxElement.offsetHeight - offsetY) * scaleY),
+    ];
+}
+
+identifyBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    identifyBtn.disabled = true;
+    loadingSpinner.classList.remove('d-none');
+    loadingText.textContent = '차량을 판별하고 있습니다...';
+    updateStatus('identifying', '판별 중');
+    resultSection.classList.add('d-none');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        if (currentBbox) formData.append('bbox', currentBbox.join(','));
+
+        const response = await fetch('/identify', { method: 'POST', body: formData });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${response.status}`);
+        }
+        displayResult(await response.json());
+    } catch (e) {
+        showToast(`판별 실패: ${e.message}`, 'error');
+        updateStatus('error', '판별 실패');
+        identifyBtn.disabled = false;
+    } finally {
+        loadingSpinner.classList.add('d-none');
+    }
+});
+
+function displayResult(result) {
+    updateStatus('completed', '분석 완료');
+    resultManufacturer.textContent = result.manufacturer_korean || '-';
+    resultModel.textContent        = result.model_korean || '-';
+    resultConfidence.textContent   = result.confidence ? `${(result.confidence * 100).toFixed(1)}%` : '-';
+    resultSection.classList.remove('d-none');
+    identifyBtn.textContent = '재분석';
+    identifyBtn.disabled = false;
+}
+
+deleteBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    previewImage.src = '';
+    imageCard.classList.add('d-none');
+    emptyState.classList.remove('d-none');
+    resetState();
+});
+
+function updateStatus(type, text) {
+    const typeMap = { ready: 'info', detecting: 'warning', detected: 'info', identifying: 'primary', completed: 'success', error: 'danger' };
+    statusBadge.className = `badge rounded-pill bg-${typeMap[type] || 'secondary'}`;
+    statusBadge.textContent = text;
+}
+
+// ══════════════════════════════════════════════
+// 배치 탭
+// ══════════════════════════════════════════════
+const BATCH_SIZE = 100;
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+const folderInput      = document.getElementById('folderInput');
+const batchDropArea    = document.getElementById('batchDropArea');
+const batchFileInfo    = document.getElementById('batchFileInfo');
+const batchFileCount   = document.getElementById('batchFileCount');
+const batchFolderName  = document.getElementById('batchFolderName');
+const batchStartBtn    = document.getElementById('batchStartBtn');
+const batchClearBtn    = document.getElementById('batchClearBtn');
+const batchProgress    = document.getElementById('batchProgress');
+const batchProgressBar = document.getElementById('batchProgressBar');
+const batchProgressLabel = document.getElementById('batchProgressLabel');
+const batchProgressCount = document.getElementById('batchProgressCount');
+const batchEta         = document.getElementById('batchEta');
+const batchStopBtn     = document.getElementById('batchStopBtn');
+const batchResultCard  = document.getElementById('batchResultCard');
+const batchResultBody  = document.getElementById('batchResultBody');
+const batchSuccessCount = document.getElementById('batchSuccessCount');
+const batchErrorCount  = document.getElementById('batchErrorCount');
+const batchDownloadBtn = document.getElementById('batchDownloadBtn');
+
+let batchFiles = [];
+let batchResults = [];
+let batchStopped = false;
+
+batchDropArea.addEventListener('click', () => folderInput.click());
+folderInput.addEventListener('change', (e) => loadBatchFiles(e.target.files));
+
+batchDropArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    batchDropArea.classList.add('dragging');
+});
+batchDropArea.addEventListener('dragleave', () => batchDropArea.classList.remove('dragging'));
+batchDropArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    batchDropArea.classList.remove('dragging');
+    if (e.dataTransfer.files.length > 0) loadBatchFiles(e.dataTransfer.files);
+});
+
+function loadBatchFiles(fileList) {
+    const imgs = Array.from(fileList).filter(f => {
+        const ext = f.name.rsplit ? f.name.rsplit('.', 1)[1] : f.name.split('.').pop().toLowerCase();
+        return IMAGE_EXTS.has(ext.toLowerCase());
+    });
+
+    if (imgs.length === 0) {
+        showToast('이미지 파일이 없습니다 (JPG, PNG, WebP)', 'error');
+        return;
     }
 
-    // ──────────────────────────────────────
-    // 차량 감지
-    // ──────────────────────────────────────
-    async function detectVehicles() {
-        loadingSpinner.classList.remove('d-none');
-        loadingText.textContent = '차량을 감지하고 있습니다...';
+    batchFiles = imgs;
+    batchFileCount.textContent = `이미지 ${imgs.length.toLocaleString()}개`;
 
+    // 폴더명 추출 (webkitRelativePath 있으면 사용)
+    const firstPath = imgs[0].webkitRelativePath || imgs[0].name;
+    const folderPart = firstPath.includes('/') ? firstPath.split('/')[0] : '';
+    batchFolderName.textContent = folderPart ? `· ${folderPart}` : '';
+
+    batchFileInfo.classList.remove('d-none');
+    batchResultCard.classList.add('d-none');
+    batchProgress.classList.add('d-none');
+    batchResults = [];
+    batchResultBody.innerHTML = '';
+}
+
+batchClearBtn.addEventListener('click', () => {
+    batchFiles = [];
+    batchResults = [];
+    folderInput.value = '';
+    batchFileInfo.classList.add('d-none');
+    batchProgress.classList.add('d-none');
+    batchResultCard.classList.add('d-none');
+    batchResultBody.innerHTML = '';
+});
+
+batchStartBtn.addEventListener('click', () => runBatch());
+
+batchStopBtn.addEventListener('click', () => {
+    batchStopped = true;
+    batchStopBtn.disabled = true;
+    batchProgressLabel.textContent = '중지 중...';
+});
+
+async function runBatch() {
+    if (batchFiles.length === 0) return;
+
+    batchStopped = false;
+    batchResults = [];
+    batchResultBody.innerHTML = '';
+    batchStartBtn.disabled = true;
+    batchClearBtn.disabled = true;
+    batchStopBtn.disabled = false;
+    batchProgress.classList.remove('d-none');
+    batchResultCard.classList.remove('d-none');
+    batchSuccessCount.textContent = '성공 0';
+    batchErrorCount.textContent = '실패 0';
+
+    const total = batchFiles.length;
+    let processed = 0;
+    let successCount = 0;
+    let errorCount = 0;
+    const startTime = Date.now();
+
+    for (let i = 0; i < total; i += BATCH_SIZE) {
+        if (batchStopped) break;
+
+        const chunk = batchFiles.slice(i, i + BATCH_SIZE);
+        const formData = new FormData();
+        chunk.forEach(f => formData.append('files', f));
+
+        let chunkResults = [];
         try {
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-
-            const response = await fetch('/detect', {
-                method: 'POST',
-                body: formData,
-            });
-
+            const response = await fetch('/identify/batch', { method: 'POST', body: formData });
             if (!response.ok) {
                 const err = await response.json().catch(() => ({}));
                 throw new Error(err.detail || `HTTP ${response.status}`);
             }
-
-            const result = await response.json();
-            handleDetectionResult(result);
-
+            const data = await response.json();
+            chunkResults = data.items || [];
         } catch (e) {
-            showToast(`감지 실패: ${e.message}`, 'error');
-            updateStatus('error', '감지 실패');
-        } finally {
-            loadingSpinner.classList.add('d-none');
+            // 청크 전체 실패 시 각 파일을 error로 마킹
+            chunkResults = chunk.map(f => ({ image_path: f.name, error: e.message }));
         }
-    }
 
-    function handleDetectionResult(result) {
-        detections = result.detections || [];
-        imageWidth = result.image_width;
-        imageHeight = result.image_height;
+        // 결과 병합 및 파일명 보정
+        chunkResults.forEach((item, idx) => {
+            if (idx < chunk.length) item.image_path = chunk[idx].name;
+            if (item.error) errorCount++; else successCount++;
+            batchResults.push(item);
+            appendBatchRow(batchResults.length, item);
+        });
 
-        if (detections.length === 0) {
-            detectionList.innerHTML = '<p style="color: #999; font-size: 13px;">차량이 감지되지 않았습니다. 이미지 전체로 판별합니다.</p>';
-            updateStatus('detected', '감지 완료');
-            selectedIndex = -1;
-            currentBbox = null;
-            identifyBtn.disabled = false;
+        processed = Math.min(i + BATCH_SIZE, total);
+
+        // 진행률 업데이트
+        const pct = Math.round((processed / total) * 100);
+        batchProgressBar.style.width = `${pct}%`;
+        batchProgressCount.textContent = `${processed.toLocaleString()} / ${total.toLocaleString()}`;
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (processed > 0 && processed < total) {
+            const eta = Math.round((elapsed / processed) * (total - processed));
+            batchEta.textContent = `예상 남은 시간: ${formatSeconds(eta)}`;
         } else {
-            // 감지 목록 표시
-            displayDetectionList();
-            updateStatus('detected', `${detections.length}대 감지`);
-
-            // 첫 번째 자동 선택
-            selectDetection(0);
+            batchEta.textContent = '';
         }
+
+        batchSuccessCount.textContent = `성공 ${successCount.toLocaleString()}`;
+        batchErrorCount.textContent   = `실패 ${errorCount.toLocaleString()}`;
     }
 
-    function displayDetectionList() {
-        detectionList.innerHTML = detections.map((det, idx) => `
-            <div class="list-group-item list-group-item-action" id="det-item-${idx}" onclick="selectDetection(${idx})">
-                <strong>${det.class_name}</strong> (신뢰도: ${(det.confidence * 100).toFixed(1)}%)
-                <br>
-                <small>면적: ${det.area.toLocaleString()} px²</small>
-            </div>
-        `).join('');
-    }
+    // 완료
+    batchProgressBar.classList.remove('progress-bar-animated');
+    batchProgressLabel.textContent = batchStopped ? '중지됨' : '완료';
+    batchProgressBar.style.width = batchStopped ? batchProgressBar.style.width : '100%';
+    batchProgressCount.textContent = `${Math.min(processed, total).toLocaleString()} / ${total.toLocaleString()}`;
+    batchEta.textContent = `총 소요: ${formatSeconds(Math.round((Date.now() - startTime) / 1000))}`;
+    batchStopBtn.disabled = true;
+    batchStartBtn.disabled = false;
+    batchClearBtn.disabled = false;
+}
 
-    function selectDetection(index) {
-        selectedIndex = index;
-        const detection = detections[index];
-        currentBbox = [...detection.bbox];
+function appendBatchRow(rowNum, item) {
+    const tr = document.createElement('tr');
+    const isError = !!item.error;
+    const confidence = item.confidence ? `${(item.confidence * 100).toFixed(1)}%` : '-';
+    const statusBadgeHtml = isError
+        ? `<span class="badge bg-danger batch-status-badge">실패</span>`
+        : `<span class="badge bg-success batch-status-badge">성공</span>`;
 
-        // 목록 하이라이트 업데이트
-        document.querySelectorAll('.list-group-item').forEach((item, idx) => {
-            item.classList.toggle('active', idx === index);
-        });
+    tr.innerHTML = `
+        <td class="text-muted small">${rowNum}</td>
+        <td class="filename-cell" title="${escHtml(item.image_path || '')}">${escHtml(item.image_path || '-')}</td>
+        <td>${escHtml(isError ? '-' : (item.manufacturer_korean || '-'))}</td>
+        <td>${escHtml(isError ? '-' : (item.model_korean || '-'))}</td>
+        <td>${isError ? '-' : confidence}</td>
+        <td>${isError ? `<span class="text-danger small">${escHtml(item.error)}</span>` : statusBadgeHtml}</td>
+    `;
+    batchResultBody.appendChild(tr);
+    // 자동 스크롤 (마지막 행이 보이도록)
+    tr.scrollIntoView({ block: 'nearest' });
+}
 
-        // 바운딩 박스 오버레이 생성
-        createBboxOverlay(currentBbox);
+batchDownloadBtn.addEventListener('click', () => {
+    if (batchResults.length === 0) return;
+    const header = ['번호', '파일명', '제조사', '모델', '신뢰도', '상태'];
+    const rows = batchResults.map((item, i) => [
+        i + 1,
+        item.image_path || '',
+        item.error ? '' : (item.manufacturer_korean || ''),
+        item.error ? '' : (item.model_korean || ''),
+        item.error ? '' : (item.confidence ? `${(item.confidence * 100).toFixed(1)}%` : ''),
+        item.error ? `실패: ${item.error}` : '성공',
+    ]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'batch_results.csv'; a.click();
+    URL.revokeObjectURL(url);
+});
 
-        identifyBtn.disabled = false;
-    }
+function formatSeconds(s) {
+    if (s < 60) return `${s}초`;
+    const m = Math.floor(s / 60), sec = s % 60;
+    return sec > 0 ? `${m}분 ${sec}초` : `${m}분`;
+}
 
-    function createBboxOverlay(bbox) {
-        bboxOverlayContainer.innerHTML = '';
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-        const displayedW = previewImage.clientWidth;
-        const displayedH = previewImage.clientHeight;
-
-        // 이미지의 실제 표시 위치 계산 (센터링 고려)
-        const containerRect = imageContainer.getBoundingClientRect();
-        const imgRect = previewImage.getBoundingClientRect();
-        const offsetX = imgRect.left - containerRect.left;
-        const offsetY = imgRect.top - containerRect.top;
-
-        const scaleX = displayedW / imageWidth;
-        const scaleY = displayedH / imageHeight;
-
-        const [x1, y1, x2, y2] = bbox;
-        const left = x1 * scaleX + offsetX;
-        const top = y1 * scaleY + offsetY;
-        const width = (x2 - x1) * scaleX;
-        const height = (y2 - y1) * scaleY;
-
-        const overlay = document.createElement('div');
-        overlay.className = 'bbox-overlay';
-        overlay.id = 'activeBbox';
-        overlay.style.left = `${left}px`;
-        overlay.style.top = `${top}px`;
-        overlay.style.width = `${width}px`;
-        overlay.style.height = `${height}px`;
-
-        overlay.innerHTML = `
-            <div class="bbox-label">드래그하여 조정 가능</div>
-            <div class="bbox-handle nw"></div>
-            <div class="bbox-handle ne"></div>
-            <div class="bbox-handle sw"></div>
-            <div class="bbox-handle se"></div>
-        `;
-
-        bboxOverlayContainer.appendChild(overlay);
-        makeBboxDraggable();
-    }
-
-    function makeBboxDraggable() {
-        const bboxElement = document.getElementById('activeBbox');
-        if (!bboxElement) return;
-
-        const imgRect = previewImage.getBoundingClientRect();
-        const containerRect = imageContainer.getBoundingClientRect();
-        const offsetX = imgRect.left - containerRect.left;
-        const offsetY = imgRect.top - containerRect.top;
-
-        let isDragging = false;
-        let startX, startY, startLeft, startTop;
-
-        // 박스 이동
-        bboxElement.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('bbox-handle')) return;
-
-            isDragging = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            startLeft = bboxElement.offsetLeft;
-            startTop = bboxElement.offsetTop;
-            e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-
-            let newLeft = startLeft + dx;
-            let newTop = startTop + dy;
-
-            // 이미지 영역 내로 제한
-            const minLeft = offsetX;
-            const minTop = offsetY;
-            const maxLeft = offsetX + previewImage.clientWidth - bboxElement.offsetWidth;
-            const maxTop = offsetY + previewImage.clientHeight - bboxElement.offsetHeight;
-
-            newLeft = Math.max(minLeft, Math.min(maxLeft, newLeft));
-            newTop = Math.max(minTop, Math.min(maxTop, newTop));
-
-            bboxElement.style.left = `${newLeft}px`;
-            bboxElement.style.top = `${newTop}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                updateBboxFromOverlay();
-            }
-        });
-
-        // 리사이즈 핸들
-        const handles = bboxElement.querySelectorAll('.bbox-handle');
-        handles.forEach(handle => {
-            handle.addEventListener('mousedown', (e) => {
-                e.stopPropagation();
-                const handleType = handle.classList[1];
-                handleResize(handleType, e);
-            });
-        });
-    }
-
-    function handleResize(handleType, startEvent) {
-        const bboxElement = document.getElementById('activeBbox');
-        if (!bboxElement) return;
-
-        const imgRect = previewImage.getBoundingClientRect();
-        const containerRect = imageContainer.getBoundingClientRect();
-        const offsetX = imgRect.left - containerRect.left;
-        const offsetY = imgRect.top - containerRect.top;
-        const imgMaxX = offsetX + previewImage.clientWidth;
-        const imgMaxY = offsetY + previewImage.clientHeight;
-
-        const startX = startEvent.clientX;
-        const startY = startEvent.clientY;
-        const startLeft = bboxElement.offsetLeft;
-        const startTop = bboxElement.offsetTop;
-        const startWidth = bboxElement.offsetWidth;
-        const startHeight = bboxElement.offsetHeight;
-
-        const minSize = 50;
-
-        const onMouseMove = (e) => {
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-
-            if (handleType === 'se') {
-                const newWidth = Math.max(minSize, Math.min(imgMaxX - startLeft, startWidth + dx));
-                const newHeight = Math.max(minSize, Math.min(imgMaxY - startTop, startHeight + dy));
-                bboxElement.style.width = `${newWidth}px`;
-                bboxElement.style.height = `${newHeight}px`;
-            } else if (handleType === 'nw') {
-                const newWidth = startWidth - dx;
-                const newHeight = startHeight - dy;
-                const newLeft = startLeft + dx;
-                const newTop = startTop + dy;
-
-                if (newWidth >= minSize && newHeight >= minSize && newLeft >= offsetX && newTop >= offsetY) {
-                    bboxElement.style.left = `${newLeft}px`;
-                    bboxElement.style.top = `${newTop}px`;
-                    bboxElement.style.width = `${newWidth}px`;
-                    bboxElement.style.height = `${newHeight}px`;
-                }
-            } else if (handleType === 'ne') {
-                const newHeight = startHeight - dy;
-                const newTop = startTop + dy;
-                const newWidth = Math.max(minSize, Math.min(imgMaxX - startLeft, startWidth + dx));
-
-                if (newHeight >= minSize && newTop >= offsetY) {
-                    bboxElement.style.top = `${newTop}px`;
-                    bboxElement.style.width = `${newWidth}px`;
-                    bboxElement.style.height = `${newHeight}px`;
-                }
-            } else if (handleType === 'sw') {
-                const newWidth = startWidth - dx;
-                const newLeft = startLeft + dx;
-                const newHeight = Math.max(minSize, Math.min(imgMaxY - startTop, startHeight + dy));
-
-                if (newWidth >= minSize && newLeft >= offsetX) {
-                    bboxElement.style.left = `${newLeft}px`;
-                    bboxElement.style.width = `${newWidth}px`;
-                    bboxElement.style.height = `${newHeight}px`;
-                }
-            }
-        };
-
-        const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            updateBboxFromOverlay();
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        startEvent.preventDefault();
-    }
-
-    function updateBboxFromOverlay() {
-        const bboxElement = document.getElementById('activeBbox');
-        if (!bboxElement) return;
-
-        const imgRect = previewImage.getBoundingClientRect();
-        const containerRect = imageContainer.getBoundingClientRect();
-        const offsetX = imgRect.left - containerRect.left;
-        const offsetY = imgRect.top - containerRect.top;
-
-        const scaleX = imageWidth / previewImage.clientWidth;
-        const scaleY = imageHeight / previewImage.clientHeight;
-
-        const x1 = Math.round((bboxElement.offsetLeft - offsetX) * scaleX);
-        const y1 = Math.round((bboxElement.offsetTop - offsetY) * scaleY);
-        const x2 = Math.round((bboxElement.offsetLeft + bboxElement.offsetWidth - offsetX) * scaleX);
-        const y2 = Math.round((bboxElement.offsetTop + bboxElement.offsetHeight - offsetY) * scaleY);
-
-        currentBbox = [x1, y1, x2, y2];
-    }
-
-    // ──────────────────────────────────────
-    // 판별
-    // ──────────────────────────────────────
-    identifyBtn.addEventListener('click', async () => {
-        if (!selectedFile) return;
-
-        identifyBtn.disabled = true;
-        loadingSpinner.classList.remove('d-none');
-        loadingText.textContent = '차량을 판별하고 있습니다...';
-        updateStatus('identifying', '판별 중');
-        resultSection.classList.add('d-none');
-
-        try {
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-
-            if (currentBbox) {
-                formData.append('bbox', currentBbox.join(','));
-            }
-
-            const response = await fetch('/identify', {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.detail || `HTTP ${response.status}`);
-            }
-
-            const result = await response.json();
-            displayResult(result);
-
-        } catch (e) {
-            showToast(`판별 실패: ${e.message}`, 'error');
-            updateStatus('error', '판별 실패');
-            identifyBtn.disabled = false;
-        } finally {
-            loadingSpinner.classList.add('d-none');
-        }
-    });
-
-    function displayResult(result) {
-        updateStatus('completed', '분석 완료');
-
-        resultManufacturer.textContent = result.manufacturer_korean || '-';
-        resultModel.textContent = result.model_korean || '-';
-        resultConfidence.textContent = result.confidence ? `${(result.confidence * 100).toFixed(1)}%` : '-';
-
-        resultSection.classList.remove('d-none');
-        identifyBtn.textContent = '재분석';
-        identifyBtn.disabled = false;
-    }
-
-    // ──────────────────────────────────────
-    // 삭제
-    // ──────────────────────────────────────
-    deleteBtn.addEventListener('click', () => {
-        selectedFile = null;
-        fileInput.value = '';
-        previewImage.src = '';
-        imageCard.classList.add('d-none');
-        emptyState.classList.remove('d-none');
-        resetState();
-    });
-
-    // ──────────────────────────────────────
-    // 유틸리티
-    // ──────────────────────────────────────
-    function updateStatus(type, text) {
-        const typeMap = { ready: 'info', detecting: 'warning', detected: 'info', identifying: 'primary', completed: 'success', error: 'danger' };
-        statusBadge.className = `badge rounded-pill bg-${typeMap[type] || 'secondary'}`;
-        statusBadge.textContent = text;
-    }
-
-    function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = 'reeve-toast';
-        toast.textContent = message;
-
-        if (type === 'error') toast.style.background = '#ef4444';
-        else if (type === 'success') toast.style.background = '#10b981';
-
-        document.body.appendChild(toast);
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.3s';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
-    }
+// ══════════════════════════════════════════════
+// 공통 토스트
+// ══════════════════════════════════════════════
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = 'reeve-toast';
+    toast.textContent = message;
+    if (type === 'error')   toast.style.background = '#ef4444';
+    else if (type === 'success') toast.style.background = '#10b981';
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
 </script>
 
 </body>
