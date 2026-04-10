@@ -2,16 +2,21 @@
 Celery 비동기 작업 태스크
 차량 판별 작업을 백그라운드 큐로 처리
 """
+import contextvars
 import logging
 import tempfile
 import os
 from typing import List, Optional
 
 from celery import Task
+from celery.exceptions import SoftTimeLimitExceeded
 from identifier.celery_app import celery_app
 from identifier.config import settings
 
 logger = logging.getLogger(__name__)
+
+# main.py와 동일한 컨텍스트 변수 (워커 프로세스에서 독립)
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
 
 class IdentifierTask(Task):
@@ -30,6 +35,12 @@ class IdentifierTask(Task):
             self._identifier = VehicleIdentifier()
             self._identifier.initialize()
         return self._identifier
+
+    def _restore_request_id(self):
+        """Celery 헤더에서 request_id를 복원하여 contextvars에 세팅"""
+        headers = getattr(self.request, "headers", None) or {}
+        rid = headers.get("request_id", "-")
+        _request_id_var.set(rid)
 
 
 @celery_app.task(
@@ -55,10 +66,20 @@ def identify_image_task(
     Returns:
         IdentificationResult.dict()
     """
+    self._restore_request_id()
     try:
         logger.info(f"Task {self.request.id}: Processing {image_path}")
         result = self.identifier.identify(image_path, bbox)
         return result.dict()
+    except SoftTimeLimitExceeded:
+        logger.error(
+            f"Task {self.request.id}: SoftTimeLimitExceeded for {image_path}"
+        )
+        return {
+            "status": "low_confidence",
+            "confidence": 0.0,
+            "message": "처리 시간 초과 — 이미지를 다시 시도해 주세요.",
+        }
     except Exception as e:
         logger.error(f"Task {self.request.id} failed: {e}", exc_info=True)
         raise
@@ -87,6 +108,7 @@ def identify_batch_task(
     Returns:
         BatchIdentificationResult.dict()
     """
+    self._restore_request_id()
     try:
         logger.info(
             f"Task {self.request.id}: Processing batch "
@@ -95,6 +117,21 @@ def identify_batch_task(
         batch_size = batch_size or settings.batch_size
         result = self.identifier.identify_batch(image_paths, batch_size)
         return result.dict()
+    except SoftTimeLimitExceeded:
+        logger.error(
+            f"Task {self.request.id}: SoftTimeLimitExceeded for batch "
+            f"({len(image_paths)} images)"
+        )
+        return {
+            "status": "low_confidence",
+            "confidence": 0.0,
+            "message": f"배치 처리 시간 초과 ({len(image_paths)}장)",
+            "items": [],
+            "total": len(image_paths),
+            "success_count": 0,
+            "error_count": len(image_paths),
+            "processing_time_ms": 0.0,
+        }
     except Exception as e:
         logger.error(f"Task {self.request.id} failed: {e}", exc_info=True)
         raise
@@ -125,6 +162,7 @@ def identify_uploaded_files_task(
     Returns:
         BatchIdentificationResult.dict() (image_path는 원본 파일명)
     """
+    self._restore_request_id()
     try:
         logger.info(
             f"Task {self.request.id}: Processing uploaded files "
@@ -140,6 +178,21 @@ def identify_uploaded_files_task(
 
         return result.dict()
 
+    except SoftTimeLimitExceeded:
+        logger.error(
+            f"Task {self.request.id}: SoftTimeLimitExceeded for uploaded files "
+            f"({len(temp_file_paths)} files)"
+        )
+        return {
+            "status": "low_confidence",
+            "confidence": 0.0,
+            "message": f"업로드 파일 처리 시간 초과 ({len(temp_file_paths)}장)",
+            "items": [],
+            "total": len(temp_file_paths),
+            "success_count": 0,
+            "error_count": len(temp_file_paths),
+            "processing_time_ms": 0.0,
+        }
     except Exception as e:
         logger.error(f"Task {self.request.id} failed: {e}", exc_info=True)
         raise

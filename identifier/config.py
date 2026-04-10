@@ -87,6 +87,12 @@ class IdentifierSettings(BaseSettings):
     vlm_max_candidates: int = Field(default=5, alias="VLM_MAX_CANDIDATES")
     vlm_fallback_to_embedding: bool = Field(default=True, alias="VLM_FALLBACK_TO_EMBEDDING")
     vlm_batch_concurrency: int = Field(default=2, alias="VLM_BATCH_CONCURRENCY")
+    vlm_max_retries: int = Field(default=2, alias="VLM_MAX_RETRIES",
+                                  description="VLM 호출 최대 재시도 횟수 (타임아웃/5xx만 재시도)")
+    vlm_circuit_breaker_threshold: int = Field(default=3, alias="VLM_CIRCUIT_BREAKER_THRESHOLD",
+                                                description="서킷 브레이커 open 전환 연속 실패 횟수")
+    vlm_circuit_breaker_cooldown: float = Field(default=30.0, alias="VLM_CIRCUIT_BREAKER_COOLDOWN",
+                                                 description="서킷 브레이커 open→half-open 대기 시간 (초)")
 
     # Celery
     celery_task_time_limit: int = Field(default=600, alias="CELERY_TASK_TIME_LIMIT")  # 10분

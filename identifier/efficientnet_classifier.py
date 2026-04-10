@@ -125,6 +125,14 @@ class EfficientNetClassifier:
             self._load(model_path, class_mapping_path)
             logger.info("EfficientNetV2-M 핫리로드 완료")
 
+    def _autocast_context(self):
+        """플랫폼별 autocast 컨텍스트 반환: CUDA → bf16, MPS/CPU → no-op"""
+        if self._device.type == "cuda":
+            return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        # MPS, CPU: autocast 미적용 (contextlib.nullcontext 대체)
+        import contextlib
+        return contextlib.nullcontext()
+
     def extract_features(self, images: List[Image.Image]) -> np.ndarray:
         """
         이미지 리스트 → L2 정규화된 1280d 특징 벡터 배열 반환.
@@ -138,13 +146,12 @@ class EfficientNetClassifier:
 
         with self._lock:
             tensors = torch.stack([self._transform(img) for img in images]).to(self._device)
-            with torch.no_grad():
+            with torch.inference_mode(), self._autocast_context():
                 if self.has_classification_head:
-                    # backbone (첫 번째 레이어)만 사용
                     feats = self._backbone(tensors)
                 else:
                     feats = self._model(tensors)
-                feats = F.normalize(feats, dim=-1)
+                feats = F.normalize(feats.float(), dim=-1)
             return feats.cpu().numpy().astype(np.float32)
 
     def classify(self, images: List[Image.Image]) -> List[Tuple[int, float]]:
@@ -163,9 +170,10 @@ class EfficientNetClassifier:
 
         with self._lock:
             tensors = torch.stack([self._transform(img) for img in images]).to(self._device)
-            with torch.no_grad():
+            with torch.inference_mode(), self._autocast_context():
                 logits = self._model(tensors)
-                probs = torch.softmax(logits, dim=-1)
+                # softmax는 수치 안정성을 위해 FP32로 환원
+                probs = torch.softmax(logits.float(), dim=-1)
                 top_probs, top_idxs = probs.max(dim=-1)
 
             results = []

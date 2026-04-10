@@ -3,11 +3,12 @@
 이미지 업로드 → Qdrant 벡터 검색 → 제조사/모델 판별
 """
 import asyncio
-import gc
+import contextvars
 import logging
 import logging.handlers
 import os
 import tempfile
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -39,8 +40,19 @@ from identifier.tasks import (
 )
 from celery.result import AsyncResult
 
+# 요청 ID 컨텍스트 — 미들웨어에서 설정, 로그에 자동 주입
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class RequestIdFilter(logging.Filter):
+    """로그 레코드에 request_id 필드를 주입하는 필터"""
+    def filter(self, record):
+        record.request_id = request_id_var.get("-")
+        return True
+
+
 # 로깅 설정
-log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_format = "%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s"
 log_level = getattr(logging, settings.log_level)
 
 log_path = Path(settings.log_file)
@@ -63,6 +75,7 @@ for uv_logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
     uv_logger = logging.getLogger(uv_logger_name)
     uv_logger.handlers.clear()
     uv_logger.propagate = True
+logging.getLogger().addFilter(RequestIdFilter())
 logger = logging.getLogger(__name__)
 
 
@@ -195,6 +208,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """X-Request-ID 헤더를 수신하여 contextvars에 저장, 응답에도 전파"""
+    rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
+    request_id_var.set(rid)
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    return response
+
 
 # 정적 파일
 static_path = Path(__file__).parent / "static"
@@ -380,13 +404,16 @@ async def identify_vehicle(
             detail=f"파일 크기가 {settings.max_upload_size // 1024 // 1024}MB를 초과합니다.",
         )
 
-    # 3. bbox 파싱
+    # 3. bbox 파싱 및 범위 검증
     bbox_list = None
     if bbox:
         try:
             bbox_list = [int(x.strip()) for x in bbox.split(",")]
             if len(bbox_list) != 4:
                 raise ValueError("bbox must have 4 values")
+            x1, y1, x2, y2 = bbox_list
+            if not (0 <= x1 < x2 and 0 <= y1 < y2):
+                raise ValueError(f"bbox 좌표가 유효하지 않습니다: x1({x1})<x2({x2}), y1({y1})<y2({y2}) 필요")
         except ValueError as e:
             raise HTTPException(
                 status_code=400,
@@ -423,13 +450,10 @@ async def identify_vehicle(
             detail=f"판별 중 오류가 발생했습니다: {str(e)}",
         )
     finally:
-        # 임시 파일 삭제
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
-        del content
-        gc.collect()
 
 
 @app.post(
@@ -458,6 +482,9 @@ async def identify_stream(
             bbox_list = [int(x.strip()) for x in bbox.split(",")]
             if len(bbox_list) != 4:
                 raise ValueError("bbox must have 4 values")
+            x1, y1, x2, y2 = bbox_list
+            if not (0 <= x1 < x2 and 0 <= y1 < y2):
+                raise ValueError(f"bbox 좌표가 유효하지 않습니다: x1({x1})<x2({x2}), y1({y1})<y2({y2}) 필요")
         except ValueError as e:
             raise HTTPException(400, f"잘못된 bbox 형식입니다: {e}")
 
@@ -469,10 +496,18 @@ async def identify_stream(
         identifier: VehicleIdentifier = app.state.identifier
         loop = asyncio.get_event_loop()
         try:
+            # 이미지를 한 번만 로드하여 detect → identify 단계에서 재사용
+            from PIL import Image as PILImage
+            shared_image = await loop.run_in_executor(
+                None, lambda: PILImage.open(tmp_path).convert("RGB")
+            )
+
             # Stage 1: YOLO 감지
             yield f"data: {json.dumps({'stage': 'detecting', 'message': '차량 감지 중...'}, ensure_ascii=False)}\n\n"
 
-            detection_result = await loop.run_in_executor(None, identifier.detect_vehicles, tmp_path)
+            detection_result = await loop.run_in_executor(
+                None, identifier.detect_vehicles, tmp_path, shared_image
+            )
 
             detect_bbox = bbox_list
             detection_info = None
@@ -484,7 +519,9 @@ async def identify_stream(
             # Stage 2: 분류
             yield f"data: {json.dumps({'stage': 'classifying', 'message': '분류 중...', 'detection': detection_info}, ensure_ascii=False)}\n\n"
 
-            result = await loop.run_in_executor(None, identifier.identify, tmp_path, detect_bbox)
+            result = await loop.run_in_executor(
+                None, identifier.identify, tmp_path, detect_bbox, shared_image
+            )
             event = {"stage": "done"}
             event.update(result.model_dump())
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -497,7 +534,6 @@ async def identify_stream(
                 os.unlink(tmp_path)
             except OSError:
                 pass
-            gc.collect()
 
     return StreamingResponse(
         generate(),
@@ -714,8 +750,11 @@ async def async_identify(
     with os.fdopen(tmp_fd, "wb") as tmp_file:
         tmp_file.write(content)
 
-    # Celery 작업 큐에 등록
-    task = identify_image_task.apply_async(args=[tmp_path])
+    # Celery 작업 큐에 등록 (request_id 전파)
+    task = identify_image_task.apply_async(
+        args=[tmp_path],
+        headers={"request_id": request_id_var.get("-")},
+    )
 
     return AsyncTaskResponse(
         task_id=task.id,
@@ -821,9 +860,10 @@ async def async_identify_batch(
             tmp_paths.append(tmp_path)
             filenames.append(filename)
 
-        # Celery 작업 큐에 등록
+        # Celery 작업 큐에 등록 (request_id 전파)
         task = identify_uploaded_files_task.apply_async(
-            args=[tmp_paths, filenames, settings.batch_size]
+            args=[tmp_paths, filenames, settings.batch_size],
+            headers={"request_id": request_id_var.get("-")},
         )
 
         return AsyncTaskResponse(

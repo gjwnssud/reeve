@@ -51,10 +51,13 @@ class VLMService:
     def __init__(self):
         self._client: Optional[httpx.Client] = None
         self.model_name: str = settings.vlm_model_name  # 런타임 변경 가능
+        # 서킷 브레이커 상태
+        self._consecutive_failures: int = 0
+        self._circuit_opened_at: float = 0.0  # open 진입 시각
 
-    def initialize(self):
-        """HTTP 클라이언트 초기화 + Ollama 연결 확인"""
-        self._client = httpx.Client(
+    def _create_client(self) -> httpx.Client:
+        """httpx 클라이언트 생성 (커넥션 풀 명시)"""
+        return httpx.Client(
             base_url=settings.ollama_base_url,
             timeout=httpx.Timeout(
                 connect=5.0,
@@ -62,7 +65,15 @@ class VLMService:
                 write=5.0,
                 pool=5.0,
             ),
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=5,
+            ),
         )
+
+    def initialize(self):
+        """HTTP 클라이언트 초기화 + Ollama 연결 확인"""
+        self._client = self._create_client()
         self._check_model_available()
 
     def reload(self, model_name: str) -> None:
@@ -72,8 +83,50 @@ class VLMService:
         """
         old = self.model_name
         self.model_name = model_name
+        # 기존 클라이언트 정리 후 새 클라이언트 생성 (커넥션 누수 방지)
+        if self._client:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+        self._client = self._create_client()
+        self._consecutive_failures = 0
+        self._circuit_opened_at = 0.0
         self._check_model_available()
         logger.info(f"VLM model reloaded: {old} → {model_name}")
+
+    # ──────────────────────────────────────────────
+    # 서킷 브레이커
+    # ──────────────────────────────────────────────
+
+    def is_available(self) -> bool:
+        """서킷 브레이커 상태 확인. False이면 호출을 건너뛴다."""
+        threshold = settings.vlm_circuit_breaker_threshold
+        if self._consecutive_failures < threshold:
+            return True  # closed
+        # open 상태 — cooldown 경과 시 half-open (1건 시험 허용)
+        elapsed = time.time() - self._circuit_opened_at
+        if elapsed >= settings.vlm_circuit_breaker_cooldown:
+            return True  # half-open
+        return False  # open
+
+    def _record_success(self):
+        """호출 성공 시 서킷 브레이커 리셋"""
+        if self._consecutive_failures > 0:
+            logger.info("VLM circuit breaker closed (recovered)")
+        self._consecutive_failures = 0
+        self._circuit_opened_at = 0.0
+
+    def _record_failure(self):
+        """호출 실패 시 서킷 브레이커 카운트 증가"""
+        self._consecutive_failures += 1
+        threshold = settings.vlm_circuit_breaker_threshold
+        if self._consecutive_failures >= threshold and self._circuit_opened_at == 0.0:
+            self._circuit_opened_at = time.time()
+            logger.warning(
+                f"VLM circuit breaker OPEN — {self._consecutive_failures} consecutive failures, "
+                f"cooldown={settings.vlm_circuit_breaker_cooldown}s"
+            )
 
     def _check_model_available(self):
         """Ollama에 모델이 로드되어 있는지 확인 (non-fatal)"""
@@ -195,13 +248,24 @@ class VLMService:
             "식별할 수 없으면 모든 이름 필드를 null로, confidence를 0.0으로 설정하세요."
         )
 
+    def _is_retryable(self, exc: Exception) -> bool:
+        """재시도 가능한 오류인지 판별 (타임아웃, 5xx)"""
+        if isinstance(exc, httpx.TimeoutException):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500:
+            return True
+        return False
+
     def _call_vlm(
         self,
         image: Image.Image,
         prompt: str,
         candidates: Optional[List[VLMCandidate]],
     ) -> VLMResult:
-        """Ollama /api/chat 엔드포인트 호출"""
+        """Ollama /api/chat 엔드포인트 호출 (지수 백오프 재시도 포함)"""
+        if not self.is_available():
+            raise RuntimeError("VLM circuit breaker is open — skipping call")
+
         img_b64 = self._image_to_base64(image)
 
         payload = {
@@ -221,25 +285,39 @@ class VLMService:
             },
         }
 
-        start = time.time()
-        try:
-            resp = self._client.post("/api/chat", json=payload)
-            resp.raise_for_status()
-            elapsed = time.time() - start
+        max_retries = settings.vlm_max_retries
+        last_exc: Optional[Exception] = None
 
-            data = resp.json()
-            msg = data.get("message", {})
-            raw_content = msg.get("content", "")
-            logger.info(f"VLM response ({elapsed:.1f}s): {raw_content[:200]}")
+        for attempt in range(1 + max_retries):
+            start = time.time()
+            try:
+                resp = self._client.post("/api/chat", json=payload)
+                resp.raise_for_status()
+                elapsed = time.time() - start
 
-            return self._parse_response(raw_content, candidates)
+                data = resp.json()
+                msg = data.get("message", {})
+                raw_content = msg.get("content", "")
+                logger.info(f"VLM response ({elapsed:.1f}s): {raw_content[:200]}")
 
-        except httpx.TimeoutException:
-            logger.error(f"VLM timeout after {settings.vlm_timeout}s")
-            raise
-        except Exception as e:
-            logger.error(f"VLM call failed: {e}")
-            raise
+                self._record_success()
+                return self._parse_response(raw_content, candidates)
+
+            except Exception as e:
+                last_exc = e
+                if attempt < max_retries and self._is_retryable(e):
+                    wait = 0.5 * (2 ** attempt)  # 0.5s, 1.0s
+                    logger.warning(
+                        f"VLM call failed (attempt {attempt + 1}/{1 + max_retries}): {e}. "
+                        f"Retrying in {wait:.1f}s..."
+                    )
+                    time.sleep(wait)
+                    continue
+                break
+
+        self._record_failure()
+        logger.error(f"VLM call failed after {1 + max_retries} attempt(s): {last_exc}")
+        raise last_exc
 
     def _parse_response(
         self,
