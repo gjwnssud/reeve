@@ -43,40 +43,87 @@ async def get_hw_profile():
 
     # EfficientNet 백엔드 — PyTorch 이미지 분류기 (MPS/CUDA/CPU 자동 감지)
     if settings.trainer_backend == "efficientnet":
+        import os
         try:
             import torch
             if torch.backends.mps.is_available():
                 hw = "apple_silicon"
                 label = "Apple Silicon MPS (EfficientNetV2-M)"
                 batch_size = 16
+                preset_extra = {
+                    "gradient_accumulation": 2, "num_workers": 2,
+                    "use_ema": True, "use_mixup": False,
+                }
             elif torch.cuda.is_available():
                 gpu = torch.cuda.get_device_properties(0)
                 vram_gb = gpu.total_memory / 1024 ** 3
-                hw = "cuda_gpu"
-                label = f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
-                batch_size = 32 if vram_gb >= 20 else 16
+                cc_major, cc_minor = torch.cuda.get_device_capability(0)
+                if cc_major >= 12 or vram_gb >= 100:
+                    hw = "dgx_spark"
+                    label = f"NVIDIA {gpu.name} ({vram_gb:.0f} GB, sm_{cc_major}{cc_minor})"
+                    batch_size = 64
+                    preset_extra = {
+                        "gradient_accumulation": 1,
+                        "num_workers": min(16, os.cpu_count() or 4),
+                        "use_ema": True, "use_mixup": True,
+                    }
+                elif vram_gb >= 20:
+                    hw = "high_end_gpu"
+                    label = f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
+                    batch_size = 32
+                    preset_extra = {
+                        "gradient_accumulation": 2,
+                        "num_workers": min(8, os.cpu_count() or 4),
+                        "use_ema": True, "use_mixup": True,
+                    }
+                elif vram_gb >= 8:
+                    hw = "mid_gpu"
+                    label = f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
+                    batch_size = 16
+                    preset_extra = {
+                        "gradient_accumulation": 4, "num_workers": 4,
+                        "use_ema": False, "use_mixup": False,
+                    }
+                else:
+                    hw = "low_gpu"
+                    label = f"NVIDIA {gpu.name} ({vram_gb:.0f} GB)"
+                    batch_size = 8
+                    preset_extra = {
+                        "gradient_accumulation": 8, "num_workers": 2,
+                        "use_ema": False, "use_mixup": False,
+                    }
             else:
                 hw = "cpu"
                 label = "CPU Only"
-                batch_size = 8
+                batch_size = 4
+                preset_extra = {
+                    "gradient_accumulation": 8, "num_workers": 0,
+                    "use_ema": False, "use_mixup": False,
+                }
         except ImportError:
-            hw, label, batch_size = "cpu", "CPU Only", 8
+            hw, label, batch_size = "cpu", "CPU Only", 4
+            preset_extra = {
+                "gradient_accumulation": 8, "num_workers": 0,
+                "use_ema": False, "use_mixup": False,
+            }
 
+        preset = {
+            "batch_size": batch_size,
+            "learning_rate": "1e-4",
+            "num_epochs": 10,
+            "freeze_epochs": 1,
+            "lora_rank": None,
+            "quantization_bit": None,
+            "cutoff_len": None,
+            "flash_attn": None,
+            "early_stopping_patience": 3,
+            **preset_extra,
+        }
         return {
             "hw": hw,
             "backend": "efficientnet",
             "label": label,
-            "preset": {
-                "batch_size": batch_size,
-                "learning_rate": "1e-4",
-                "num_epochs": 10,
-                "freeze_epochs": 1,
-                "gradient_accumulation": 1,
-                "lora_rank": None,
-                "quantization_bit": None,
-                "cutoff_len": None,
-                "flash_attn": None,
-            },
+            "preset": preset,
         }
 
     # MLX 백엔드 = Apple Silicon 확정
@@ -187,6 +234,10 @@ class TrainingConfig(BaseModel):
     freeze_epochs: int = 1
     studio_url: Optional[str] = None
     max_per_class: Optional[int] = None  # 클래스당 최대 샘플 수 (None = 제한 없음)
+    use_ema: bool = False
+    use_mixup: bool = False
+    num_workers: Optional[int] = None  # None = 플랫폼 자동 감지
+    early_stopping_patience: int = 3
 
 
 class ExportModelRequest(BaseModel):
@@ -211,6 +262,11 @@ async def start_training(config: TrainingConfig):
                 output_dir=config.output_dir,
                 studio_url=config.studio_url or settings.studio_url,
                 max_per_class=config.max_per_class,
+                gradient_accumulation=config.gradient_accumulation,
+                use_ema=config.use_ema,
+                use_mixup=config.use_mixup,
+                num_workers=config.num_workers,
+                early_stopping_patience=config.early_stopping_patience,
             )
         elif settings.trainer_backend == "llamafactory":
             config_path = trainer.generate_train_yaml(

@@ -196,23 +196,34 @@ CLASSIFIER_CONFIDENCE_THRESHOLD=0 (기본) → 동적 계산 활성화
 ### 학습 스크립트 동작 (efficientnet_trainer.py)
 - **모델**: `tf_efficientnetv2_m.in21k_ft_in1k` + Dropout(0.3) + Linear(1280, num_classes)
 - **입력 해상도**: 480×480
+- **Data Augmentation**: RandomResizedCrop + TrivialAugmentWide + RandomErasing (학습), Resize+CenterCrop (검증)
+- **CutMix/MixUp**: 배치 레벨, `use_mixup` 파라미터로 활성화 (고사양 플랫폼 자동 활성)
 - **손실 함수**: CrossEntropyLoss (label_smoothing=0.1, 클래스 가중치 sqrt 보정)
 - **옵티마이저**: AdamW (freeze 구간: head만, unfreeze 구간: head + backbone 별도 LR)
-- **스케줄러**: OneCycleLR (freeze/unfreeze 전환 시 재생성)
-- **Gradient clipping**: max_norm=1.0 (MPS/CPU 경로 포함)
-- **Best model 저장**: val_acc 기준, 최종 모델에 복사
+- **스케줄러**: OneCycleLR (freeze/unfreeze 전환 시 재생성, Gradient Accumulation 반영)
+- **Mixed Precision**: CUDA bf16(sm_80+)/fp16+GradScaler, MPS fp16 autocast, CPU fp32
+- **channels_last**: CUDA/MPS에서 컨볼루션 메모리 레이아웃 최적화
+- **torch.compile**: DGX Spark `max-autotune`, 일반 CUDA `reduce-overhead`
+- **Gradient Accumulation**: `gradient_accumulation` 파라미터, effective batch size 통일 (기본 32~64)
+- **EMA**: `use_ema` 파라미터, decay=0.999, 검증/저장 시 EMA 모델 사용
+- **Early Stopping**: `early_stopping_patience` 파라미터 (기본 3 epoch)
+- **Per-Class 정확도**: worst 5 클래스 추적, JSONL 로그에 `worst_classes` 필드 기록
+- **Gradient clipping**: max_norm=1.0
+- **Best model 저장**: val_acc 기준 (EMA 적용 시 EMA state_dict), 최종 모델에 복사
 - **생성 파일 위치**: `logs/trainer/efficientnet/efficientnet_train.py` ← Studio hot-reload 감시 디렉토리 밖이어야 함 (Dockerfile: `--reload-dir /app/studio`)
 
 ### 하드웨어별 기본 파라미터
-| 환경 | batch_size | epochs | freeze_epochs | lr |
-|------|-----------|--------|---------------|----|
-| Apple Silicon (MPS) | 16 | 10 | 1 | 1e-4 |
-| NVIDIA 20GB+ | 32 | 3 | 1 | 1e-4 |
-| NVIDIA 8~20GB | 16 | 10 | 1 | 1e-4 |
-| CPU | 8 | 10 | 1 | 1e-4 |
+| 환경 | batch | grad_accum | eff_batch | workers | EMA | MixUp | precision |
+|------|-------|------------|-----------|---------|-----|-------|-----------|
+| DGX Spark (sm_120+/100GB+) | 64 | 1 | 64 | 16 | O | O | bf16 |
+| High-end NVIDIA (20GB+) | 32 | 2 | 64 | 8 | O | O | fp16 |
+| Mid NVIDIA (8~20GB) | 16 | 4 | 64 | 4 | X | X | fp16 |
+| Low NVIDIA (<8GB) | 8 | 8 | 64 | 2 | X | X | fp16 |
+| Apple Silicon (MPS) | 16 | 2 | 32 | 2 | O | X | mps fp16 |
+| CPU | 4 | 8 | 32 | 0 | X | X | fp32 |
 
 ### API 엔드포인트
-- `POST /train/start` — 학습 시작 (`learning_rate`, `num_epochs`, `batch_size`, `freeze_epochs`, `max_per_class`)
+- `POST /train/start` — 학습 시작 (`learning_rate`, `num_epochs`, `batch_size`, `freeze_epochs`, `max_per_class`, `gradient_accumulation`, `use_ema`, `use_mixup`, `num_workers`, `early_stopping_patience`)
 - `GET /train/status` — 진행 상태 (current_steps, total_steps, epoch, loss, val_acc)
 - `POST /train/stop` — 학습 중지
 - `GET /train/logs` — JSONL 로그 (tail)

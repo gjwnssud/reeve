@@ -50,6 +50,11 @@ class EfficientNetTrainer:
         output_dir: str = "efficientnet",
         studio_url: Optional[str] = None,
         max_per_class: Optional[int] = None,
+        gradient_accumulation: int = 1,
+        use_ema: bool = False,
+        use_mixup: bool = False,
+        num_workers: Optional[int] = None,
+        early_stopping_patience: int = 3,
     ) -> dict:
         """EfficientNetV2-M 파인튜닝 시작 (백그라운드 프로세스)"""
         log_dir = self._log_dir(output_dir)
@@ -80,6 +85,11 @@ class EfficientNetTrainer:
             jsonl_log=jsonl_log,
             raw_log=raw_log,
             max_per_class=max_per_class,
+            gradient_accumulation=gradient_accumulation,
+            use_ema=use_ema,
+            use_mixup=use_mixup,
+            num_workers=num_workers,
+            early_stopping_patience=early_stopping_patience,
         )
         script_path.write_text(script_content, encoding="utf-8")
 
@@ -114,11 +124,17 @@ class EfficientNetTrainer:
         jsonl_log: str,
         raw_log: str,
         max_per_class: Optional[int] = None,
+        gradient_accumulation: int = 1,
+        use_ema: bool = False,
+        use_mixup: bool = False,
+        num_workers: Optional[int] = None,
+        early_stopping_patience: int = 3,
     ) -> str:
         """학습 스크립트를 파라미터와 함께 빌드."""
         max_per_class_val = max_per_class if max_per_class else "None"
+        num_workers_val = num_workers if num_workers is not None else "None"
         return textwrap.dedent(f"""\
-            import json, csv, sys, os, time, math, random, shutil
+            import json, csv, sys, os, time, math, random, shutil, copy, contextlib
             from pathlib import Path
             from collections import Counter, defaultdict
 
@@ -132,6 +148,7 @@ class EfficientNetTrainer:
             from PIL import Image
             import httpx
 
+            # ── 하이퍼파라미터 ──────────────────────────────────────
             STUDIO_URL = "{studio_url}"
             IDENTIFIER_URL = "{settings.identifier_url}"
             LEARNING_RATE = {learning_rate}
@@ -139,21 +156,26 @@ class EfficientNetTrainer:
             BATCH_SIZE = {batch_size}
             FREEZE_EPOCHS = {freeze_epochs}
             MAX_PER_CLASS = {max_per_class_val}
+            GRAD_ACCUM = {gradient_accumulation}
+            USE_EMA = {use_ema}
+            USE_MIXUP = {use_mixup}
+            NUM_WORKERS_OVERRIDE = {num_workers_val}
+            PATIENCE = {early_stopping_patience}
             MODEL_OUT = "{model_out}"
             MODEL_BEST = MODEL_OUT.replace(".pth", ".best.pth")
             CLASS_MAP_OUT = "{class_map_out}"
             JSONL_LOG = "{jsonl_log}"
             RAW_LOG = "{raw_log}"
-            # Identifier 컨테이너 내부 경로 (핫리로드 요청용)
             IDENTIFIER_MODEL_PATH = "{settings.identifier_efficientnet_model_path}"
             IDENTIFIER_CLASS_MAP_PATH = "{settings.identifier_class_mapping_path}"
 
+            # ── 로깅 ──────────────────────────────────────────────
             def log_raw(msg):
                 Path(RAW_LOG).parent.mkdir(parents=True, exist_ok=True)
                 with open(RAW_LOG, "a", encoding="utf-8") as f:
                     f.write(msg + "\\n")
 
-            def log_jsonl(step, total_steps, epoch, loss, val_acc=None):
+            def log_jsonl(step, total_steps, epoch, loss, val_acc=None, worst_classes=None):
                 entry = {{
                     "current_steps": step,
                     "total_steps": total_steps,
@@ -163,21 +185,68 @@ class EfficientNetTrainer:
                 }}
                 if val_acc is not None:
                     entry["val_acc"] = round(val_acc, 2)
+                if worst_classes is not None:
+                    entry["worst_classes"] = worst_classes
                 Path(JSONL_LOG).parent.mkdir(parents=True, exist_ok=True)
                 with open(JSONL_LOG, "a", encoding="utf-8") as f:
                     f.write(json.dumps(entry) + "\\n")
 
+            # ── EMA 클래스 ──────────────────────────────────────────
+            class EMAModel:
+                def __init__(self, model, decay=0.999):
+                    self.module = copy.deepcopy(model)
+                    self.module.eval()
+                    self.decay = decay
+
+                @torch.no_grad()
+                def update(self, model):
+                    for ema_p, p in zip(self.module.parameters(), model.parameters()):
+                        ema_p.data.mul_(self.decay).add_(p.data, alpha=1 - self.decay)
+
+                def state_dict(self):
+                    return self.module.state_dict()
+
+            # ── 디바이스 감지 ────────────────────────────────────────
+            cc_major = 0
+            vram_gb = 0
             if torch.backends.mps.is_available():
                 device = torch.device("mps")
                 log_raw("디바이스: MPS (Apple Silicon)")
             elif torch.cuda.is_available():
                 device = torch.device("cuda")
-                log_raw(f"디바이스: CUDA {{torch.cuda.get_device_name(0)}}")
+                cc_major, _ = torch.cuda.get_device_capability(0)
+                vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
+                log_raw(f"디바이스: CUDA {{torch.cuda.get_device_name(0)}} ({{vram_gb:.0f}} GB, sm_{{cc_major}})")
             else:
                 device = torch.device("cpu")
                 log_raw("디바이스: CPU")
 
-            # Studio에서 학습 데이터 내보내기
+            # ── Mixed Precision 설정 ────────────────────────────────
+            if device.type == "cuda":
+                if cc_major >= 8 and torch.cuda.is_bf16_supported():
+                    autocast_ctx = lambda: torch.autocast("cuda", dtype=torch.bfloat16)
+                    scaler = None
+                    log_raw("Mixed Precision: bf16 (GradScaler 불필요)")
+                else:
+                    autocast_ctx = lambda: torch.autocast("cuda", dtype=torch.float16)
+                    scaler = torch.amp.GradScaler()
+                    log_raw("Mixed Precision: fp16 + GradScaler")
+            elif device.type == "mps":
+                try:
+                    _test_ctx = torch.autocast("mps", dtype=torch.float16)
+                    autocast_ctx = lambda: torch.autocast("mps", dtype=torch.float16)
+                    scaler = None
+                    log_raw("Mixed Precision: MPS fp16 autocast")
+                except Exception:
+                    autocast_ctx = lambda: contextlib.nullcontext()
+                    scaler = None
+                    log_raw("Mixed Precision: 미지원, fp32 폴백")
+            else:
+                autocast_ctx = lambda: contextlib.nullcontext()
+                scaler = None
+                log_raw("Mixed Precision: 없음 (CPU fp32)")
+
+            # ── Studio에서 학습 데이터 내보내기 ─────────────────────
             log_raw("Studio에서 학습 데이터 내보내기 요청...")
             export_body = {{"split": 0.9}}
             if MAX_PER_CLASS is not None:
@@ -208,6 +277,7 @@ class EfficientNetTrainer:
                 log_raw("오류: 클래스가 2개 미만입니다.")
                 sys.exit(1)
 
+            # ── Dataset ──────────────────────────────────────────────
             class VehicleDataset(Dataset):
                 def __init__(self, data_dir, transform):
                     import glob
@@ -230,15 +300,18 @@ class EfficientNetTrainer:
                     img = Image.open(path).convert("RGB")
                     return self.transform(img), label
 
+            # ── Data Augmentation (강화) ─────────────────────────────
             train_transform = T.Compose([
-                T.RandomResizedCrop(480, scale=(0.7, 1.0)),
+                T.RandomResizedCrop(480, scale=(0.6, 1.0), interpolation=T.InterpolationMode.BICUBIC),
                 T.RandomHorizontalFlip(),
-                T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2),
+                T.TrivialAugmentWide(),
                 T.ToTensor(),
                 T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                T.RandomErasing(p=0.25, scale=(0.02, 0.15)),
             ])
             val_transform = T.Compose([
-                T.Resize((480, 480)),
+                T.Resize(512, interpolation=T.InterpolationMode.BICUBIC),
+                T.CenterCrop(480),
                 T.ToTensor(),
                 T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
@@ -250,19 +323,61 @@ class EfficientNetTrainer:
                 log_raw("오류: 유효한 학습 이미지가 없습니다.")
                 sys.exit(1)
 
-            # macOS spawn 방식에서 num_workers > 0은 스크립트 재실행을 유발하므로 0으로 고정
-            num_workers = 0 if device.type == "mps" else min(4, os.cpu_count() or 1)
-            train_loader = DataLoader(
-                train_ds, batch_size=BATCH_SIZE, shuffle=True,
-                num_workers=num_workers, pin_memory=(device.type == "cuda"),
-            )
-            val_loader = DataLoader(
-                val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=num_workers,
-            ) if val_ds else None
+            # ── CutMix/MixUp (배치 레벨) ─────────────────────────────
+            cutmix_or_mixup = None
+            if USE_MIXUP:
+                try:
+                    from torchvision.transforms import v2
+                    cutmix_or_mixup = v2.RandomChoice([
+                        v2.CutMix(num_classes=num_classes),
+                        v2.MixUp(num_classes=num_classes),
+                    ])
+                    log_raw("CutMix/MixUp 활성화")
+                except Exception as e:
+                    log_raw(f"CutMix/MixUp 초기화 실패 (비활성): {{e}}")
 
-            log_raw(f"학습: {{len(train_ds)}}장, 검증: {{len(val_ds) if val_ds else 0}}장")
+            # ── DataLoader 최적화 ────────────────────────────────────
+            if device.type == "mps":
+                _num_workers = NUM_WORKERS_OVERRIDE if NUM_WORKERS_OVERRIDE is not None else 2
+                worker_kwargs = {{"multiprocessing_context": "fork", "persistent_workers": True}} if _num_workers > 0 else {{}}
+            elif device.type == "cuda":
+                _num_workers = NUM_WORKERS_OVERRIDE if NUM_WORKERS_OVERRIDE is not None else min(8, os.cpu_count() or 1)
+                worker_kwargs = {{"pin_memory": True, "persistent_workers": True, "prefetch_factor": 2}} if _num_workers > 0 else {{"pin_memory": True}}
+            else:
+                _num_workers = 0
+                worker_kwargs = {{}}
 
-            # 클래스 가중치 계산 (불균형 보정)
+            try:
+                train_loader = DataLoader(
+                    train_ds, batch_size=BATCH_SIZE, shuffle=True,
+                    num_workers=_num_workers, **worker_kwargs,
+                )
+                # 테스트 이터레이션으로 멀티프로세스 정상 작동 확인
+                if _num_workers > 0:
+                    _test_iter = iter(train_loader)
+                    next(_test_iter)
+                    del _test_iter
+            except Exception as e:
+                log_raw(f"DataLoader 멀티프로세스 실패 (num_workers=0 폴백): {{e}}")
+                _num_workers = 0
+                worker_kwargs = {{}}
+                train_loader = DataLoader(
+                    train_ds, batch_size=BATCH_SIZE, shuffle=True,
+                    num_workers=0,
+                )
+
+            val_loader = None
+            if val_ds:
+                val_worker_kwargs = {{"pin_memory": True}} if device.type == "cuda" else {{}}
+                val_loader = DataLoader(
+                    val_ds, batch_size=BATCH_SIZE, shuffle=False,
+                    num_workers=min(_num_workers, 2),
+                    **val_worker_kwargs,
+                )
+
+            log_raw(f"학습: {{len(train_ds)}}장, 검증: {{len(val_ds) if val_ds else 0}}장, workers={{_num_workers}}")
+
+            # ── 클래스 가중치 (불균형 보정) ──────────────────────────
             label_counts = Counter(label for _, label in train_ds.items)
             total_samples = len(train_ds.items)
             class_weights = torch.zeros(num_classes)
@@ -274,7 +389,7 @@ class EfficientNetTrainer:
 
             criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
 
-            # 모델 생성
+            # ── 모델 생성 ────────────────────────────────────────────
             backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
             with torch.no_grad():
                 sample = torch.zeros(1, 3, 480, 480)
@@ -287,7 +402,13 @@ class EfficientNetTrainer:
                 nn.Linear(feat_dim, num_classes),
             ).to(device)
 
-            # 기존 모델 이어 학습
+            # ── channels_last 메모리 포맷 (CUDA/MPS 컨볼루션 최적화) ─
+            use_channels_last = device.type in ("cuda", "mps")
+            if use_channels_last:
+                model = model.to(memory_format=torch.channels_last)
+                log_raw("channels_last 메모리 포맷 적용")
+
+            # ── 기존 모델 이어 학습 ──────────────────────────────────
             head_reinitialized = False
             if os.path.exists(MODEL_OUT):
                 log_raw(f"기존 모델 발견: {{MODEL_OUT}} — 이어 학습 시도")
@@ -315,26 +436,38 @@ class EfficientNetTrainer:
                 FREEZE_EPOCHS = 1
                 log_raw("head 재초기화 감지 → freeze_epochs 자동 보정: 1")
 
-            # CUDA 환경에서만 torch.compile 적용 (MPS는 Metal shader 컴파일 오버헤드로 비효율)
+            # ── torch.compile (CUDA 전용, 모드 분기) ─────────────────
             if device.type == "cuda":
+                compile_mode = "max-autotune" if (cc_major >= 12 or vram_gb >= 100) else "reduce-overhead"
                 try:
-                    model = torch.compile(model)
-                    log_raw("torch.compile 적용 (CUDA)")
+                    model = torch.compile(model, mode=compile_mode)
+                    log_raw(f"torch.compile 적용 (mode={{compile_mode}})")
                 except Exception as e:
                     log_raw(f"torch.compile 실패 (무시): {{e}}")
 
+            # ── EMA 초기화 ───────────────────────────────────────────
+            ema = EMAModel(model) if USE_EMA else None
+            if ema:
+                log_raw("EMA 활성화 (decay=0.999)")
+
+            # ── 학습 스케줄 계산 (Gradient Accumulation 반영) ────────
             steps_per_epoch = math.ceil(len(train_ds) / BATCH_SIZE)
-            total_steps = NUM_EPOCHS * steps_per_epoch
+            optim_steps_per_epoch = math.ceil(steps_per_epoch / GRAD_ACCUM)
+            total_optim_steps = NUM_EPOCHS * optim_steps_per_epoch
+            total_steps = NUM_EPOCHS * steps_per_epoch  # 로깅용 전체 스텝
             global_step = 0
+            optim_step = 0
             best_val_acc = 0.0
+            no_improve = 0
             opt = None
             scheduler = None
-            scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
+
+            log_raw(f"Gradient Accumulation: {{GRAD_ACCUM}} (effective batch={{BATCH_SIZE * GRAD_ACCUM}})")
+            log_raw(f"총 optim steps: {{total_optim_steps}} (steps/epoch={{steps_per_epoch}}, optim_steps/epoch={{optim_steps_per_epoch}})")
 
             for epoch in range(NUM_EPOCHS):
-                # Optimizer / Scheduler 초기화 (freeze → unfreeze 전환 시 재생성)
+                # ── Optimizer / Scheduler 초기화 (freeze → unfreeze 전환 시 재생성) ──
                 if epoch == 0 and FREEZE_EPOCHS > 0:
-                    # freeze 구간: head만 학습, LR × 10
                     for p in backbone.parameters():
                         p.requires_grad = False
                     opt = optim.AdamW(
@@ -343,11 +476,10 @@ class EfficientNetTrainer:
                     )
                     scheduler = optim.lr_scheduler.OneCycleLR(
                         opt, max_lr=LEARNING_RATE * 10,
-                        total_steps=total_steps, pct_start=0.1, anneal_strategy="cos",
+                        total_steps=total_optim_steps, pct_start=0.1, anneal_strategy="cos",
                     )
                     log_raw(f"Epoch 1: backbone 동결, head lr={{LEARNING_RATE * 10:.2e}}")
                 elif epoch == 0 and FREEZE_EPOCHS == 0:
-                    # freeze 없이 처음부터 전체 파인튜닝
                     for p in backbone.parameters():
                         p.requires_grad = True
                     opt = optim.AdamW([
@@ -357,91 +489,139 @@ class EfficientNetTrainer:
                     scheduler = optim.lr_scheduler.OneCycleLR(
                         opt,
                         max_lr=[LEARNING_RATE, LEARNING_RATE * 0.1],
-                        total_steps=total_steps, pct_start=0.1, anneal_strategy="cos",
+                        total_steps=total_optim_steps, pct_start=0.1, anneal_strategy="cos",
                     )
                     log_raw(f"Epoch 1: freeze 없이 전체 파인튜닝 — head lr={{LEARNING_RATE:.2e}}, backbone lr={{LEARNING_RATE * 0.1:.2e}}")
                 elif epoch == FREEZE_EPOCHS:
-                    # unfreeze: backbone은 LR × 0.1, head는 LR × 1.0 (Layer-wise LR decay)
                     for p in backbone.parameters():
                         p.requires_grad = True
                     opt = optim.AdamW([
                         {{"params": list(model[2].parameters()), "lr": LEARNING_RATE,       "weight_decay": 0.05}},
                         {{"params": list(backbone.parameters()),  "lr": LEARNING_RATE * 0.1, "weight_decay": 0.05}},
                     ])
-                    remaining_steps = max(1, total_steps - global_step)
+                    remaining_optim_steps = max(1, total_optim_steps - optim_step)
                     scheduler = optim.lr_scheduler.OneCycleLR(
                         opt,
                         max_lr=[LEARNING_RATE, LEARNING_RATE * 0.1],
-                        total_steps=remaining_steps, pct_start=0.1, anneal_strategy="cos",
+                        total_steps=remaining_optim_steps, pct_start=0.1, anneal_strategy="cos",
                     )
                     log_raw(f"Epoch {{epoch+1}}: 전체 파인튜닝 시작 — head lr={{LEARNING_RATE:.2e}}, backbone lr={{LEARNING_RATE * 0.1:.2e}}")
 
                 model.train()
                 epoch_loss = 0.0
                 log_interval = max(1, steps_per_epoch // 10)
+                opt.zero_grad()
 
                 for batch_idx, (imgs, labels) in enumerate(train_loader):
-                    imgs, labels = imgs.to(device), labels.to(device)
-                    opt.zero_grad()
-                    if scaler is not None:
-                        with torch.autocast("cuda"):
-                            loss = criterion(model(imgs), labels)
-                        scaler.scale(loss).backward()
-                        scaler.unscale_(opt)
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                        scaler.step(opt)
-                        scaler.update()
+                    if use_channels_last:
+                        imgs = imgs.to(device, memory_format=torch.channels_last)
                     else:
-                        loss = criterion(model(imgs), labels)
+                        imgs = imgs.to(device)
+                    labels = labels.to(device)
+
+                    # CutMix/MixUp 적용
+                    if cutmix_or_mixup is not None:
+                        imgs, labels = cutmix_or_mixup(imgs, labels)
+
+                    with autocast_ctx():
+                        loss = criterion(model(imgs), labels) / GRAD_ACCUM
+
+                    if scaler is not None:
+                        scaler.scale(loss).backward()
+                        if (batch_idx + 1) % GRAD_ACCUM == 0 or (batch_idx + 1) == steps_per_epoch:
+                            scaler.unscale_(opt)
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                            scaler.step(opt)
+                            scaler.update()
+                            opt.zero_grad()
+                            scheduler.step()
+                            optim_step += 1
+                            if ema:
+                                ema.update(model)
+                    else:
                         loss.backward()
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                        opt.step()
-                    scheduler.step()
+                        if (batch_idx + 1) % GRAD_ACCUM == 0 or (batch_idx + 1) == steps_per_epoch:
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                            opt.step()
+                            opt.zero_grad()
+                            scheduler.step()
+                            optim_step += 1
+                            if ema:
+                                ema.update(model)
 
                     global_step += 1
-                    epoch_loss += loss.item()
+                    epoch_loss += loss.item() * GRAD_ACCUM
 
                     if batch_idx % log_interval == 0:
                         cur_epoch = epoch + (batch_idx + 1) / steps_per_epoch
-                        log_raw(f"Ep{{epoch+1}} step{{global_step}}/{{total_steps}} loss={{loss.item():.4f}}")
-                        log_jsonl(global_step, total_steps, cur_epoch, loss.item())
+                        log_raw(f"Ep{{epoch+1}} step{{global_step}}/{{total_steps}} loss={{loss.item() * GRAD_ACCUM:.4f}}")
+                        log_jsonl(global_step, total_steps, cur_epoch, loss.item() * GRAD_ACCUM)
 
                 avg_loss = epoch_loss / max(1, len(train_loader))
                 log_raw(f"Epoch {{epoch+1}}/{{NUM_EPOCHS}} 완료 avg_loss={{avg_loss:.4f}}")
 
+                # ── 검증 (EMA 모델 사용) ─────────────────────────────
                 if val_loader:
-                    model.eval()
+                    eval_model = ema.module if ema else model
+                    eval_model.eval()
                     correct = total_val = 0
+                    class_correct = defaultdict(int)
+                    class_total = defaultdict(int)
+
                     with torch.no_grad():
                         for imgs, labels in val_loader:
-                            imgs, labels = imgs.to(device), labels.to(device)
-                            preds = model(imgs).argmax(dim=1)
+                            if use_channels_last:
+                                imgs = imgs.to(device, memory_format=torch.channels_last)
+                            else:
+                                imgs = imgs.to(device)
+                            labels = labels.to(device)
+                            preds = eval_model(imgs).argmax(dim=1)
                             correct += (preds == labels).sum().item()
                             total_val += len(labels)
+                            for p, l in zip(preds, labels):
+                                class_total[l.item()] += 1
+                                if p == l:
+                                    class_correct[l.item()] += 1
+
                     val_acc = correct / max(1, total_val) * 100
+                    per_class_acc = {{c: round(class_correct[c] / class_total[c] * 100, 1) for c in class_total if class_total[c] > 0}}
+                    worst_5 = sorted(per_class_acc.items(), key=lambda x: x[1])[:5]
+
                     log_raw(f"검증 정확도: {{val_acc:.1f}}% ({{correct}}/{{total_val}})")
-                    log_jsonl(global_step, total_steps, epoch + 1, avg_loss, val_acc=val_acc)
+                    log_raw(f"최저 5개 클래스: {{worst_5}}")
+                    worst_classes_log = [{{"class": c, "acc": a}} for c, a in worst_5]
+                    log_jsonl(global_step, total_steps, epoch + 1, avg_loss,
+                              val_acc=val_acc, worst_classes=worst_classes_log)
 
                     # Best model 저장
                     if val_acc > best_val_acc:
                         best_val_acc = val_acc
+                        no_improve = 0
                         Path(MODEL_BEST).parent.mkdir(parents=True, exist_ok=True)
-                        torch.save(model.state_dict(), MODEL_BEST)
+                        save_state = ema.state_dict() if ema else model.state_dict()
+                        torch.save(save_state, MODEL_BEST)
                         log_raw(f"Best model 저장 (val_acc={{val_acc:.1f}}%): {{MODEL_BEST}}")
+                    else:
+                        no_improve += 1
+                        log_raw(f"개선 없음 ({{no_improve}}/{{PATIENCE}})")
+                        if PATIENCE > 0 and no_improve >= PATIENCE:
+                            log_raw(f"Early stopping: {{PATIENCE}} epoch 동안 개선 없음")
+                            break
 
-            # 최종 모델 저장: best checkpoint 우선, 없으면 마지막 epoch
+            # ── 최종 모델 저장 ────────────────────────────────────────
             Path(MODEL_OUT).parent.mkdir(parents=True, exist_ok=True)
             if os.path.exists(MODEL_BEST):
                 shutil.copy(MODEL_BEST, MODEL_OUT)
                 log_raw(f"Best model → 최종 모델 복사 (best_val_acc={{best_val_acc:.1f}}%): {{MODEL_OUT}}")
             else:
-                torch.save(model.state_dict(), MODEL_OUT)
+                save_state = ema.state_dict() if ema else model.state_dict()
+                torch.save(save_state, MODEL_OUT)
                 log_raw(f"모델 저장 완료 (val 없음, 마지막 epoch): {{MODEL_OUT}}")
 
             shutil.copy(class_mapping_path, CLASS_MAP_OUT)
             log_raw(f"class_mapping 저장: {{CLASS_MAP_OUT}}")
 
-            # Identifier 핫리로드 (컨테이너 내부 경로 사용)
+            # ── Identifier 핫리로드 ──────────────────────────────────
             try:
                 resp = httpx.post(
                     f"{{IDENTIFIER_URL}}/admin/reload-efficientnet",
