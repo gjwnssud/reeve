@@ -114,7 +114,7 @@ async def get_freeze_epochs(db: Session = Depends(get_db)):
 
     model_classes = None
     try:
-        info = await _proxy_get("/train/model-info")
+        info = await _proxy_get("/model-info")
         model_classes = info.get("num_classes")
     except Exception:
         pass

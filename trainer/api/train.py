@@ -209,7 +209,7 @@ async def get_model_info():
     """현재 저장된 EfficientNet 모델의 클래스 수 반환"""
     import json, os
     from trainer.config import settings
-    path = settings.identifier_class_mapping_path
+    path = os.path.join(settings.efficientnet_model_dir, "class_mapping.json")
     if not os.path.exists(path):
         return {"num_classes": None}
     with open(path, encoding="utf-8") as f:
