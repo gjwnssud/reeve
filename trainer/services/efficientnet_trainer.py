@@ -368,7 +368,7 @@ class EfficientNetTrainer:
 
             val_loader = None
             if val_ds:
-                val_worker_kwargs = {{"pin_memory": True}} if device.type == "cuda" else {{}}
+                val_worker_kwargs = {{"pin_memory": True}} if device.type == "cuda" else ({{"multiprocessing_context": "fork"}} if device.type == "mps" and _num_workers > 0 else {{}})
                 val_loader = DataLoader(
                     val_ds, batch_size=BATCH_SIZE, shuffle=False,
                     num_workers=min(_num_workers, 2),
