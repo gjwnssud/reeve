@@ -349,7 +349,7 @@ Image: blurry or vehicle not clearly visible
                         continue
                     key, value = line.split(':', 1)
                     key = key.strip().lower()
-                    value = value.strip().strip('"').strip(',')
+                    value = value.strip().strip(',').strip('"')
 
                     if "manufacturer_code" in key:
                         result["manufacturer_code"] = value.lower() if value.lower() not in ["unknown"] else None

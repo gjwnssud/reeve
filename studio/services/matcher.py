@@ -28,6 +28,16 @@ class VehicleMatcher:
         self.threshold = settings.fuzzy_match_threshold
         self.auto_insert = auto_insert
 
+    @staticmethod
+    def _sanitize_code(code: str) -> str:
+        """앞뒤 공백·특수문자 제거 후 소문자 반환"""
+        return re.sub(r'[^a-z0-9_]', '', code.strip().lower())
+
+    @staticmethod
+    def _normalize_code(code: str) -> str:
+        """비교용 정규화: 영문자·숫자만 남기고 소문자화 (구분자 무시)"""
+        return re.sub(r'[^a-z0-9]', '', code.lower())
+
     def match_manufacturer_by_code(
         self,
         manufacturer_code: str
@@ -44,9 +54,15 @@ class VehicleMatcher:
         if not manufacturer_code:
             return None
 
-        # 코드로 정확 매칭 (대소문자 무시)
+        # 입력 정제 (공백·특수문자 제거)
+        clean_code = self._sanitize_code(manufacturer_code)
+        if not clean_code:
+            return None
+
+        # 코드로 정확 매칭 (대소문자 무시, ilike의 _ 와일드카드 문제 방지)
+        from sqlalchemy import func
         manufacturer = self.db.query(Manufacturer).filter(
-            Manufacturer.code.ilike(manufacturer_code)
+            func.lower(Manufacturer.code) == clean_code
         ).first()
 
         if manufacturer:
@@ -134,9 +150,13 @@ class VehicleMatcher:
         if not model_code:
             return None
 
-        # 코드로 정확 매칭 (대소문자 무시)
+        # 코드로 정확 매칭 (대소문자 무시, ilike wildcard 문제 방지)
+        clean_code = self._sanitize_code(model_code)
+        if not clean_code:
+            return None
+        from sqlalchemy import func
         query = self.db.query(VehicleModel).filter(
-            VehicleModel.code.ilike(model_code)
+            func.lower(VehicleModel.code) == clean_code
         )
 
         if manufacturer_id:
@@ -432,29 +452,29 @@ class VehicleMatcher:
         if not self.auto_insert or not manufacturer_code:
             return None
 
-        try:
-            # 기존 코드 목록 가져오기
-            existing_codes = [mf.code.lower() for mf in self.db.query(Manufacturer).all()]
+        # 입력 정제
+        clean_code = self._sanitize_code(manufacturer_code)
+        if not clean_code:
+            return None
 
-            # 중복 체크
-            if manufacturer_code.lower() in existing_codes:
-                logger.warning(f"Manufacturer code already exists: {manufacturer_code}")
+        try:
+            # 정규화 기반 중복 체크 (구분자 차이 무시: hyundai == hyundai_, HYUNDAI 등)
+            existing_normalized = [self._normalize_code(mf.code) for mf in self.db.query(Manufacturer).all()]
+            if self._normalize_code(clean_code) in existing_normalized:
+                logger.warning(f"Manufacturer code already exists (normalized): {manufacturer_code}")
                 return None
 
-            # code를 대문자로 변환 (DB 저장용)
-            code_upper = manufacturer_code.upper()
-
             # 한글명/영문명은 code를 capitalize한 형태로 사용
-            # 예: "hyundai" → korean_name: "HYUNDAI", english_name: "Hyundai"
-            korean_name = code_upper
-            english_name = manufacturer_code.capitalize()
+            # 예: "hyundai" → korean_name: "Hyundai", english_name: "Hyundai"
+            korean_name = clean_code.capitalize()
+            english_name = clean_code.capitalize()
 
             # 국내/해외 판단 (기본값: 해외)
             is_domestic = False
 
             # DB에 삽입
             new_manufacturer = Manufacturer(
-                code=code_upper,
+                code=clean_code,
                 korean_name=korean_name,
                 english_name=english_name,
                 is_domestic=is_domestic
@@ -466,7 +486,7 @@ class VehicleMatcher:
 
             logger.info(
                 f"Auto-inserted manufacturer by code: {manufacturer_code} -> "
-                f"code={code_upper}, korean={korean_name}, english={english_name}, domestic={is_domestic}"
+                f"code={clean_code}, korean={korean_name}, english={english_name}, domestic={is_domestic}"
             )
 
             return new_manufacturer
@@ -560,26 +580,26 @@ class VehicleMatcher:
         if not self.auto_insert or not model_code or not manufacturer:
             return None
 
-        try:
-            # 기존 코드 목록 가져오기
-            existing_codes = [m.code.lower() for m in self.db.query(VehicleModel).all()]
+        # 입력 정제
+        clean_code = self._sanitize_code(model_code)
+        if not clean_code:
+            return None
 
-            # 중복 체크
-            if model_code.lower() in existing_codes:
-                logger.warning(f"Model code already exists: {model_code}")
+        try:
+            # 정규화 기반 중복 체크 (구분자 차이 무시: model3 == model_3, MODEL3 등)
+            existing_normalized = [self._normalize_code(m.code) for m in self.db.query(VehicleModel).all()]
+            if self._normalize_code(clean_code) in existing_normalized:
+                logger.warning(f"Model code already exists (normalized): {model_code}")
                 return None
 
-            # code를 대문자로 변환 (DB 저장용)
-            code_upper = model_code.upper()
-
             # 한글명/영문명은 code를 capitalize한 형태로 사용
-            # 예: "casper" → korean_name: "CASPER", english_name: "Casper"
-            korean_name = code_upper
-            english_name = model_code.capitalize()
+            # 예: "casper" → korean_name: "Casper", english_name: "Casper"
+            korean_name = clean_code.capitalize()
+            english_name = clean_code.capitalize()
 
             # DB에 삽입
             new_model = VehicleModel(
-                code=code_upper,
+                code=clean_code,
                 manufacturer_id=manufacturer.id,
                 manufacturer_code=manufacturer.code,
                 korean_name=korean_name,
@@ -592,7 +612,7 @@ class VehicleMatcher:
 
             logger.info(
                 f"Auto-inserted model by code: {model_code} -> "
-                f"code={code_upper}, korean={korean_name}, english={english_name}, "
+                f"code={clean_code}, korean={korean_name}, english={english_name}, "
                 f"manufacturer={manufacturer.korean_name}"
             )
 
