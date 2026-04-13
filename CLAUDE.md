@@ -11,22 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Running Services
 
 ```bash
-# Mac (Apple Silicon) — Docker + native Ollama/Trainer
-cd deploy/dev/mac
-./setup.sh   # 최초 1회: venv 생성, Docker 이미지 빌드, .env 초기화
-./start.sh   # 서비스 시작 (Ollama + Trainer 네이티브, 나머지 Docker)
-
-# Linux/Windows (NVIDIA GPU) — 전체 Docker
-cd deploy/dev/linux   # 또는 windows
-./setup.sh && ./start.sh
-```
-
-Docker compose 직접 실행:
-```bash
-# Mac
+# Mac (Apple Silicon) — Ollama/Trainer 네이티브 + 나머지 Docker
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f docker/docker-compose.mac.yml up -d
 
-# Linux/Windows
+# Linux/Windows (NVIDIA GPU) — 전체 Docker
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
 ```
 
@@ -130,12 +118,12 @@ Three microservices communicate over a shared Docker network:
   → IdentificationResult 반환 (status, manufacturer, model, confidence, top_k_details)
 ```
 
-### 분류기 신뢰도 임계값 (동적 계산)
+### 분류기 신뢰도 임계값 (identifier/identifier.py:440-447)
 ```
-CLASSIFIER_CONFIDENCE_THRESHOLD=0 (기본) → 동적 계산 활성화
-  threshold = CLASSIFIER_CONFIDENCE_K / num_classes
-  예) CLASSIFIER_CONFIDENCE_K=50, 458 클래스 → threshold ≈ 0.109
-  → 랜덤(1/458 ≈ 0.22%) 대비 50배 이상 확신할 때만 직접 반환
+CLASSIFIER_CONFIDENCE_THRESHOLD > 0 → 해당 값을 'identified' 임계값으로 사용
+CLASSIFIER_CONFIDENCE_THRESHOLD = 0 (기본) → IDENTIFIER_CONFIDENCE_THRESHOLD (0.80) 폴백
+CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40) → 이 값 미만이면 VLM 폴백,
+                                                   이상이면 low_confidence 반환
 ```
 
 ### API 엔드포인트
@@ -159,8 +147,8 @@ CLASSIFIER_CONFIDENCE_THRESHOLD=0 (기본) → 동적 계산 활성화
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
 | `IDENTIFIER_MODE` | efficientnet | 판별 모드 |
-| `CLASSIFIER_CONFIDENCE_THRESHOLD` | 0.0 | 0이면 동적 계산 (`k/num_classes`) |
-| `CLASSIFIER_CONFIDENCE_K` | 50.0 | 동적 임계값 배수 |
+| `CLASSIFIER_CONFIDENCE_THRESHOLD` | 0.0 | identified 임계값 (0이면 `IDENTIFIER_CONFIDENCE_THRESHOLD` 폴백) |
+| `CLASSIFIER_LOW_CONFIDENCE_THRESHOLD` | 0.40 | VLM 폴백 여부 결정 임계값 |
 | `IDENTIFIER_TOP_K` | 10 | Qdrant 검색 Top-K |
 | `IDENTIFIER_CONFIDENCE_THRESHOLD` | 0.80 | 최종 판별 신뢰도 임계값 |
 | `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD` | 0.3 | 투표 집중도 임계값 |

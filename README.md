@@ -32,9 +32,11 @@ Trainer (8002) — EfficientNet / LLM 파인튜닝 (LlamaFactory or MLX)
 
 **식별 파이프라인 (Identifier, efficientnet 모드 기준):**
 1. **YOLO26** — 차량 바운딩 박스 탐지 및 크롭
-2. **EfficientNetV2-M** — 1280차원 특징 벡터 추출 후 분류
-3. 신뢰도 ≥ 0.9 → 즉시 반환
-4. 신뢰도 < 0.9 → **Qwen3-VL:8b** 폴백 추론
+2. **EfficientNetV2-M** — 1280차원 특징 벡터 추출 후 softmax 분류
+3. 신뢰도 ≥ identified 임계값 → 즉시 반환 (`CLASSIFIER_CONFIDENCE_THRESHOLD > 0`이면 그 값, 아니면 `IDENTIFIER_CONFIDENCE_THRESHOLD`(기본 0.80) 사용)
+4. 임계값 미달 → **Qwen3-VL:8b** 폴백 추론 (`visual_rag` 모드에서는 Qdrant Top-K 후보 + VLM 최종 판별)
+
+식별 모드는 `IDENTIFIER_MODE` 환경변수로 전환: `efficientnet`(기본) / `visual_rag` / `vlm_only` / `embedding_only`.
 
 ---
 
@@ -101,22 +103,37 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
+| `VISION_BACKEND` | `openai` | 비전 백엔드 (`openai` / `ollama`) |
 | `OPENAI_MODEL` | `gpt-5-mini` | OpenAI 비전 모델 |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini 교차 검증 모델 |
+| `STUDIO_VLM_MODEL` | `qwen3-vl:8b` | Ollama 백엔드 VLM |
 | `FUZZY_MATCH_THRESHOLD` | `80` | 퍼지 매칭 임계값 |
-| `CONFIDENCE_THRESHOLD` | `0.8` | 식별 신뢰도 임계값 |
+| `DEDUP_ENABLED` | `true` | 중복 이미지 검사 활성화 |
+| `DEDUP_SIMILARITY_THRESHOLD` | `0.92` | 중복 판정 코사인 유사도 임계값 |
 | `ANALYZED_VEHICLES_RETENTION_DAYS` | `30` | 분석 결과 보존 기간 (일) |
+| `CLEANUP_HOUR` | `3` | 자동 정리 실행 시각 |
 
 ### Identifier (포트 8001)
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `IDENTIFIER_MODE` | `efficientnet` | 식별 모드 (`efficientnet` / `visual_rag` / `vlm_only`) |
+| `IDENTIFIER_MODE` | `efficientnet` | 식별 모드 (`efficientnet` / `visual_rag` / `vlm_only` / `embedding_only`) |
+| `CLASSIFIER_CONFIDENCE_THRESHOLD` | `0.0` | EfficientNet identified 임계값 (0이면 `IDENTIFIER_CONFIDENCE_THRESHOLD` 사용) |
 | `VLM_MODEL_NAME` | `qwen3-vl:8b` | Ollama VLM 모델명 |
+| `VLM_TIMEOUT` | `30.0` | VLM 추론 타임아웃 (초) |
 | `IDENTIFIER_TOP_K` | `10` | Qdrant 후보 검색 수 |
 | `IDENTIFIER_CONFIDENCE_THRESHOLD` | `0.80` | 식별 신뢰도 임계값 |
+| `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD` | `0.3` | 투표 집중도 임계값 |
+| `IDENTIFIER_YOLO_CONFIDENCE` | `0.25` | YOLO 탐지 신뢰도 |
+| `IDENTIFIER_ENABLE_TORCH_COMPILE` | `true` | torch.compile 활성화 (ARM에서는 false) |
 | `IDENTIFIER_MAX_BATCH_FILES` | `100` | 배치 최대 파일 수 |
 | `IDENTIFIER_MAX_BATCH_UPLOAD_SIZE` | `104857600` | 배치 최대 업로드 크기 (100MB) |
+
+### Trainer (포트 8002)
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `TRAINER_BACKEND` | (자동) | `efficientnet` / `mlx` (Mac Apple Silicon, VLM) / `llamafactory` (Linux/Windows GPU, VLM) |
 
 ---
 
@@ -129,9 +146,13 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 | GET | `/health` | 서비스 상태 확인 |
 | POST | `/detect` | YOLO 차량 탐지 (바운딩 박스 반환) |
 | POST | `/identify` | 단일 이미지 동기 식별 |
+| POST | `/identify/stream` | SSE 스트리밍 식별 (단계별 진행) |
+| POST | `/identify/batch` | 배치 동기 식별 (최대 100장, 100MB) |
 | POST | `/async/identify` | 단일 이미지 비동기 식별 |
-| POST | `/async/identify/batch` | 배치 비동기 식별 (최대 100장, 100MB) |
+| POST | `/async/identify/batch` | 배치 비동기 식별 |
 | GET | `/async/result/{task_id}` | 비동기 결과 조회 |
+| POST | `/admin/reload-efficientnet` | EfficientNet 모델 핫리로드 |
+| POST | `/admin/reload-vlm` | VLM 모델 핫리로드 |
 
 **식별 응답 예시:**
 ```json
@@ -162,20 +183,43 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 
 ### Studio (8000)
 
+**UI**
 - `GET /` — 메인 분석 UI
 - `GET /admin-ui` — 관리/리뷰 UI
 - `GET /analyze-ui` — 차량 분석 UI (YOLO 탐지 + SSE 스트리밍)
 - `GET /finetune-ui` — 파인튜닝 관리 UI
-- `POST /api/analyze/vehicle` — OpenAI Vision 분석
+- `GET /basic-data-ui` — 기준 데이터(제조사·모델) 관리 UI
+
+**분석 / 관리**
+- `POST /api/analyze/vehicle` — Vision 분석
+- `POST /api/detect-vehicle` — YOLO 탐지만 수행
+- `POST /api/analyze-vehicle-stream` — SSE 스트리밍 분석
+- `GET/POST /admin/manufacturers` / `/admin/vehicle-models` — 기준 데이터 CRUD
+- `GET /admin/analyzed-vehicles` — 분석 결과 목록
+- `GET /admin/review-queue` / `PATCH /admin/review/{id}` — 검수 큐 및 승인
 - `POST /admin/analyze-batch` — 배치 분석
+- `POST /admin/sync-vectordb` / `POST /admin/recreate-collection` / `GET /admin/vectordb-stats` — Qdrant 동기화·통계
+
+**파인튜닝 (프록시)**
+- `POST /finetune/export-efficientnet` — EfficientNet 학습용 CSV export (스레드풀 실행)
+- `POST /finetune/export` — VLM 학습용 ShareGPT JSON export
+- `POST /finetune/train/start` / `GET /finetune/train/status` / `POST /finetune/train/stop`
+- `GET /finetune/train/logs` / `GET /finetune/train/raw-log`
+- `GET /finetune/evaluate` — Before/After 정확도 평가
+- `GET /finetune/hw-profile` — 하드웨어 권장 파라미터
 
 ### Trainer (8002)
 
-- `POST /train/start` — 파인튜닝 시작
-- `GET /train/status` — 학습 진행 상태 (epoch, loss)
+- `POST /train/start` — 파인튜닝 시작 (`learning_rate`, `num_epochs`, `batch_size`, `freeze_epochs`, `gradient_accumulation`, `use_ema`, `use_mixup`, `early_stopping_patience` …)
+- `GET /train/status` — 학습 진행 상태 (current_steps, total_steps, epoch, loss, val_acc)
 - `POST /train/stop` — 학습 중단
-- `POST /train/export` — LoRA 병합 및 GGUF 내보내기
+- `GET /train/logs` — JSONL 로그 (tail)
+- `GET /train/raw-log` — 원시 로그 (tail)
+- `GET /train/deploy-config` — 배포 설정 조회
+- `POST /train/export` — LoRA 병합 및 GGUF 내보내기 (VLM 백엔드)
+- `GET /model-info` — 현재 모델 정보
 - `GET /hw-profile` — 하드웨어 감지 및 최적 파라미터 제안
+- `GET /deploy/cmd` / `POST /deploy/ollama` — Ollama 배포 헬퍼
 
 ---
 
