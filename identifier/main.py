@@ -85,9 +85,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """시작 시 EfficientNet-B3 임베딩 모델 + Qdrant 초기화"""
+    """시작 시 EfficientNetV2-M 분류기 초기화"""
     logger.info("Starting Vehicle Identification Service...")
-    logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
     logger.info(f"PyTorch threads: {settings.torch_threads}")
     logger.info(f"CPU cores: {os.cpu_count()}")
 

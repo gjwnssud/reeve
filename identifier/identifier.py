@@ -10,13 +10,11 @@
 """
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 
-import numpy as np
 from PIL import Image
 from pydantic import BaseModel, Field
-from qdrant_client import QdrantClient
 
 from identifier.config import settings
 
@@ -101,26 +99,6 @@ class BatchIdentificationResult(BaseModel):
 
 
 # ──────────────────────────────────────────────
-# 내부 집계 구조
-# ──────────────────────────────────────────────
-
-@dataclass
-class VoteCandidate:
-    """투표 집계 후보"""
-    manufacturer_id: int
-    model_id: int
-    manufacturer_korean: Optional[str] = None
-    manufacturer_english: Optional[str] = None
-    model_korean: Optional[str] = None
-    model_english: Optional[str] = None
-    weighted_score: float = 0.0
-    count: int = 0
-    max_score: float = 0.0
-    scores: list = field(default_factory=list)
-    confidence: float = 0.0
-
-
-# ──────────────────────────────────────────────
 # 메인 판별 클래스
 # ──────────────────────────────────────────────
 
@@ -133,23 +111,18 @@ class VehicleIdentifier:
     그 미만 구간은 모두 low_confidence 반환 (VLM 폴백 없음).
     """
 
-    COLLECTION_NAME = "training_images"
-    VECTOR_DIM = 1280  # EfficientNetV2-M 특징 차원
-
     # COCO 데이터셋의 차량 관련 클래스
     VEHICLE_CLASSES = {2, 3, 5, 7}  # car, motorcycle, bus, truck
 
     def __init__(self):
-        """분류기, Qdrant 클라이언트, YOLO 모델 초기화"""
+        """분류기, YOLO 모델 초기화"""
         self.classifier = None  # EfficientNetClassifier
-        self.qdrant: Optional[QdrantClient] = None
         self.yolo_model = None
         self.vlm_service = None  # VLMService (vlm_only / efficientnet 폴백)
 
     def initialize(self):
         """서비스 시작 시 호출 — 무거운 리소스 로드"""
         self._load_efficientnet()
-        self._connect_qdrant()
         self._load_yolo_model()
 
         # VLM 서비스: efficientnet 모드에서도 폴백용으로 초기화
@@ -181,34 +154,8 @@ class VehicleIdentifier:
             f"classes={self.classifier.num_classes}"
         )
 
-    def _encode_images(self, images: list) -> np.ndarray:
-        """이미지 리스트를 L2-정규화된 1280d 특징 벡터 배열로 변환 (Qdrant 검색용)"""
-        rgb_images = [img.convert("RGB") for img in images]
-        return self.classifier.extract_features(rgb_images)
-
-    def _connect_qdrant(self):
-        """Qdrant 클라이언트 연결"""
-        try:
-            self.qdrant = QdrantClient(
-                host=settings.qdrant_host,
-                port=settings.qdrant_port,
-                timeout=30
-            )
-            # 연결 확인
-            collections = self.qdrant.get_collections().collections
-            names = [c.name for c in collections]
-            if self.COLLECTION_NAME not in names:
-                logger.warning(
-                    f"Collection '{self.COLLECTION_NAME}' not found. "
-                    f"Available: {names}"
-                )
-            logger.info(f"Qdrant connected: {settings.qdrant_host}:{settings.qdrant_port}")
-        except Exception as e:
-            logger.error(f"Failed to connect Qdrant: {e}")
-            raise
-
     def _init_vlm_service(self):
-        """VLM 서비스 초기화 (vlm_fallback_to_embedding=true이면 실패해도 계속 진행)"""
+        """VLM 서비스 초기화 (실패해도 서비스 중단 없이 None으로 둔다)"""
         try:
             from identifier.vlm_service import VLMService
             self.vlm_service = VLMService()
@@ -216,9 +163,7 @@ class VehicleIdentifier:
             logger.info(f"VLM service initialized (mode={settings.identifier_mode})")
         except Exception as e:
             logger.error(f"Failed to initialize VLM service: {e}")
-            if not settings.vlm_fallback_to_embedding:
-                raise
-            logger.warning("VLM unavailable — will use embedding-only as fallback")
+            logger.warning("VLM unavailable — identify() will fall back to low_confidence")
             self.vlm_service = None
 
     def _load_yolo_model(self):
@@ -247,18 +192,7 @@ class VehicleIdentifier:
             "identifier_mode": settings.identifier_mode,
             "efficientnet_classifier": classifier_info,
             "yolo_model": "loaded" if self.yolo_model else ("disabled" if not settings.vehicle_detection else "not_loaded"),
-            "qdrant": "disconnected",
-            "training_images_count": 0,
         }
-
-        try:
-            if self.qdrant:
-                info = self.qdrant.get_collection(self.COLLECTION_NAME)
-                result["qdrant"] = "connected"
-                result["training_images_count"] = info.points_count
-        except Exception as e:
-            result["qdrant"] = f"error: {e}"
-            result["status"] = "degraded"
 
         if self.classifier is None:
             result["status"] = "unhealthy"
@@ -523,16 +457,17 @@ class VehicleIdentifier:
 
         try:
             vlm_result = self.vlm_service.identify_freeform(crop_image)
-            return self._build_vlm_result(vlm_result, detection, img_w, img_h, [])
+            return self._build_vlm_result(vlm_result, detection, img_w, img_h)
         except Exception as e:
             logger.error(f"VLM failed in vlm_only mode: {e}")
-            if settings.vlm_fallback_to_embedding:
-                logger.warning("VLM failed, falling back to EfficientNet+Qdrant")
-                optimized = self._optimize_image_for_embedding(crop_image)
-                embedding = self._encode_images([optimized])[0]
-                search_results = self._search_qdrant(embedding.tolist())
-                return self._build_identification_result(search_results, detection, img_w, img_h)
-            raise
+            return IdentificationResult(
+                status="low_confidence",
+                confidence=0.0,
+                message="VLM 판별에 실패했습니다.",
+                detection=detection,
+                image_width=img_w,
+                image_height=img_h,
+            )
 
     def _build_vlm_result(
         self,
@@ -540,7 +475,6 @@ class VehicleIdentifier:
         detection: Optional[VehicleDetection],
         img_w: int,
         img_h: int,
-        search_results: List[Tuple[Dict, float]],
     ) -> IdentificationResult:
         """VLMResult → IdentificationResult 변환"""
         if vlm.manufacturer_korean and vlm.confidence >= settings.confidence_threshold:
@@ -569,31 +503,7 @@ class VehicleIdentifier:
             detection=detection,
             image_width=img_w,
             image_height=img_h,
-            top_k_details=self._build_top_k_details(search_results),
         )
-
-    # ──────────────────────────────────────────
-    # 내부 메서드
-    # ──────────────────────────────────────────
-
-    def _optimize_image_for_embedding(self, image: Image.Image) -> Image.Image:
-        """
-        EfficientNet-B3 입력을 위한 이미지 최적화
-        - 최대 크기 제한 (불필요한 고해상도 연산 방지)
-        - 종횡비 유지하며 리사이즈
-        """
-        max_size = 800  # EfficientNet-B3는 내부적으로 300×300으로 변환하므로 이 이상 불필요
-
-        w, h = image.size
-        if w <= max_size and h <= max_size:
-            return image
-
-        # 종횡비 유지하며 축소
-        scale = max_size / max(w, h)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-
-        return image.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
     def _extract_best_vehicle(
         self, image: Image.Image, yolo_result
@@ -667,237 +577,6 @@ class VehicleIdentifier:
             logger.warning(f"Vehicle detection failed, using full image: {e}")
             return image, None
 
-    def _encode_image(
-        self,
-        image: Image.Image,
-        bbox: Optional[List[int]] = None
-    ) -> Tuple[List[float], Optional[VehicleDetection], int, int]:
-        """
-        이미지를 EfficientNet-B3 임베딩 벡터로 변환
-
-        Args:
-            image: RGB 변환된 PIL 이미지
-            bbox: 사용자가 선택한 bbox [x1, y1, x2, y2] (없으면 자동 감지)
-
-        Returns:
-            (임베딩 벡터, 감지 정보, 이미지 너비, 이미지 높이) 튜플
-        """
-        w, h = image.size
-
-        if bbox is not None:
-            # 사용자가 선택한 bbox 사용
-            x1, y1, x2, y2 = bbox
-            # 패딩 적용
-            padding = settings.crop_padding
-            x1 = max(0, x1 - padding)
-            y1 = max(0, y1 - padding)
-            x2 = min(w, x2 + padding)
-            y2 = min(h, y2 + padding)
-
-            cropped_image = image.crop((x1, y1, x2, y2))
-            detection = VehicleDetection(
-                index=0,
-                bbox=bbox,  # 원본 bbox 저장
-                confidence=1.0,  # 사용자 선택이므로 100%
-                class_name="selected",
-                area=(bbox[2] - bbox[0]) * (bbox[3] - bbox[1]),
-            )
-            logger.info(f"Using user-selected bbox: {bbox}")
-        else:
-            # 자동 감지
-            cropped_image, detection = self._detect_and_crop(image)
-
-        # 이미지 최적화 (고해상도 불필요 연산 제거)
-        optimized_image = self._optimize_image_for_embedding(cropped_image)
-
-        embedding = self._encode_images([optimized_image])[0]
-        return embedding.tolist(), detection, w, h
-
-    def _search_qdrant(
-        self, embedding: List[float]
-    ) -> List[Tuple[Dict, float]]:
-        """Qdrant training_images 컬렉션 검색"""
-        try:
-            results = self.qdrant.search(
-                collection_name=self.COLLECTION_NAME,
-                query_vector=embedding,
-                limit=settings.top_k,
-            )
-            return [
-                (point.payload, point.score)
-                for point in results
-            ]
-        except Exception as e:
-            logger.error(f"Qdrant search failed: {e}")
-            return []
-
-    def _aggregate_votes(
-        self, results: List[Tuple[Dict, float]]
-    ) -> List[VoteCandidate]:
-        """
-        하이브리드 Weighted k-NN 알고리즘으로 제조사/모델 후보를 집계한다.
-
-        ■ 알고리즘:
-
-        1) Top-K 결과에서 동일 (manufacturer_id, model_id)별로 집계
-           → weighted_score = Σ similarity_i
-           → max_score = 가장 높은 유사도
-
-        2) 정렬 기준 (하이브리드):
-           → 1차: max_score (1% 단위로 반올림하여 비교)
-           → 2차: weighted_score (max_score가 1% 이내로 같을 때)
-
-        3) 신뢰도 = 해당 클래스의 최고 유사도 (max_score)
-
-        ■ 예시:
-           - 코나: max=0.9759 (→0.98), weighted=2.79
-           - 아반떼: max=0.9455 (→0.95), weighted=2.80
-           → 코나 승리 (반올림된 max_score 0.98 > 0.95)
-
-           - 모델A: max=0.9113 (→0.91), weighted=2.71
-           - 모델B: max=0.9150 (→0.92), weighted=0.91
-           → 모델B 승리 (반올림된 max_score 0.92 > 0.91)
-
-           - 모델A: max=0.9113 (→0.91), weighted=2.71
-           - 모델B: max=0.9113 (→0.91), weighted=0.91
-           → 모델A 승리 (max_score 동점, weighted_score 2.71 > 0.91)
-        """
-        votes: Dict[Tuple[int, int], VoteCandidate] = {}
-
-        for metadata, score in results:
-            key = (metadata["manufacturer_id"], metadata["model_id"])
-
-            if key not in votes:
-                votes[key] = VoteCandidate(
-                    manufacturer_id=key[0],
-                    model_id=key[1],
-                    manufacturer_korean=metadata.get("manufacturer_korean"),
-                    manufacturer_english=metadata.get("manufacturer_english"),
-                    model_korean=metadata.get("model_korean"),
-                    model_english=metadata.get("model_english"),
-                )
-
-            candidate = votes[key]
-            candidate.weighted_score += score
-            candidate.count += 1
-            candidate.max_score = max(candidate.max_score, score)
-            candidate.scores.append(score)
-
-        # 신뢰도 = 해당 클래스의 최고 유사도 (사용자 친화적)
-        # (선택 기준은 weighted_score이지만, 표시되는 신뢰도는 max_score 사용)
-        for candidate in votes.values():
-            candidate.confidence = candidate.max_score
-
-        # 디버깅: 모든 후보 출력 (DEBUG 레벨에서만 덤프)
-        if logger.isEnabledFor(logging.DEBUG):
-            for candidate in votes.values():
-                logger.debug(
-                    f"Candidate: ({candidate.manufacturer_id},{candidate.model_id}) "
-                    f"weighted_score={candidate.weighted_score:.4f}, count={candidate.count}, "
-                    f"max_score={candidate.max_score:.4f}"
-                )
-
-        # 하이브리드 정렬: max_score 우선, 근소한 차이(1% 미만)일 때만 weighted_score 적용
-        # - max_score를 소수점 2자리로 반올림 (1% 단위로 구분)
-        # - 반올림된 max_score가 같으면 weighted_score로 결정
-        # 예: 0.9759 → 0.98, 0.9455 → 0.95 → 0.98이 더 높으므로 max_score 높은 쪽 선택
-        sorted_candidates = sorted(
-            votes.values(),
-            key=lambda c: (round(c.max_score, 2), c.weighted_score),
-            reverse=True,
-        )
-        winner = sorted_candidates[0]
-        logger.info(
-            f"Final winner: ({winner.manufacturer_id},{winner.model_id}) "
-            f"max_score={winner.max_score:.4f}, weighted_score={winner.weighted_score:.4f}"
-        )
-        return sorted_candidates
-
-    def _build_identification_result(
-        self,
-        search_results: List[Tuple[Dict, float]],
-        detection: Optional[VehicleDetection],
-        img_w: int,
-        img_h: int,
-    ) -> IdentificationResult:
-        """검색 결과로부터 판별 결과 생성 (단건/배치 공통)"""
-        if not search_results:
-            return IdentificationResult(
-                status="no_match",
-                confidence=0.0,
-                message="학습 데이터가 없습니다. 관리자에게 문의하세요.",
-                detection=detection,
-                image_width=img_w,
-                image_height=img_h,
-            )
-
-        candidates = self._aggregate_votes(search_results)
-        best = candidates[0]
-
-        if best.max_score < settings.min_similarity:
-            return IdentificationResult(
-                status="no_match",
-                confidence=round(best.confidence, 4),
-                message="판별 불가 - 유사한 차량 데이터를 찾을 수 없습니다.",
-                detection=detection,
-                image_width=img_w,
-                image_height=img_h,
-                top_k_details=self._build_top_k_details(search_results),
-            )
-
-        if best.confidence >= settings.confidence_threshold:
-            status = "identified"
-            message = "차량이 판별되었습니다."
-        else:
-            status = "low_confidence"
-            message = "판별 불가 - 신뢰도가 낮습니다. 가장 유사한 후보를 표시합니다."
-
-        # ── 보정 1: 투표 집중도 (Vote Concentration) ──
-        # Top-K 결과 중 winner의 득표 비율이 낮으면 여러 차종으로 분산된 것 → low_confidence
-        concentration = best.count / len(search_results)
-        if concentration < settings.vote_concentration_threshold and status == "identified":
-            status = "low_confidence"
-            message = (
-                f"판별 불가 - 상위 결과가 여러 차종으로 분산됩니다. "
-                f"(집중도 {concentration:.0%})"
-            )
-            logger.info(
-                f"Vote concentration too low: {concentration:.2f} "
-                f"(threshold={settings.vote_concentration_threshold}), "
-                f"winner=({best.manufacturer_id},{best.model_id}) "
-                f"count={best.count}/{len(search_results)}"
-            )
-
-        # ── 보정 2: 모델 정보 누락 패널티 ──
-        # Qdrant payload에 model_korean이 없으면 불완전한 학습 데이터 → identified 차단
-        if not best.model_korean and status == "identified":
-            status = "low_confidence"
-            message = "모델 정보가 없는 학습 데이터로 판별되었습니다. 학습 데이터를 확인해 주세요."
-
-        # ── 보정 3: YOLO 미감지 패널티 ──
-        # detection이 None이면 전체 이미지(배경 포함)로 임베딩한 상태 → identified 차단
-        if detection is None and status == "identified":
-            status = "low_confidence"
-            message = "차량 자동 감지 실패 - 전체 이미지로 판별한 결과이므로 신뢰도가 낮습니다."
-            logger.info(
-                f"No vehicle detection — downgraded to low_confidence "
-                f"(was identified with confidence={best.confidence:.4f})"
-            )
-
-        return IdentificationResult(
-            status=status,
-            manufacturer_korean=best.manufacturer_korean,
-            manufacturer_english=best.manufacturer_english,
-            model_korean=best.model_korean,
-            model_english=best.model_english,
-            confidence=round(best.confidence, 4),
-            message=message,
-            detection=detection,
-            image_width=img_w,
-            image_height=img_h,
-            top_k_details=self._build_top_k_details(search_results),
-        )
-
     # ──────────────────────────────────────────
     # 배치 처리
     # ──────────────────────────────────────────
@@ -909,7 +588,7 @@ class VehicleIdentifier:
     ) -> BatchIdentificationResult:
         """
         여러 이미지를 배치로 처리하여 성능 극대화.
-        YOLO, EfficientNet-B3, Qdrant 각 단계를 배치로 실행.
+        YOLO, EfficientNet 각 단계를 배치로 실행.
 
         Args:
             image_paths: 이미지 파일 경로 리스트
@@ -944,8 +623,8 @@ class VehicleIdentifier:
         """
         한 배치(N장)를 파이프라인으로 처리. 모드별 파이프라인:
 
-        - efficientnet: YOLO → EfficientNet 분류 (VLM/Qdrant 폴백 없음, 단건과 동일)
-        - vlm_only:     YOLO → VLM 직접 판별 → Qdrant 폴백
+        - efficientnet: YOLO → EfficientNet 분류 (단건과 동일)
+        - vlm_only:     YOLO → VLM 직접 판별
         """
         n = len(image_paths)
 
@@ -1006,7 +685,7 @@ class VehicleIdentifier:
         mode = settings.identifier_mode
 
         # ──────────────────────────────────────────
-        # efficientnet 모드: 분류기만 사용 (VLM/Qdrant 폴백 없음 — 단건 경로와 동일)
+        # efficientnet 모드: 분류기만 사용 (단건 경로와 동일)
         # ──────────────────────────────────────────
         if mode == "efficientnet":
             classify_indices = [
@@ -1107,7 +786,7 @@ class VehicleIdentifier:
             return items
 
         # ──────────────────────────────────────────
-        # vlm_only 모드: VLM 직접 판별 → Qdrant 폴백
+        # vlm_only 모드: VLM 직접 판별 (실패 시 low_confidence)
         # ──────────────────────────────────────────
         if mode == "vlm_only":
             vlm_indices = [
@@ -1115,10 +794,9 @@ class VehicleIdentifier:
                 if cropped_images[i] is not None and errors[i] is None
             ]
             result_map: Dict[int, IdentificationResult] = {}
-            qdrant_fallback_indices: List[int] = []
 
             if vlm_indices and self.vlm_service is not None and self.vlm_service.is_available():
-                from concurrent.futures import ThreadPoolExecutor
+                from concurrent.futures import ThreadPoolExecutor, as_completed
 
                 def _run_vlm_only(idx: int):
                     try:
@@ -1129,19 +807,15 @@ class VehicleIdentifier:
                         return idx, None
 
                 with ThreadPoolExecutor(max_workers=settings.vlm_batch_concurrency) as executor:
-                    from concurrent.futures import as_completed
                     futures = {executor.submit(_run_vlm_only, idx): idx for idx in vlm_indices}
                     for future in as_completed(futures):
                         idx, vlm_res = future.result()
+                        w, h = sizes[idx]
                         if vlm_res is not None:
-                            w, h = sizes[idx]
                             result_map[idx] = self._build_vlm_result(
-                                vlm_res, detections[idx], w, h, []
+                                vlm_res, detections[idx], w, h
                             )
-                        elif settings.vlm_fallback_to_embedding:
-                            qdrant_fallback_indices.append(idx)
                         else:
-                            w, h = sizes[idx]
                             result_map[idx] = IdentificationResult(
                                 status="low_confidence",
                                 confidence=0.0,
@@ -1150,46 +824,6 @@ class VehicleIdentifier:
                                 image_width=w,
                                 image_height=h,
                             )
-
-            if qdrant_fallback_indices:
-                try:
-                    from qdrant_client.models import SearchRequest
-
-                    fallback_inputs = [
-                        self._optimize_image_for_embedding(cropped_images[i])
-                        for i in qdrant_fallback_indices
-                    ]
-                    fallback_embeddings = self._encode_images(fallback_inputs)
-                    requests = [
-                        SearchRequest(vector=fallback_embeddings[bi].tolist(), limit=settings.top_k)
-                        for bi in range(len(qdrant_fallback_indices))
-                    ]
-                    batch_results = self.qdrant.search_batch(
-                        collection_name=self.COLLECTION_NAME,
-                        requests=requests,
-                    )
-                    for bi, orig_idx in enumerate(qdrant_fallback_indices):
-                        w, h = sizes[orig_idx]
-                        search_results = [
-                            (point.payload, point.score)
-                            for point in batch_results[bi]
-                            if point.payload is not None
-                        ]
-                        result_map[orig_idx] = self._build_identification_result(
-                            search_results, detections[orig_idx], w, h
-                        )
-                except Exception as e:
-                    logger.error(f"Qdrant 배치 폴백 실패 (vlm_only): {e}")
-                    for orig_idx in qdrant_fallback_indices:
-                        w, h = sizes[orig_idx]
-                        result_map[orig_idx] = IdentificationResult(
-                            status="low_confidence",
-                            confidence=0.0,
-                            message="판별에 실패했습니다.",
-                            detection=detections[orig_idx],
-                            image_width=w,
-                            image_height=h,
-                        )
 
             items: List[BatchImageResult] = []
             for idx in range(n):
@@ -1229,17 +863,3 @@ class VehicleIdentifier:
             for idx in range(n)
         ]
 
-    def _build_top_k_details(
-        self, results: List[Tuple[Dict, float]]
-    ) -> List[TopKDetail]:
-        """Top-K 결과를 응답 포맷으로 변환"""
-        details = []
-        for rank, (metadata, score) in enumerate(results, start=1):
-            details.append(TopKDetail(
-                rank=rank,
-                manufacturer_id=metadata.get("manufacturer_id", 0),
-                model_id=metadata.get("model_id", 0),
-                similarity=round(score, 4),
-                image_path=metadata.get("image_path"),
-            ))
-        return details

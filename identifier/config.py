@@ -14,10 +14,6 @@ class IdentifierSettings(BaseSettings):
     # 서비스 설정
     identifier_port: int = Field(default=8001, alias="IDENTIFIER_PORT")
 
-    # Qdrant
-    qdrant_host: str = Field(default="localhost", alias="QDRANT_HOST")
-    qdrant_port: int = Field(default=6333, alias="QDRANT_PORT")
-
     # Redis (Celery broker/backend)
     redis_host: str = Field(default="localhost", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
@@ -31,11 +27,7 @@ class IdentifierSettings(BaseSettings):
     allowed_extensions: str = Field(default="jpg,jpeg,png,webp", alias="ALLOWED_EXTENSIONS")
 
     # 판별 알고리즘 설정
-    top_k: int = Field(default=10, alias="IDENTIFIER_TOP_K")
     confidence_threshold: float = Field(default=0.80, alias="IDENTIFIER_CONFIDENCE_THRESHOLD")
-    min_similarity: float = Field(default=0.3, alias="IDENTIFIER_MIN_SIMILARITY")
-    vote_threshold: int = Field(default=3, alias="IDENTIFIER_VOTE_THRESHOLD")
-    vote_concentration_threshold: float = Field(default=0.3, alias="IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD")
 
     # 차량 감지 (YOLO26)
     vehicle_detection: bool = Field(default=True, alias="IDENTIFIER_VEHICLE_DETECTION")
@@ -85,7 +77,6 @@ class IdentifierSettings(BaseSettings):
     vlm_model_name: str = Field(default="qwen3-vl:8b", alias="VLM_MODEL_NAME")
     vlm_timeout: float = Field(default=30.0, alias="VLM_TIMEOUT")
     vlm_max_candidates: int = Field(default=5, alias="VLM_MAX_CANDIDATES")
-    vlm_fallback_to_embedding: bool = Field(default=True, alias="VLM_FALLBACK_TO_EMBEDDING")
     vlm_batch_concurrency: int = Field(default=2, alias="VLM_BATCH_CONCURRENCY")
     vlm_max_retries: int = Field(default=2, alias="VLM_MAX_RETRIES",
                                   description="VLM 호출 최대 재시도 횟수 (타임아웃/5xx만 재시도)")
