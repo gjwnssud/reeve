@@ -24,149 +24,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# Pydantic 스키마
-class AnalysisResponse(BaseModel):
-    """차량 분석 응답"""
-    id: int
-    manufacturer: Optional[str]
-    model: Optional[str]
-    year: Optional[str]
-    confidence_score: Optional[float]
-    matched_manufacturer_id: Optional[int]
-    matched_model_id: Optional[int]
-
-    class Config:
-        from_attributes = True
-
-
-@router.post("/analyze/vehicle", response_model=AnalysisResponse, status_code=status.HTTP_201_CREATED)
-async def analyze_vehicle_image(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    """
-    차량 이미지 분석
-
-    Phase 1: OpenAI Vision API 사용
-    Phase 2: LLaVA-1.6 로컬 모델 사용
-    """
-    # 파일 확장자 검증
-    file_ext = file.filename.split(".")[-1].lower()
-    if file_ext not in settings.allowed_extensions_list:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file extension. Allowed: {settings.allowed_extensions}"
-        )
-
-    # 파일 크기 검증
-    file.file.seek(0, 2)  # 파일 끝으로 이동
-    file_size = file.file.tell()
-    file.file.seek(0)  # 다시 처음으로
-
-    if file_size > settings.max_upload_size:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Max size: {settings.max_upload_size / 1024 / 1024}MB"
-        )
-
-    # 파일 저장 (날짜별 디렉토리)
-    from datetime import datetime
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    data_dir = Path(f"data/uploads/{date_str}")
-    data_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = data_dir / f"{os.urandom(16).hex()}_{file.filename}"
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
-
-    # Vision API 분석 (백엔드 설정에 따라 OpenAI 또는 Ollama)
-    from studio.services.vision_backend import get_vision_backend
-    vision_service = get_vision_backend()
-    from studio.services.matcher import VehicleMatcher
-
-    # Vision 프롬프트용 DB 컨텍스트를 미리 캐싱한 후 커넥션 반환
-    # (OpenAI/Gemini 호출 중 DB 커넥션을 점유하지 않도록)
-    vision_service.preload_db_context(db)
-    db.close()
-
-    loop = asyncio.get_running_loop()
-
-    try:
-        # OpenAI Vision API 호출 (DB 없이 캐시 사용)
-        vision_result = await vision_service.analyze_vehicle_image(str(file_path))
-
-        # 매칭 및 저장 — sync 블로킹이므로 스레드풀에서 실행
-        def _match_and_save():
-            with SessionLocal() as write_db:
-                matcher = VehicleMatcher(write_db, auto_insert=True)
-                match_result = matcher.match_vehicle(
-                    vision_result.get("manufacturer_code", ""),
-                    vision_result.get("model_code", ""),
-                    vision_confidence=vision_result.get("confidence")
-                )
-                row = AnalyzedVehicle(
-                    image_path=str(file_path),
-                    raw_result=vision_result,
-                    manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
-                    model=match_result["model"].korean_name if match_result["model"] else None,
-                    year=None,  # 연식 분석 제외
-                    matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
-                    matched_model_id=match_result["model"].id if match_result["model"] else None,
-                    confidence_score=match_result["overall_confidence"],
-                    is_verified=False
-                )
-                write_db.add(row)
-                write_db.commit()
-                write_db.refresh(row)
-                return {
-                    "id": row.id, "manufacturer": row.manufacturer, "model": row.model,
-                    "year": row.year, "confidence_score": row.confidence_score,
-                    "matched_manufacturer_id": row.matched_manufacturer_id,
-                    "matched_model_id": row.matched_model_id,
-                }
-
-        result = await loop.run_in_executor(None, _match_and_save)
-
-    except Exception as e:
-        def _save_error():
-            with SessionLocal() as write_db:
-                row = AnalyzedVehicle(
-                    image_path=str(file_path),
-                    raw_result={"error": str(e)},
-                    manufacturer=None, model=None,
-                    confidence_score=0.0, is_verified=False
-                )
-                write_db.add(row)
-                write_db.commit()
-                write_db.refresh(row)
-                return row.id
-
-        await loop.run_in_executor(None, _save_error)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
-
-    return AnalysisResponse(
-        id=result["id"],
-        manufacturer=result["manufacturer"],
-        model=result["model"],
-        year=result["year"],
-        confidence_score=float(result["confidence_score"]) if result["confidence_score"] else 0.0,
-        matched_manufacturer_id=result["matched_manufacturer_id"],
-        matched_model_id=result["matched_model_id"],
-    )
-
-
-@router.get("/vehicle/{vehicle_id}")
-async def get_vehicle_analysis(vehicle_id: int, db: Session = Depends(get_db)):
-    """차량 분석 결과 조회"""
-    analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == vehicle_id).first()
-
-    if not analyzed:
-        raise HTTPException(status_code=404, detail="Analysis result not found")
-
-    return analyzed.to_dict()
-
-
 #=============================================================================
 # 차량 감지 엔드포인트
 #=============================================================================
@@ -335,6 +192,28 @@ async def stream_analysis_progress(
 
         crop_path_str = await loop.run_in_executor(None, _crop)
 
+        # 1.5단계: 크롭 경로를 DB에 즉시 반영
+        # (Vision 실패 시에도 크롭 이미지가 DB와 연결되어 수동 입력 → 학습 데이터 적재 시 사용 가능)
+        def _persist_crop():
+            if not analyzed_id:
+                return
+            with SessionLocal() as db:
+                row = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+                if not row:
+                    return
+                if row.image_path and row.image_path != row.original_image_path and row.image_path != crop_path_str:
+                    old_crop = Path(row.image_path)
+                    if old_crop.exists():
+                        try:
+                            old_crop.unlink()
+                        except OSError:
+                            pass
+                row.image_path = crop_path_str
+                row.selected_bbox = bbox
+                db.commit()
+
+        await loop.run_in_executor(None, _persist_crop)
+
         # 2단계: Vision API 호출 (이미 async)
         api_label = "ChatGPT + Gemini 교차 검증 중" if settings.gemini_api_key else "ChatGPT Vision API 호출 중"
         yield f"data: {json.dumps({'event': 'progress', 'progress': 30, 'message': api_label})}\n\n"
@@ -370,7 +249,9 @@ async def stream_analysis_progress(
                 analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first() if analyzed_id else None
 
                 if analyzed:
-                    if analyzed.image_path and analyzed.image_path != analyzed.original_image_path:
+                    if (analyzed.image_path
+                            and analyzed.image_path != analyzed.original_image_path
+                            and analyzed.image_path != crop_path_str):
                         old_crop = Path(analyzed.image_path)
                         if old_crop.exists():
                             old_crop.unlink()

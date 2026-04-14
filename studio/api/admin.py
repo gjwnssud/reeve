@@ -18,6 +18,7 @@ from studio.models.database import SessionLocal
 from studio.models.manufacturer import Manufacturer
 from studio.models.vehicle_model import VehicleModel
 from studio.models.analyzed_vehicle import AnalyzedVehicle
+from studio.services.crop_utils import ensure_cropped_image
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -86,15 +87,6 @@ async def get_manufacturers(
     return manufacturers
 
 
-@router.get("/manufacturers/{manufacturer_id}", response_model=ManufacturerResponse)
-async def get_manufacturer(manufacturer_id: int, db: Session = Depends(get_db)):
-    """제조사 상세 조회"""
-    manufacturer = db.query(Manufacturer).filter(Manufacturer.id == manufacturer_id).first()
-    if not manufacturer:
-        raise HTTPException(status_code=404, detail="Manufacturer not found")
-    return manufacturer
-
-
 @router.post("/manufacturers", response_model=ManufacturerResponse, status_code=status.HTTP_201_CREATED)
 async def create_manufacturer(manufacturer: ManufacturerCreate, db: Session = Depends(get_db)):
     """제조사 생성"""
@@ -126,15 +118,6 @@ async def get_vehicle_models(
 
     models = query.offset(skip).limit(limit).all()
     return models
-
-
-@router.get("/vehicle-models/{model_id}", response_model=VehicleModelResponse)
-async def get_vehicle_model(model_id: int, db: Session = Depends(get_db)):
-    """차량 모델 상세 조회"""
-    model = db.query(VehicleModel).filter(VehicleModel.id == model_id).first()
-    if not model:
-        raise HTTPException(status_code=404, detail="Vehicle model not found")
-    return model
 
 
 @router.post("/vehicle-models", response_model=VehicleModelResponse, status_code=status.HTTP_201_CREATED)
@@ -226,19 +209,6 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/analyzed-vehicles-pending")
-def get_pending_vehicles(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """미검수 분석 레코드 목록 조회 (페이지 복원용)"""
-    records = db.query(AnalyzedVehicle).filter(
-        AnalyzedVehicle.is_verified == False
-    ).order_by(AnalyzedVehicle.created_at.desc()).offset(skip).limit(limit).all()
-    return {"items": [r.to_dict() for r in records]}
-
-
 @router.get("/review-queue")
 async def get_review_queue(
     skip: int = 0,
@@ -303,107 +273,13 @@ async def update_analyzed_vehicle(
     analyzed.manufacturer = update_data.manufacturer or manufacturer.korean_name
     analyzed.model = update_data.model or model.korean_name
 
+    # 학습 데이터로 적재될 가능성이 있으므로 image_path가 원본이면 크롭 생성
+    ensure_cropped_image(analyzed)
+
     db.commit()
     db.refresh(analyzed)
 
     return {"message": "Updated successfully", "data": analyzed.to_dict()}
-
-
-@router.put("/review/{analyzed_id}")
-async def review_analyzed_vehicle(
-    analyzed_id: int,
-    is_approved: bool,
-    notes: Optional[str] = None,
-    verified_by: str = "admin",
-    db: Session = Depends(get_db)
-):
-    """분석 결과 검수 (승인/거부)"""
-    analyzed = db.query(AnalyzedVehicle).options(
-        joinedload(AnalyzedVehicle.matched_manufacturer),
-        joinedload(AnalyzedVehicle.matched_model)
-    ).filter(AnalyzedVehicle.id == analyzed_id).first()
-    if not analyzed:
-        raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
-
-    analyzed.is_verified = is_approved
-    analyzed.verified_by = verified_by
-    analyzed.notes = notes
-
-    if is_approved:
-        from datetime import datetime
-        from studio.models.training_dataset import TrainingDataset
-        from studio.services.embedding import embedding_service
-        from studio.services.vectordb import vectordb_service
-
-        analyzed.verified_at = datetime.now()
-
-        # 승인된 데이터를 학습 데이터셋에 추가
-        if analyzed.matched_manufacturer_id and analyzed.matched_model_id:
-            try:
-                # 기존 학습 데이터 확인 (중복 방지)
-                existing = db.query(TrainingDataset).filter(
-                    TrainingDataset.image_path == analyzed.image_path
-                ).first()
-
-                if not existing:
-                    # 이미지 임베딩 생성
-                    loop = asyncio.get_running_loop()
-                    image_embedding = await loop.run_in_executor(
-                        None, embedding_service.encode_image, analyzed.image_path
-                    )
-
-                    # 학습 데이터셋에 추가
-                    training_data = TrainingDataset(
-                        image_path=analyzed.image_path,
-                        manufacturer_id=analyzed.matched_manufacturer_id,
-                        model_id=analyzed.matched_model_id,
-                        qdrant_id=None
-                    )
-
-                    db.add(training_data)
-                    db.flush()  # ID 생성
-
-                    # 제조사/모델 이름 (이미 joinedload로 로드됨, 추가 쿼리 없음)
-                    mfr = analyzed.matched_manufacturer
-                    mdl = analyzed.matched_model
-
-                    # Qdrant 메타데이터 (extra_metadata 대신 직접 생성)
-                    qdrant_metadata = {
-                        "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-                        "verified_by": verified_by,
-                        "verified_at": datetime.now().isoformat()
-                    }
-
-                    # QdrantDB에 추가
-                    success = await loop.run_in_executor(
-                        None,
-                        functools.partial(
-                            vectordb_service.add_training_image,
-                            training_id=training_data.id,
-                            image_path=training_data.image_path,
-                            manufacturer_id=training_data.manufacturer_id,
-                            model_id=training_data.model_id,
-                            embedding=image_embedding,
-                            metadata=qdrant_metadata,
-                            manufacturer_korean=mfr.korean_name if mfr else None,
-                            manufacturer_english=mfr.english_name if mfr else None,
-                            model_korean=mdl.korean_name if mdl else None,
-                            model_english=mdl.english_name if mdl else None,
-                        )
-                    )
-
-                    if success:
-                        training_data.qdrant_id = f"train_{training_data.id}"
-                        logger.info(f"Added to training dataset: {training_data.id}")
-
-            except Exception as e:
-                logger.error(f"Failed to add to training dataset: {e}")
-                # 실패해도 검수는 완료되도록 함
-
-    db.commit()
-    db.refresh(analyzed)
-
-    return {"message": "Review completed", "data": analyzed.to_dict()}
 
 
 @router.post("/review/batch-save-all")
@@ -462,11 +338,21 @@ async def batch_save_all_to_vectordb():
                 if not batch:
                     break
 
+                # 학습 데이터에는 반드시 크롭된 이미지가 필요 → 원본 그대로인 항목은 즉석 크롭
+                crop_dirty = False
+                for a in batch:
+                    if a.image_path == a.original_image_path:
+                        if ensure_cropped_image(a):
+                            crop_dirty = True
+                if crop_dirty:
+                    db.commit()
+
                 # 배치 데이터를 메모리에 복사해 세션 닫기 전에 준비
                 batch_data = [
                     {
                         "id": a.id,
                         "image_path": a.image_path,
+                        "original_image_path": a.original_image_path,
                         "confidence_score": float(a.confidence_score) if a.confidence_score else 0.0,
                         "matched_manufacturer_id": a.matched_manufacturer_id,
                         "matched_model_id": a.matched_model_id,
@@ -483,6 +369,14 @@ async def batch_save_all_to_vectordb():
             for item in batch_data:
                 current += 1
                 vectordb_ok = False
+
+                # 크롭이 보장되지 않은 항목은 학습 데이터로 적재하지 않음
+                if item["image_path"] == item["original_image_path"]:
+                    failed += 1
+                    failed_ids.append(item["id"])
+                    yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': item['id'], 'reason': 'no_crop'})}\n\n"
+                    await asyncio.sleep(0.05)
+                    continue
 
                 try:
                     # ── Phase 1: DB 읽기 (커넥션 즉시 반환) ──────────────────
@@ -659,6 +553,15 @@ async def save_to_vectordb(
             status_code=400,
             detail="Cannot save: manufacturer and model must be identified"
         )
+
+    # 학습 데이터에는 반드시 크롭된 이미지가 들어가야 함
+    if not ensure_cropped_image(analyzed):
+        if analyzed.image_path == analyzed.original_image_path:
+            raise HTTPException(
+                status_code=400,
+                detail="크롭 이미지가 없고 bbox 정보도 없습니다. 수정 모달에서 영역을 지정 후 다시 시도하세요."
+            )
+    db.flush()
 
     # 1) training_dataset + QdrantDB 저장 시도
     vectordb_ok = False
@@ -1013,96 +916,6 @@ async def analyze_single_image(
             status_code=500,
             detail=f"Analysis failed: {str(e)}"
         )
-
-
-# 일괄 분석 API
-@router.post("/analyze-batch")
-async def analyze_batch_images(
-    image_dir: str,
-    db: Session = Depends(get_db)
-):
-    """
-    디렉토리 내 이미지 일괄 분석
-
-    Args:
-        image_dir: 분석할 이미지가 있는 디렉토리 경로
-    """
-    from pathlib import Path
-    from studio.services.openai_vision import vision_service
-    from studio.services.matcher import VehicleMatcher
-    import os
-
-    # 디렉토리 확인
-    dir_path = Path(image_dir)
-    if not dir_path.exists() or not dir_path.is_dir():
-        raise HTTPException(status_code=400, detail="Invalid directory path")
-
-    # 이미지 파일 수집
-    image_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
-    image_files = [
-        str(f) for f in dir_path.iterdir()
-        if f.suffix.lower() in image_extensions
-    ]
-
-    if not image_files:
-        raise HTTPException(status_code=400, detail="No image files found in directory")
-
-    # Vision 프롬프트 캐시 준비 후 커넥션 반환
-    vision_service.preload_db_context(db)
-    db.close()
-
-    # 일괄 분석 (이미지당 짧은 세션)
-    results = []
-
-    for image_path in image_files:
-        try:
-            # OpenAI Vision API 분석 (DB 커넥션 미점유)
-            vision_result = await vision_service.analyze_vehicle_image(image_path)
-
-            with SessionLocal() as write_db:
-                matcher = VehicleMatcher(write_db, auto_insert=True)
-                match_result = matcher.match_vehicle(
-                    vision_result.get("manufacturer_code", ""),
-                    vision_result.get("model_code", ""),
-                    vision_confidence=vision_result.get("confidence")
-                )
-
-                analyzed = AnalyzedVehicle(
-                    image_path=image_path,
-                    raw_result=vision_result,
-                    manufacturer=match_result["manufacturer"].korean_name if match_result["manufacturer"] else None,
-                    model=match_result["model"].korean_name if match_result["model"] else None,
-                    year=vision_result.get("year"),
-                    matched_manufacturer_id=match_result["manufacturer"].id if match_result["manufacturer"] else None,
-                    matched_model_id=match_result["model"].id if match_result["model"] else None,
-                    confidence_score=match_result["overall_confidence"],
-                    is_verified=False
-                )
-                write_db.add(analyzed)
-                write_db.commit()
-                write_db.refresh(analyzed)
-
-            results.append({
-                "image_path": image_path,
-                "analyzed_id": analyzed.id,
-                "manufacturer": vision_result.get("manufacturer"),
-                "model": vision_result.get("model"),
-                "matched": match_result["manufacturer"] is not None or match_result["model"] is not None,
-                "confidence": match_result["overall_confidence"]
-            })
-
-        except Exception as e:
-            results.append({
-                "image_path": image_path,
-                "error": str(e),
-                "success": False
-            })
-
-    return {
-        "total": len(image_files),
-        "processed": len(results),
-        "results": results
-    }
 
 
 # 벡터 DB 동기화 API
