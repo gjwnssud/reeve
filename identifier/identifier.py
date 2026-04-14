@@ -1,14 +1,12 @@
 """
 차량 판별 핵심 로직
-이미지 → YOLO26 차량 감지 → 크롭 → EfficientNetV2-M 분류 또는 Qdrant 벡터 검색 → 결과 반환
+이미지 → YOLO26 차량 감지 → 크롭 → EfficientNetV2-M 분류 또는 VLM 판별 → 결과 반환
 
 판별 모드 (IDENTIFIER_MODE):
-  efficientnet   : EfficientNetV2-M 분류기 (기본값)
-                   confidence ≥ classifier_confidence_threshold(기본 0.80) → identified
-                   그 미만 구간은 모두 low_confidence로 반환 (VLM 폴백 없음, 단건/배치 동일)
-  visual_rag     : EfficientNetV2-M+Qdrant 후보 → VLM 최종 판별
-  vlm_only       : VLM만으로 판별 (Qdrant 미사용)
-  embedding_only : EfficientNetV2-M 임베딩+Qdrant 투표 (레거시)
+  efficientnet : EfficientNetV2-M 분류기 (기본값)
+                 confidence ≥ classifier_confidence_threshold(기본 0.80) → identified
+                 그 미만 구간은 모두 low_confidence로 반환 (VLM 폴백 없음, 단건/배치 동일)
+  vlm_only     : VLM만으로 판별
 """
 import logging
 import time
@@ -146,7 +144,7 @@ class VehicleIdentifier:
         self.classifier = None  # EfficientNetClassifier
         self.qdrant: Optional[QdrantClient] = None
         self.yolo_model = None
-        self.vlm_service = None  # VLMService (visual_rag / vlm_only / 폴백)
+        self.vlm_service = None  # VLMService (vlm_only / efficientnet 폴백)
 
     def initialize(self):
         """서비스 시작 시 호출 — 무거운 리소스 로드"""
@@ -155,7 +153,7 @@ class VehicleIdentifier:
         self._load_yolo_model()
 
         # VLM 서비스: efficientnet 모드에서도 폴백용으로 초기화
-        if settings.identifier_mode in ("visual_rag", "vlm_only", "efficientnet"):
+        if settings.identifier_mode in ("vlm_only", "efficientnet"):
             self._init_vlm_service()
 
     # ──────────────────────────────────────────
@@ -385,17 +383,10 @@ class VehicleIdentifier:
 
         mode = settings.identifier_mode
 
-        if mode == "efficientnet":
-            return self._identify_efficientnet(image, bbox)
-        elif mode == "visual_rag" and self.vlm_service is not None:
-            return self._identify_visual_rag(image, bbox)
-        elif mode == "vlm_only" and self.vlm_service is not None:
+        if mode == "vlm_only" and self.vlm_service is not None:
             return self._identify_vlm_only(image, bbox)
-        else:
-            # embedding_only 또는 VLM 미초기화 시 기존 경로
-            embedding, detection, img_w, img_h = self._encode_image(image, bbox)
-            search_results = self._search_qdrant(embedding)
-            return self._build_identification_result(search_results, detection, img_w, img_h)
+        # efficientnet (기본) 또는 VLM 미초기화 시 분류기 경로
+        return self._identify_efficientnet(image, bbox)
 
     def _identify_efficientnet(
         self,
@@ -508,66 +499,6 @@ class VehicleIdentifier:
             image_width=img_w,
             image_height=img_h,
         )
-
-    def _identify_visual_rag(
-        self,
-        image: Image.Image,
-        bbox: Optional[List[int]] = None,
-    ) -> IdentificationResult:
-        """Visual RAG: EfficientNet+Qdrant 후보 → VLM 최종 판별"""
-        from identifier.vlm_service import VLMCandidate
-
-        # 1. YOLO 크롭 + EfficientNet 임베딩
-        embedding, detection, img_w, img_h = self._encode_image(image, bbox)
-        search_results = self._search_qdrant(embedding)
-
-        if not search_results:
-            return IdentificationResult(
-                status="no_match",
-                confidence=0.0,
-                message="학습 데이터가 없습니다. 관리자에게 문의하세요.",
-                detection=detection,
-                image_width=img_w,
-                image_height=img_h,
-            )
-
-        # 2. Qdrant 후보 집계 → 상위 N개 VLMCandidate 변환
-        candidates_vote = self._aggregate_votes(search_results)
-        top_candidates = candidates_vote[:settings.vlm_max_candidates]
-
-        vlm_candidates = [
-            VLMCandidate(
-                manufacturer_id=c.manufacturer_id,
-                model_id=c.model_id,
-                manufacturer_korean=c.manufacturer_korean or "",
-                manufacturer_english=c.manufacturer_english or "",
-                model_korean=c.model_korean or "",
-                model_english=c.model_english or "",
-                similarity=c.max_score,
-            )
-            for c in top_candidates
-        ]
-
-        # 3. 크롭 이미지 (VLM 전송용) — identify()에서 이미 로드된 image 재사용
-        if bbox:
-            x1, y1, x2, y2 = bbox
-            crop_image = image.crop((x1, y1, x2, y2))
-        elif detection:
-            x1, y1, x2, y2 = detection.bbox
-            crop_image = image.crop((x1, y1, x2, y2))
-        else:
-            crop_image = image
-
-        # 4. VLM 호출
-        try:
-            vlm_result = self.vlm_service.identify_with_candidates(crop_image, vlm_candidates)
-            return self._build_vlm_result(vlm_result, detection, img_w, img_h, search_results)
-        except Exception as e:
-            logger.error(f"VLM failed in visual_rag mode: {e}")
-            if settings.vlm_fallback_to_embedding:
-                logger.warning("Falling back to embedding result")
-                return self._build_identification_result(search_results, detection, img_w, img_h)
-            raise
 
     def _identify_vlm_only(
         self,
@@ -1013,10 +944,8 @@ class VehicleIdentifier:
         """
         한 배치(N장)를 파이프라인으로 처리. 모드별 파이프라인:
 
-        - efficientnet:   YOLO → EfficientNet 분류 (VLM/Qdrant 폴백 없음, 단건과 동일)
-        - visual_rag:     YOLO → EfficientNet 임베딩 → Qdrant 검색 → VLM 최종 판별
-        - embedding_only: YOLO → EfficientNet 임베딩 → Qdrant 검색 → 투표
-        - vlm_only:       YOLO → VLM 직접 판별 → Qdrant 폴백
+        - efficientnet: YOLO → EfficientNet 분류 (VLM/Qdrant 폴백 없음, 단건과 동일)
+        - vlm_only:     YOLO → VLM 직접 판별 → Qdrant 폴백
         """
         n = len(image_paths)
 
@@ -1281,127 +1210,24 @@ class VehicleIdentifier:
                 items.append(BatchImageResult(image_path=image_paths[idx], result=result))
             return items
 
-        # ──────────────────────────────────────────
-        # embedding_only / visual_rag 모드
-        # ──────────────────────────────────────────
-
-        # ── 3. EfficientNet 배치 임베딩 ──
-        embedding_indices = [
-            i for i in valid_indices
-            if cropped_images[i] is not None and errors[i] is None
-        ]
-        embeddings_map: Dict[int, List[float]] = {}
-
-        if embedding_indices:
-            embedding_inputs = [
-                self._optimize_image_for_embedding(cropped_images[i])
-                for i in embedding_indices
-            ]
-            batch_embeddings = self._encode_images(embedding_inputs)
-            for batch_idx, orig_idx in enumerate(embedding_indices):
-                embeddings_map[orig_idx] = batch_embeddings[batch_idx].tolist()
-
-        # ── 4. Qdrant 배치 검색 ──
-        search_map: Dict[int, List[Tuple[Dict, float]]] = {}
-
-        if embeddings_map:
-            from qdrant_client.models import SearchRequest
-
-            request_indices = sorted(embeddings_map.keys())
-            requests = [
-                SearchRequest(
-                    vector=embeddings_map[idx],
-                    limit=settings.top_k,
-                )
-                for idx in request_indices
-            ]
-            try:
-                batch_results = self.qdrant.search_batch(
-                    collection_name=self.COLLECTION_NAME,
-                    requests=requests,
-                )
-                for batch_idx, orig_idx in enumerate(request_indices):
-                    search_map[orig_idx] = [
-                        (point.payload, point.score)
-                        for point in batch_results[batch_idx]
-                        if point.payload is not None
-                    ]
-            except Exception as e:
-                logger.error(f"Batch Qdrant search failed: {e}")
-
-        # ── 5. VLM 배치 (visual_rag 모드) ──
-        vlm_result_map: Dict[int, object] = {}
-
-        if (
-            mode == "visual_rag"
-            and self.vlm_service is not None
-            and self.vlm_service.is_available()
-            and embeddings_map
-        ):
-            from concurrent.futures import ThreadPoolExecutor
-            from identifier.vlm_service import VLMCandidate
-
-            def _run_vlm(idx: int):
-                try:
-                    search_results = search_map.get(idx, [])
-                    if not search_results:
-                        return idx, None
-                    candidates_vote = self._aggregate_votes(search_results)
-                    top_candidates = candidates_vote[:settings.vlm_max_candidates]
-                    vlm_candidates = [
-                        VLMCandidate(
-                            manufacturer_id=c.manufacturer_id,
-                            model_id=c.model_id,
-                            manufacturer_korean=c.manufacturer_korean or "",
-                            manufacturer_english=c.manufacturer_english or "",
-                            model_korean=c.model_korean or "",
-                            model_english=c.model_english or "",
-                            similarity=c.max_score,
-                        )
-                        for c in top_candidates
-                    ]
-                    crop = cropped_images[idx]
-                    vlm_res = self.vlm_service.identify_with_candidates(crop, vlm_candidates)
-                    return idx, vlm_res
-                except Exception as e:
-                    logger.warning(f"VLM failed for batch index {idx}: {e}")
-                    return idx, None
-
-            vlm_indices = [i for i in embedding_indices if not errors[i]]
-            with ThreadPoolExecutor(max_workers=settings.vlm_batch_concurrency) as executor:
-                from concurrent.futures import as_completed
-                futures = {executor.submit(_run_vlm, idx): idx for idx in vlm_indices}
-                for future in as_completed(futures):
-                    idx, vlm_res = future.result()
-                    if vlm_res is not None:
-                        vlm_result_map[idx] = vlm_res
-
-        # ── 6. 결과 조립 ──
-        items: List[BatchImageResult] = []
-
-        for idx in range(n):
-            if errors[idx]:
-                items.append(BatchImageResult(
-                    image_path=image_paths[idx],
-                    error=errors[idx],
-                ))
-                continue
-
-            w, h = sizes[idx]
-            detection = detections[idx]
-            search_results = search_map.get(idx, [])
-
-            if idx in vlm_result_map:
-                result = self._build_vlm_result(vlm_result_map[idx], detection, w, h, search_results)
-            else:
-                result = self._build_identification_result(search_results, detection, w, h)
-
-            items.append(BatchImageResult(
+        # 알 수 없는 모드 — efficientnet으로 폴백
+        logger.warning(f"Unknown IDENTIFIER_MODE={mode}, falling back to efficientnet")
+        return [
+            BatchImageResult(image_path=image_paths[idx], error=errors[idx])
+            if errors[idx]
+            else BatchImageResult(
                 image_path=image_paths[idx],
-                result=result,
-            ))
-
-        return items
+                result=IdentificationResult(
+                    status="low_confidence",
+                    confidence=0.0,
+                    message=f"알 수 없는 모드: {mode}",
+                    detection=detections[idx],
+                    image_width=sizes[idx][0],
+                    image_height=sizes[idx][1],
+                ),
+            )
+            for idx in range(n)
+        ]
 
     def _build_top_k_details(
         self, results: List[Tuple[Dict, float]]

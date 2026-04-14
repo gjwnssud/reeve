@@ -978,8 +978,7 @@ async def reload_vlm(req: ReloadVLMRequest, request: Request):
         raise HTTPException(
             status_code=400,
             detail=(
-                f"VLM 서비스가 비활성 상태입니다 (IDENTIFIER_MODE={settings.identifier_mode}). "
-                "visual_rag 또는 vlm_only 모드에서만 사용 가능합니다."
+                f"VLM 서비스가 비활성 상태입니다 (IDENTIFIER_MODE={settings.identifier_mode})."
             ),
         )
     try:

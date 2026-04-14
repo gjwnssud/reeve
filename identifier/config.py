@@ -52,7 +52,7 @@ class IdentifierSettings(BaseSettings):
     torch_threads: int = Field(default=8, alias="IDENTIFIER_TORCH_THREADS")
     enable_torch_compile: bool = Field(default=True, alias="IDENTIFIER_ENABLE_TORCH_COMPILE")
 
-    # 판별 모드: "efficientnet" (기본), "embedding_only", "visual_rag", "vlm_only"
+    # 판별 모드: "efficientnet" (기본), "vlm_only"
     identifier_mode: str = Field(default="efficientnet", alias="IDENTIFIER_MODE")
 
     # EfficientNetV2-M 분류기

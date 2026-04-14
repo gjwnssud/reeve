@@ -19,18 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class VLMCandidate:
-    """Qdrant에서 가져온 후보 정보 (VLM 프롬프트용)"""
-    manufacturer_id: int
-    model_id: int
-    manufacturer_korean: str
-    manufacturer_english: str
-    model_korean: str
-    model_english: str
-    similarity: float
-
-
-@dataclass
 class VLMResult:
     """VLM 판별 결과"""
     selected_index: Optional[int]       # 선택된 후보 인덱스 (None이면 해당없음)
@@ -149,24 +137,6 @@ class VLMService:
     # 공개 API
     # ──────────────────────────────────────────────
 
-    def identify_with_candidates(
-        self,
-        image: Image.Image,
-        candidates: List[VLMCandidate],
-    ) -> VLMResult:
-        """
-        Visual RAG: 이미지 + Qdrant 후보 목록 → VLM 최종 판별
-
-        Args:
-            image: YOLO 크롭된 차량 이미지
-            candidates: Qdrant 유사 검색 결과에서 집계된 고유 (manufacturer, model) 후보
-
-        Returns:
-            VLMResult
-        """
-        prompt = self._build_visual_rag_prompt(candidates)
-        return self._call_vlm(image, prompt, candidates)
-
     def identify_freeform(self, image: Image.Image) -> VLMResult:
         """
         VLM-only 모드: 후보 없이 이미지만으로 차량 판별
@@ -175,7 +145,7 @@ class VLMService:
             VLMResult (selected_index는 항상 None)
         """
         prompt = self._build_freeform_prompt()
-        return self._call_vlm(image, prompt, candidates=None)
+        return self._call_vlm(image, prompt)
 
     def health_check(self) -> dict:
         """Ollama + VLM 모델 상태 확인"""
@@ -215,28 +185,6 @@ class VLMService:
         image.save(buffer, format="JPEG", quality=90)
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    def _build_visual_rag_prompt(self, candidates: List[VLMCandidate]) -> str:
-        """Visual RAG용 프롬프트 생성"""
-        candidate_lines = []
-        for i, c in enumerate(candidates):
-            candidate_lines.append(
-                f"  {i}: {c.manufacturer_korean}({c.manufacturer_english}) "
-                f"{c.model_korean}({c.model_english}) "
-                f"[유사도={c.similarity:.3f}]"
-            )
-        candidate_text = "\n".join(candidate_lines)
-
-        return (
-            "이 차량 이미지를 보고, 아래 후보 중에서 가장 적합한 차량을 선택하세요.\n\n"
-            f"후보 목록:\n{candidate_text}\n\n"
-            "규칙:\n"
-            "- 이미지의 차량과 가장 일치하는 후보의 번호를 선택하세요.\n"
-            "- 어떤 후보도 맞지 않으면 selected_index를 null로 설정하세요.\n"
-            "- confidence는 0.0~1.0 사이로, 선택에 대한 확신 정도입니다.\n\n"
-            "반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:\n"
-            '{"selected_index": <번호 또는 null>, "confidence": <0.0~1.0>, "reasoning": "<판단 이유>"}'
-        )
-
     def _build_freeform_prompt(self) -> str:
         """VLM-only 모드용 프롬프트"""
         return (
@@ -260,7 +208,6 @@ class VLMService:
         self,
         image: Image.Image,
         prompt: str,
-        candidates: Optional[List[VLMCandidate]],
     ) -> VLMResult:
         """Ollama /api/chat 엔드포인트 호출 (지수 백오프 재시도 포함)"""
         if not self.is_available():
@@ -301,7 +248,7 @@ class VLMService:
                 logger.info(f"VLM response ({elapsed:.1f}s): {raw_content[:200]}")
 
                 self._record_success()
-                return self._parse_response(raw_content, candidates)
+                return self._parse_response(raw_content)
 
             except Exception as e:
                 last_exc = e
@@ -319,14 +266,9 @@ class VLMService:
         logger.error(f"VLM call failed after {1 + max_retries} attempt(s): {last_exc}")
         raise last_exc
 
-    def _parse_response(
-        self,
-        raw: str,
-        candidates: Optional[List[VLMCandidate]],
-    ) -> VLMResult:
+    def _parse_response(self, raw: str) -> VLMResult:
         """VLM JSON 응답 파싱 (방어적)"""
         try:
-            # 마크다운 코드블록 제거
             cleaned = raw.strip()
             if cleaned.startswith("```"):
                 lines = cleaned.split("\n")
@@ -347,43 +289,15 @@ class VLMService:
         confidence = float(parsed.get("confidence", 0.0))
         reasoning = str(parsed.get("reasoning", ""))
 
-        if candidates is not None:
-            # Visual RAG 모드: selected_index로 후보 매핑
-            idx = parsed.get("selected_index")
-            if idx is not None and isinstance(idx, int) and 0 <= idx < len(candidates):
-                c = candidates[idx]
-                return VLMResult(
-                    selected_index=idx,
-                    manufacturer_id=c.manufacturer_id,
-                    model_id=c.model_id,
-                    manufacturer_korean=c.manufacturer_korean,
-                    manufacturer_english=c.manufacturer_english,
-                    model_korean=c.model_korean,
-                    model_english=c.model_english,
-                    confidence=confidence,
-                    reasoning=reasoning,
-                    raw_response=raw,
-                )
-            else:
-                return VLMResult(
-                    selected_index=None, manufacturer_id=None, model_id=None,
-                    manufacturer_korean=None, manufacturer_english=None,
-                    model_korean=None, model_english=None,
-                    confidence=0.0,
-                    reasoning=reasoning or "후보 중 일치하는 차량 없음",
-                    raw_response=raw,
-                )
-        else:
-            # VLM-only 모드: 자유 응답 매핑
-            return VLMResult(
-                selected_index=None,
-                manufacturer_id=None,
-                model_id=None,
-                manufacturer_korean=parsed.get("manufacturer_korean"),
-                manufacturer_english=parsed.get("manufacturer_english"),
-                model_korean=parsed.get("model_korean"),
-                model_english=parsed.get("model_english"),
-                confidence=confidence,
-                reasoning=reasoning,
-                raw_response=raw,
-            )
+        return VLMResult(
+            selected_index=None,
+            manufacturer_id=None,
+            model_id=None,
+            manufacturer_korean=parsed.get("manufacturer_korean"),
+            manufacturer_english=parsed.get("manufacturer_english"),
+            model_korean=parsed.get("model_korean"),
+            model_english=parsed.get("model_english"),
+            confidence=confidence,
+            reasoning=reasoning,
+            raw_response=raw,
+        )
