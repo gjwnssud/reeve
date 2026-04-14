@@ -2,7 +2,7 @@
 
 AI 기반 차량 제조사·모델 자동 식별 시스템.
 
-CCTV·사진 이미지에서 차량을 탐지하고, EfficientNet 임베딩 + Qdrant 벡터 검색 + 파인튜닝된 Qwen3-VL을 조합해 제조사와 모델을 자동으로 식별합니다.
+CCTV·사진 이미지에서 차량을 탐지하고, 파인튜닝된 EfficientNetV2-M 분류기와 Qwen3-VL을 조합해 제조사와 모델을 자동으로 식별합니다.
 
 ---
 
@@ -13,9 +13,9 @@ CCTV·사진 이미지에서 차량을 탐지하고, EfficientNet 임베딩 + Qd
     ↓
 Studio (8000) — 업로드, OpenAI/Ollama 비전 분석, 관리 UI
     ↓
-Identifier (8001) — YOLO 탐지 → EfficientNet 임베딩 → Qdrant 검색 → 투표
+Identifier (8001) — YOLO 탐지 → EfficientNetV2-M 분류
     ↓
-MySQL (결과 저장) + Qdrant (벡터 저장)
+MySQL (결과 저장)
     ↓
 Trainer (8002) — EfficientNet / LLM 파인튜닝 (LlamaFactory or MLX)
 ```
@@ -23,9 +23,8 @@ Trainer (8002) — EfficientNet / LLM 파인튜닝 (LlamaFactory or MLX)
 | 서비스 | 포트 | 역할 |
 |--------|------|------|
 | Studio | 8000 | 관리 UI, 데이터 라벨링, OpenAI Vision 분석, 파인튜닝 오케스트레이션 |
-| Identifier | 8001 | 차량 식별 (동기/비동기), YOLO 탐지, EfficientNet 임베딩 |
+| Identifier | 8001 | 차량 식별 (동기/비동기), YOLO 탐지, EfficientNet 분류 |
 | Trainer | 8002 | 모델 파인튜닝, LoRA 병합, GGUF 내보내기 |
-| Qdrant | 6333 | 차량 이미지 임베딩(1280차원) 저장·검색 |
 | Redis | 6379 | Celery 브로커, 비동기 결과 저장 (24h TTL) |
 | Ollama | 11434 | Qwen3-VL:8b 로컬 VLM 서빙 |
 | MySQL | 3306 | 제조사, 모델, 분석 이력 저장 (개발 환경) |
@@ -33,10 +32,10 @@ Trainer (8002) — EfficientNet / LLM 파인튜닝 (LlamaFactory or MLX)
 **식별 파이프라인 (Identifier, efficientnet 모드 기준):**
 1. **YOLO26** — 차량 바운딩 박스 탐지 및 크롭
 2. **EfficientNetV2-M** — 1280차원 특징 벡터 추출 후 softmax 분류
-3. 신뢰도 ≥ identified 임계값 → 즉시 반환 (`CLASSIFIER_CONFIDENCE_THRESHOLD > 0`이면 그 값, 아니면 `IDENTIFIER_CONFIDENCE_THRESHOLD`(기본 0.80) 사용)
-4. 임계값 미달 → **Qwen3-VL:8b** 폴백 추론 (`visual_rag` 모드에서는 Qdrant Top-K 후보 + VLM 최종 판별)
+3. 신뢰도 ≥ identified 임계값 → `identified` 반환 (`CLASSIFIER_CONFIDENCE_THRESHOLD > 0`이면 그 값, 아니면 `IDENTIFIER_CONFIDENCE_THRESHOLD`(기본 0.80) 사용)
+4. 임계값 미달 → `low_confidence` 반환
 
-식별 모드는 `IDENTIFIER_MODE` 환경변수로 전환: `efficientnet`(기본) / `visual_rag` / `vlm_only` / `embedding_only`.
+식별 모드는 `IDENTIFIER_MODE` 환경변수로 전환: `efficientnet`(기본) / `vlm_only`.
 
 ---
 
@@ -94,8 +93,6 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `QDRANT_HOST` | `qdrant` | Qdrant 호스트 |
-| `QDRANT_PORT` | `6333` | Qdrant 포트 |
 | `EMBEDDING_DEVICE` | `cuda` | 임베딩 연산 장치 (`cuda` / `cpu`) |
 | `LOG_LEVEL` | `INFO` | 로그 레벨 |
 
@@ -115,13 +112,11 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `IDENTIFIER_MODE` | `efficientnet` | 식별 모드 (`efficientnet` / `visual_rag` / `vlm_only` / `embedding_only`) |
+| `IDENTIFIER_MODE` | `efficientnet` | 식별 모드 (`efficientnet` / `vlm_only`) |
 | `CLASSIFIER_CONFIDENCE_THRESHOLD` | `0.0` | EfficientNet identified 임계값 (0이면 `IDENTIFIER_CONFIDENCE_THRESHOLD` 사용) |
 | `VLM_MODEL_NAME` | `qwen3-vl:8b` | Ollama VLM 모델명 |
 | `VLM_TIMEOUT` | `30.0` | VLM 추론 타임아웃 (초) |
-| `IDENTIFIER_TOP_K` | `10` | Qdrant 후보 검색 수 |
 | `IDENTIFIER_CONFIDENCE_THRESHOLD` | `0.80` | 식별 신뢰도 임계값 |
-| `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD` | `0.3` | 투표 집중도 임계값 |
 | `IDENTIFIER_YOLO_CONFIDENCE` | `0.25` | YOLO 탐지 신뢰도 |
 | `IDENTIFIER_ENABLE_TORCH_COMPILE` | `true` | torch.compile 활성화 (ARM에서는 false) |
 | `IDENTIFIER_MAX_BATCH_FILES` | `100` | 배치 최대 파일 수 |
@@ -196,7 +191,6 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 - `GET /admin/analyzed-vehicles` — 분석 결과 목록
 - `GET /admin/review-queue` / `PATCH /admin/review/{id}` — 검수 큐 및 승인
 - `POST /admin/analyze-batch` — 배치 분석
-- `POST /admin/sync-vectordb` / `POST /admin/recreate-collection` / `GET /admin/vectordb-stats` — Qdrant 동기화·통계
 
 **파인튜닝 (프록시)**
 - `POST /finetune/export-efficientnet` — EfficientNet 학습용 CSV export (스레드풀 실행)
@@ -235,6 +229,5 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 
 - 개발 환경에서는 소스 코드가 컨테이너에 bind mount되어 코드 변경 시 자동 재시작됩니다.
 - Uvicorn 워커 수는 `identifier/start.sh`에서 CPU 코어 수에 따라 자동 계산됩니다.
-- Qdrant 재인덱싱: `python3 .claude/index_qdrant.py --clear`
 - 학습 데이터 결과: [docs/학습데이터결과서.md](docs/학습데이터결과서.md)
 - 시스템 아키텍처 다이어그램: [docs/architecture.svg](docs/architecture.svg)

@@ -51,14 +51,11 @@ services:
       - ../logs:/app/logs
     environment:
       - MYSQL_HOST=mysql
-      - QDRANT_HOST=qdrant
       - OLLAMA_BASE_URL=http://ollama:11434
       - TRAINER_URL=http://trainer:8002
     depends_on:
       mysql:
         condition: service_healthy
-      qdrant:
-        condition: service_started
     networks:
       - reeve-network
     restart: no
