@@ -359,7 +359,7 @@ function renderReviewItems(container, items) {
             <div class="review-actions">
                 <button class="btn btn-primary" style="font-size:0.85rem;" onclick="openImageDetail(${item.id}, '${item.image_path}', '${(item.manufacturer || 'N/A').replace(/'/g, "\\'")}', '${(item.model || 'N/A').replace(/'/g, "\\'")}', ${item.matched_manufacturer_id || 'null'}, ${item.matched_model_id || 'null'})">분석결과 수정</button>
                 <button class="btn btn-danger" onclick="deleteReview(${item.id})">분석결과 삭제</button>
-                <button class="btn btn-success" onclick="saveToVectorDB(${item.id})">벡터DB 저장</button>
+                <button class="btn btn-success" onclick="saveToVectorDB(${item.id})">검수 승인</button>
             </div>
         `;
         container.appendChild(div);
@@ -617,7 +617,7 @@ async function saveInlineModel() {
 
 // 벡터DB에 저장
 async function saveToVectorDB(id) {
-    if (!confirm('이 데이터를 벡터DB에 저장하시겠습니까?')) {
+    if (!confirm('이 데이터를 검수 승인하시겠습니까?')) {
         return;
     }
 
@@ -639,7 +639,7 @@ async function saveToVectorDB(id) {
         state.reviewSkip = Math.max(0, state.reviewSkip - 1);
         state.reviewTotal = Math.max(0, state.reviewTotal - 1);
 
-        alert('벡터DB에 저장되었습니다');
+        alert('검수 승인 완료');
     } catch (error) {
         // 에러는 apiCall에서 처리됨
     }
@@ -674,7 +674,7 @@ async function deleteReview(id) {
 
 // 일괄 벡터DB 저장 시작 (DB 전체 대상 - is_verified=false)
 async function startBatchAnalysis() {
-    if (!confirm('검수 대기 중인 전체 데이터를 벡터DB에 일괄 저장하시겠습니까?\n(제조사와 모델이 식별된 항목만 저장됩니다)\n\n저장 후에는 검색 시스템에서 사용됩니다.')) {
+    if (!confirm('검수 대기 중인 전체 데이터를 일괄 검수 승인하시겠습니까?\n(제조사와 모델이 식별된 항목만 처리됩니다)')) {
         return;
     }
 
@@ -753,7 +753,7 @@ async function startBatchAnalysis() {
 
         if (finalResult) {
             progressText.textContent = `✨ 완료! 총 ${finalResult.total}개 중 ${finalResult.succeeded}개 저장 완료, ${finalResult.failed}개 실패`;
-            alert(`벡터DB 일괄 저장이 완료되었습니다.\n\n✅ 저장 완료: ${finalResult.succeeded}개\n❌ 실패: ${finalResult.failed}개`);
+            alert(`일괄 검수 승인이 완료되었습니다.\n\n✅ 승인 완료: ${finalResult.succeeded}개\n❌ 실패: ${finalResult.failed}개`);
         } else {
             progressText.textContent = '저장할 수 있는 데이터가 없습니다.';
         }
@@ -764,7 +764,7 @@ async function startBatchAnalysis() {
         alert('일괄 저장 중 오류가 발생했습니다.');
     } finally {
         analyzeBtn.disabled = false;
-        analyzeBtn.textContent = '💾 전체 일괄 벡터DB 저장';
+        analyzeBtn.textContent = '💾 전체 일괄 검수 승인';
         deleteBtn.disabled = false;
 
         setTimeout(() => {
@@ -1477,7 +1477,7 @@ async function saveVehicleFromModal() {
         return;
     }
 
-    if (!confirm('이 데이터를 벡터DB에 저장하시겠습니까?')) return;
+    if (!confirm('이 데이터를 검수 승인하시겠습니까?')) return;
 
     const btn = document.getElementById('vehicleSaveVectorBtn');
     const origHTML = btn.innerHTML;
@@ -1503,7 +1503,7 @@ async function saveVehicleFromModal() {
             throw new Error(err.detail || '제조사/모델 저장 실패');
         }
 
-        // 2단계: 벡터DB 등록
+        // 2단계: 검수 승인
         const resp = await fetch(`${API_BASE}/admin/review/${id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1513,7 +1513,7 @@ async function saveVehicleFromModal() {
             const err = await resp.json();
             throw new Error(err.detail || '저장 실패');
         }
-        showAdminToast('벡터DB에 저장되었습니다', 'success');
+        showAdminToast('검수 승인 완료', 'success');
         bootstrap.Modal.getInstance(document.getElementById('vehicleEditModal'))?.hide();
         loadVehicleData();
     } catch (e) {
@@ -1576,7 +1576,7 @@ async function saveVehicleEdit() {
 
 
 async function deleteVehicle(id) {
-    if (!confirm('이 데이터를 삭제하시겠습니까?\n검증 완료 데이터는 벡터DB 레코드도 함께 삭제됩니다.\n삭제된 데이터는 복구할 수 없습니다.')) return;
+    if (!confirm('이 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.')) return;
 
     try {
         const resp = await fetch(`${API_BASE}/admin/review/${id}`, { method: 'DELETE' });
@@ -1614,7 +1614,7 @@ async function saveSelectedToVectorDB() {
         showAdminToast('선택된 항목이 없습니다', 'error');
         return;
     }
-    if (!confirm(`선택한 ${vehicleState.selectedIds.size}개 레코드를 벡터DB에 저장하시겠습니까?`)) return;
+    if (!confirm(`선택한 ${vehicleState.selectedIds.size}개 레코드를 검수 승인하시겠습니까?`)) return;
 
     let saved = 0, failed = 0;
     for (const id of vehicleState.selectedIds) {

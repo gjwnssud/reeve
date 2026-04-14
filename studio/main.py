@@ -47,7 +47,6 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Reeve application...")
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Database: {settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}")
-    logger.info(f"Qdrant: {settings.qdrant_url}")
 
     # 데이터베이스 초기화 (개발 환경에서만)
     if settings.environment == "development":
@@ -187,7 +186,6 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected",  # TODO: 실제 DB 연결 확인 추가
-        "qdrant": "connected",  # TODO: 실제 Qdrant 연결 확인 추가
         "environment": settings.environment
     }
 

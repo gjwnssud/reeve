@@ -1655,7 +1655,7 @@ async function saveImageToVectorDB(imageId, { silent = false } = {}) {
         return false;
     }
 
-    if (!silent && !confirm('이 분석 결과를 벡터DB에 저장하시겠습니까?')) return false;
+    if (!silent && !confirm('이 분석 결과를 검수 승인하시겠습니까?')) return false;
 
     const saveBtn = document.getElementById(`save-btn-${imageId}`);
     if (saveBtn) {
@@ -1675,7 +1675,7 @@ async function saveImageToVectorDB(imageId, { silent = false } = {}) {
             throw new Error(err.detail || '저장 실패');
         }
 
-        showToast('벡터DB에 저장되었습니다.', 'success');
+        showToast('검수 승인 완료.', 'success');
 
         // 저장 완료 → 재시도 큐에서 자동 제거
         imageState.status = 'verified';
@@ -1717,7 +1717,7 @@ async function startVectorBatchSave() {
         return;
     }
 
-    if (!confirm(`분석 완료된 ${targets.length}개 이미지를 벡터DB에 저장하시겠습니까?\n(이미 저장된 항목은 제외됩니다)`)) return;
+    if (!confirm(`분석 완료된 ${targets.length}개 이미지를 검수 승인하시겠습니까?\n(이미 저장된 항목은 제외됩니다)`)) return;
 
     const progressContainer = document.getElementById('vectorSaveProgressContainer');
     const progressBar = document.getElementById('vectorSaveProgressBar');
@@ -1774,7 +1774,7 @@ async function startVectorBatchSave() {
     }
 
     progressText.textContent = `✨ 완료! 총 ${targets.length}개 중 ${succeeded}개 저장 완료, ${failed}개 실패. 페이지를 새로고침합니다...`;
-    showToast(`벡터DB 저장 완료: ${succeeded}개`, 'success');
+    showToast(`검수 승인 완료: ${succeeded}개`, 'success');
 
     setTimeout(() => {
         window.location.reload();

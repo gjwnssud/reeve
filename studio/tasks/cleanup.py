@@ -19,7 +19,7 @@ async def cleanup_old_analyzed_vehicles():
     오래된 미검수 analyzed_vehicles 자동 삭제
 
     - 삭제 대상: is_verified=false AND created_at < (현재 - RETENTION_DAYS)
-    - 크롭 이미지 + 원본 이미지 + training_dataset + Qdrant + DB 레코드 모두 삭제
+    - 크롭 이미지 + 원본 이미지 + training_dataset + DB 레코드 모두 삭제
     """
     if not settings.cleanup_enabled:
         logger.info("Cleanup is disabled in settings")

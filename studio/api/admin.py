@@ -11,7 +11,6 @@ from datetime import datetime
 import logging
 import json
 import asyncio
-import functools
 
 from studio.models import get_db
 from studio.models.database import SessionLocal
@@ -283,12 +282,10 @@ async def update_analyzed_vehicle(
 
 
 @router.post("/review/batch-save-all")
-async def batch_save_all_to_vectordb():
-    """is_verified=false인 전체 항목을 벡터DB에 일괄 저장 (SSE 스트리밍, 커서 기반 페이지네이션)"""
+async def batch_save_all_to_training():
+    """is_verified=false인 전체 항목을 학습 데이터로 일괄 저장 (SSE 스트리밍, 커서 기반 페이지네이션)"""
     from sqlalchemy import func as sql_func
     from studio.models.training_dataset import TrainingDataset
-    from studio.services.embedding import embedding_service
-    from studio.services.vectordb import vectordb_service
 
     BATCH_SIZE = 100
 
@@ -312,15 +309,12 @@ async def batch_save_all_to_vectordb():
         current = 0
         last_id = None  # desc 순이므로 None부터 시작
 
-        loop = asyncio.get_running_loop()
-
         # 시작 이벤트
         yield f"data: {json.dumps({'type': 'start', 'total': total, 'total_unverified': total_unverified, 'skipped': skipped})}\n\n"
 
         while True:
             # 배치마다 새 세션으로 짧게 커넥션 점유
             with SessionLocal() as db:
-                # 커서 기반 배치 조회 (desc 순) + JOIN 최적화
                 query = db.query(AnalyzedVehicle).options(
                     joinedload(AnalyzedVehicle.matched_manufacturer),
                     joinedload(AnalyzedVehicle.matched_model)
@@ -347,28 +341,20 @@ async def batch_save_all_to_vectordb():
                 if crop_dirty:
                     db.commit()
 
-                # 배치 데이터를 메모리에 복사해 세션 닫기 전에 준비
                 batch_data = [
                     {
                         "id": a.id,
                         "image_path": a.image_path,
                         "original_image_path": a.original_image_path,
-                        "confidence_score": float(a.confidence_score) if a.confidence_score else 0.0,
                         "matched_manufacturer_id": a.matched_manufacturer_id,
                         "matched_model_id": a.matched_model_id,
-                        "mfr_korean": a.matched_manufacturer.korean_name if a.matched_manufacturer else None,
-                        "mfr_english": a.matched_manufacturer.english_name if a.matched_manufacturer else None,
-                        "mdl_korean": a.matched_model.korean_name if a.matched_model else None,
-                        "mdl_english": a.matched_model.english_name if a.matched_model else None,
                     }
                     for a in batch
                 ]
                 last_id = batch[-1].id
-            # 세션 닫힘 → 커넥션 반환
 
             for item in batch_data:
                 current += 1
-                vectordb_ok = False
 
                 # 크롭이 보장되지 않은 항목은 학습 데이터로 적재하지 않음
                 if item["image_path"] == item["original_image_path"]:
@@ -379,117 +365,31 @@ async def batch_save_all_to_vectordb():
                     continue
 
                 try:
-                    # ── Phase 1: DB 읽기 (커넥션 즉시 반환) ──────────────────
+                    # training_dataset upsert
                     with SessionLocal() as db:
                         existing = db.query(TrainingDataset).filter(
                             TrainingDataset.image_path == item["image_path"]
                         ).first()
-                        existing_snapshot = {
-                            "id": existing.id,
-                            "qdrant_id": existing.qdrant_id,
-                            "manufacturer_id": existing.manufacturer_id,
-                            "model_id": existing.model_id,
-                        } if existing else None
-                    # ← 커넥션 반환
 
-                    qdrant_metadata = {
-                        "confidence_score": item["confidence_score"],
-                        "verified_by": "admin",
-                        "verified_at": datetime.now().isoformat()
-                    }
-
-                    if existing_snapshot:
-                        needs_update = (
-                            existing_snapshot["qdrant_id"] is None
-                            or existing_snapshot["manufacturer_id"] != item["matched_manufacturer_id"]
-                            or existing_snapshot["model_id"] != item["matched_model_id"]
-                        )
-                        if needs_update:
-                            # ── Phase 2a: 비동기 작업 (DB 커넥션 없음) ────────
-                            if existing_snapshot["qdrant_id"]:
-                                await loop.run_in_executor(None, vectordb_service.delete_training_image, existing_snapshot["id"])
-                            image_embedding = await loop.run_in_executor(
-                                None, embedding_service.encode_image, item["image_path"]
-                            )
-                            qdrant_success = await loop.run_in_executor(
-                                None,
-                                functools.partial(
-                                    vectordb_service.add_training_image,
-                                    training_id=existing_snapshot["id"],
-                                    image_path=item["image_path"],
-                                    manufacturer_id=item["matched_manufacturer_id"],
-                                    model_id=item["matched_model_id"],
-                                    embedding=image_embedding,
-                                    metadata=qdrant_metadata,
-                                    manufacturer_korean=item["mfr_korean"],
-                                    manufacturer_english=item["mfr_english"],
-                                    model_korean=item["mdl_korean"],
-                                    model_english=item["mdl_english"],
-                                )
-                            )
-                            # ── Phase 3a: DB 쓰기 (커넥션 즉시 반환) ─────────
-                            with SessionLocal() as db:
-                                record = db.query(TrainingDataset).filter(
-                                    TrainingDataset.id == existing_snapshot["id"]
-                                ).first()
-                                if record:
-                                    record.manufacturer_id = item["matched_manufacturer_id"]
-                                    record.model_id = item["matched_model_id"]
-                                    if qdrant_success:
-                                        record.qdrant_id = f"train_{existing_snapshot['id']}"
-                                    db.commit()
-                        vectordb_ok = True
-
-                    else:
-                        # ── Phase 2b: 신규 레코드 DB 생성 (ID 확보) ──────────
-                        with SessionLocal() as db:
+                        if existing:
+                            if (existing.manufacturer_id != item["matched_manufacturer_id"]
+                                    or existing.model_id != item["matched_model_id"]):
+                                existing.manufacturer_id = item["matched_manufacturer_id"]
+                                existing.model_id = item["matched_model_id"]
+                                db.commit()
+                        else:
                             training_data = TrainingDataset(
                                 image_path=item["image_path"],
                                 manufacturer_id=item["matched_manufacturer_id"],
                                 model_id=item["matched_model_id"],
-                                qdrant_id=None
                             )
                             db.add(training_data)
                             db.commit()
-                            db.refresh(training_data)
-                            new_training_id = training_data.id
-                        # ← 커넥션 반환
-
-                        # ── Phase 3b: 비동기 작업 (DB 커넥션 없음) ────────────
-                        image_embedding = await loop.run_in_executor(
-                            None, embedding_service.encode_image, item["image_path"]
-                        )
-                        qdrant_success = await loop.run_in_executor(
-                            None,
-                            functools.partial(
-                                vectordb_service.add_training_image,
-                                training_id=new_training_id,
-                                image_path=item["image_path"],
-                                manufacturer_id=item["matched_manufacturer_id"],
-                                model_id=item["matched_model_id"],
-                                embedding=image_embedding,
-                                metadata=qdrant_metadata,
-                                manufacturer_korean=item["mfr_korean"],
-                                manufacturer_english=item["mfr_english"],
-                                model_korean=item["mdl_korean"],
-                                model_english=item["mdl_english"],
-                            )
-                        )
-                        # ── Phase 4b: qdrant_id 업데이트 ──────────────────────
-                        if qdrant_success:
-                            with SessionLocal() as db:
-                                record = db.query(TrainingDataset).filter(
-                                    TrainingDataset.id == new_training_id
-                                ).first()
-                                if record:
-                                    record.qdrant_id = f"train_{new_training_id}"
-                                    db.commit()
-                        vectordb_ok = True
 
                 except Exception as e:
-                    logger.error(f"Batch VectorDB save: {item['id']} training_data failed - {e}")
+                    logger.error(f"Batch save: {item['id']} training_data failed - {e}")
 
-                # is_verified는 training_data 성공/실패와 무관하게 항상 업데이트
+                # is_verified 업데이트
                 try:
                     with SessionLocal() as db:
                         analyzed_fresh = db.query(AnalyzedVehicle).filter(
@@ -502,19 +402,17 @@ async def batch_save_all_to_vectordb():
                             db.commit()
 
                     succeeded += 1
-                    logger.info(f"Batch VectorDB save: {item['id']} succeeded (vectordb={'OK' if vectordb_ok else 'SKIP'}) ({current}/{total})")
+                    logger.info(f"Batch save: {item['id']} succeeded ({current}/{total})")
 
                 except Exception as e:
-                    logger.error(f"Batch VectorDB save: {item['id']} is_verified update failed - {e}")
+                    logger.error(f"Batch save: {item['id']} is_verified update failed - {e}")
                     failed += 1
                     failed_ids.append(item["id"])
 
-                # 진행 이벤트
                 yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': item['id']})}\n\n"
 
                 await asyncio.sleep(0.1)
 
-        # 완료 이벤트
         yield f"data: {json.dumps({'type': 'done', 'total': total, 'succeeded': succeeded, 'failed': failed, 'failed_ids': failed_ids})}\n\n"
 
     return StreamingResponse(
@@ -529,16 +427,14 @@ async def batch_save_all_to_vectordb():
 
 
 @router.post("/review/{analyzed_id}")
-async def save_to_vectordb(
+async def save_to_training(
     analyzed_id: int,
     db: Session = Depends(get_db)
 ):
-    """벡터DB에 저장 (간소화된 버전 - 메모 입력 없음)"""
+    """검수 승인: 학습 데이터 적재 + is_verified 업데이트"""
     from datetime import datetime
     from sqlalchemy.orm import joinedload
     from studio.models.training_dataset import TrainingDataset
-    from studio.services.embedding import embedding_service
-    from studio.services.vectordb import vectordb_service
 
     analyzed = db.query(AnalyzedVehicle).options(
         joinedload(AnalyzedVehicle.matched_manufacturer),
@@ -547,7 +443,6 @@ async def save_to_vectordb(
     if not analyzed:
         raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
 
-    # 제조사와 모델이 모두 있어야 저장 가능
     if not analyzed.matched_manufacturer_id or not analyzed.matched_model_id:
         raise HTTPException(
             status_code=400,
@@ -563,136 +458,46 @@ async def save_to_vectordb(
             )
     db.flush()
 
-    # 1) training_dataset + QdrantDB 저장 시도
-    vectordb_ok = False
+    # 1) training_dataset upsert
     try:
-        # 기존 학습 데이터 확인 (동일 이미지 경로 기준)
         existing = db.query(TrainingDataset).filter(
             TrainingDataset.image_path == analyzed.image_path
         ).first()
 
-        mfr = analyzed.matched_manufacturer
-        mdl = analyzed.matched_model
-
         if existing:
-            # 기존 레코드가 있더라도: qdrant_id가 없거나 제조사/모델이 변경된 경우 재저장
-            needs_qdrant_update = (
-                existing.qdrant_id is None
-                or existing.manufacturer_id != analyzed.matched_manufacturer_id
-                or existing.model_id != analyzed.matched_model_id
-            )
-            if needs_qdrant_update:
-                loop = asyncio.get_running_loop()
-                # 기존 Qdrant 항목 삭제 후 재등록
-                if existing.qdrant_id:
-                    await loop.run_in_executor(None, vectordb_service.delete_training_image, existing.id)
-
+            if (existing.manufacturer_id != analyzed.matched_manufacturer_id
+                    or existing.model_id != analyzed.matched_model_id):
                 existing.manufacturer_id = analyzed.matched_manufacturer_id
                 existing.model_id = analyzed.matched_model_id
                 db.flush()
-
-                image_embedding = await loop.run_in_executor(
-                    None, embedding_service.encode_image, analyzed.image_path
-                )
-                qdrant_metadata = {
-                    "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-                    "verified_by": "admin",
-                    "verified_at": datetime.now().isoformat()
-                }
-                qdrant_success = await loop.run_in_executor(
-                    None,
-                    functools.partial(
-                        vectordb_service.add_training_image,
-                        training_id=existing.id,
-                        image_path=existing.image_path,
-                        manufacturer_id=existing.manufacturer_id,
-                        model_id=existing.model_id,
-                        embedding=image_embedding,
-                        metadata=qdrant_metadata,
-                        manufacturer_korean=mfr.korean_name if mfr else None,
-                        manufacturer_english=mfr.english_name if mfr else None,
-                        model_korean=mdl.korean_name if mdl else None,
-                        model_english=mdl.english_name if mdl else None,
-                    )
-                )
-                if not qdrant_success:
-                    raise RuntimeError(f"Qdrant 저장 실패 (training_id={existing.id})")
-                existing.qdrant_id = f"train_{existing.id}"
-                db.commit()
-                logger.info(f"Updated VectorDB: {existing.id}")
-
-            vectordb_ok = True
+                logger.info(f"Updated training_dataset: {existing.id}")
         else:
-            # 이미지 임베딩 생성
-            loop = asyncio.get_running_loop()
-            image_embedding = await loop.run_in_executor(
-                None, embedding_service.encode_image, analyzed.image_path
-            )
-
-            # 학습 데이터셋에 추가
             training_data = TrainingDataset(
                 image_path=analyzed.image_path,
                 manufacturer_id=analyzed.matched_manufacturer_id,
                 model_id=analyzed.matched_model_id,
-                qdrant_id=None
             )
-
             db.add(training_data)
-            db.flush()  # ID 생성
-
-            # Qdrant 메타데이터
-            qdrant_metadata = {
-                "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
-                "verified_by": "admin",
-                "verified_at": datetime.now().isoformat()
-            }
-
-            # QdrantDB에 추가
-            qdrant_success = await loop.run_in_executor(
-                None,
-                functools.partial(
-                    vectordb_service.add_training_image,
-                    training_id=training_data.id,
-                    image_path=training_data.image_path,
-                    manufacturer_id=training_data.manufacturer_id,
-                    model_id=training_data.model_id,
-                    embedding=image_embedding,
-                    metadata=qdrant_metadata,
-                    manufacturer_korean=mfr.korean_name if mfr else None,
-                    manufacturer_english=mfr.english_name if mfr else None,
-                    model_korean=mdl.korean_name if mdl else None,
-                    model_english=mdl.english_name if mdl else None,
-                )
-            )
-
-            if not qdrant_success:
-                raise RuntimeError(f"Qdrant 저장 실패 (training_id={training_data.id})")
-
-            training_data.qdrant_id = f"train_{training_data.id}"
-            logger.info(f"Added to VectorDB: {training_data.id}")
-            db.commit()
-            vectordb_ok = True
+            db.flush()
+            logger.info(f"Added training_dataset: {training_data.id}")
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to save to VectorDB: {e}")
+        logger.error(f"Failed to save training data: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"VectorDB 저장 실패: {str(e)}"
+            detail=f"학습 데이터 저장 실패: {str(e)}"
         )
 
-    # 2) VectorDB 성공 시에만 is_verified 업데이트
+    # 2) is_verified 업데이트
     try:
-        analyzed_fresh = db.query(AnalyzedVehicle).filter(
-            AnalyzedVehicle.id == analyzed_id
-        ).first()
-        analyzed_fresh.is_verified = True
-        analyzed_fresh.verified_by = "admin"
-        analyzed_fresh.verified_at = datetime.now()
+        analyzed.is_verified = True
+        analyzed.verified_by = "admin"
+        analyzed.verified_at = datetime.now()
         db.commit()
-        db.refresh(analyzed_fresh)
+        db.refresh(analyzed)
 
-        return {"message": "Saved to VectorDB successfully", "data": analyzed_fresh.to_dict()}
+        return {"message": "검수 승인 완료", "data": analyzed.to_dict()}
 
     except Exception as e:
         db.rollback()
@@ -710,14 +515,12 @@ def _delete_analyzed_vehicle(analyzed: AnalyzedVehicle, db: Session) -> dict:
     - 크롭 이미지 파일
     - 원본 업로드 이미지 파일 (raw_result["original_image"] + original_image_path 둘 다)
     - training_dataset 레코드 (존재할 경우)
-    - Qdrant 벡터 (qdrant_id 존재할 경우)
     - analyzed_vehicles DB 레코드 (호출자가 commit 해야 함)
 
     반환: {"deleted_files": int, "failed_files": int}
     """
     import os
     from studio.models.training_dataset import TrainingDataset
-    from studio.services.vectordb import vectordb_service
 
     deleted_files = 0
     failed_files = 0
@@ -749,17 +552,12 @@ def _delete_analyzed_vehicle(analyzed: AnalyzedVehicle, db: Session) -> dict:
                 logger.warning(f"Failed to delete original file {original_path}: {e}")
                 failed_files += 1
 
-    # 3. training_dataset + Qdrant (존재할 경우 무조건 삭제)
+    # 3. training_dataset 삭제 (존재할 경우)
     try:
         training = db.query(TrainingDataset).filter(
             TrainingDataset.image_path == analyzed.image_path
         ).first()
         if training:
-            if training.qdrant_id:
-                try:
-                    vectordb_service.delete_training_image(training.id)
-                except Exception as e:
-                    logger.warning(f"Failed to delete from Qdrant: {e}")
             db.delete(training)
             db.flush()
     except Exception as e:
@@ -775,7 +573,7 @@ def _delete_analyzed_vehicle(analyzed: AnalyzedVehicle, db: Session) -> dict:
 async def batch_delete_all_analyzed_vehicles(
     db: Session = Depends(get_db)
 ):
-    """미검수 분석 결과 전체 삭제 (이미지 파일 + training_dataset + Qdrant + DB 레코드)"""
+    """미검수 분석 결과 전체 삭제 (이미지 파일 + training_dataset + DB 레코드)"""
     all_unverified = db.query(AnalyzedVehicle).filter(
         AnalyzedVehicle.is_verified == False
     ).all()
@@ -805,7 +603,7 @@ async def delete_analyzed_vehicle(
     analyzed_id: int,
     db: Session = Depends(get_db)
 ):
-    """분석 결과 삭제 (크롭 이미지 + 원본 업로드 파일 + training_dataset + Qdrant + MySQL 레코드)"""
+    """분석 결과 삭제 (크롭 이미지 + 원본 업로드 파일 + training_dataset + MySQL 레코드)"""
     analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
     if not analyzed:
         raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
@@ -916,178 +714,6 @@ async def analyze_single_image(
             status_code=500,
             detail=f"Analysis failed: {str(e)}"
         )
-
-
-# 벡터 DB 동기화 API
-@router.post("/sync-vectordb")
-async def sync_vector_database(
-    db: Session = Depends(get_db)
-):
-    """
-    벡터 데이터베이스 동기화 (학습 이미지 → training_images 컬렉션)
-    - Incremental sync: qdrant_id가 없는 레코드만 동기화
-    - JOIN 최적화: N+1 쿼리 제거
-    """
-    from sqlalchemy import func as sql_func
-    from sqlalchemy.orm import joinedload
-    from studio.services.vectordb import vectordb_service
-    from studio.services.embedding import embedding_service
-    from studio.models.training_dataset import TrainingDataset
-
-    BATCH_SIZE = 100
-
-    results = {
-        "training": {"total": 0, "synced": 0, "errors": 0, "skipped": 0}
-    }
-
-    # Incremental sync: qdrant_id가 없는 것만 카운트
-    total = db.query(sql_func.count(TrainingDataset.id)).filter(
-        TrainingDataset.qdrant_id.is_(None)
-    ).scalar()
-    results["training"]["total"] = total
-
-    if total == 0:
-        logger.info("All training data already synced to Qdrant")
-        results["stats"] = vectordb_service.get_collection_stats()
-        return results
-
-    # 커서 기반 페이지네이션 + JOIN 최적화
-    loop = asyncio.get_running_loop()
-    last_id = 0
-    while True:
-        batch = db.query(TrainingDataset).options(
-            joinedload(TrainingDataset.manufacturer),
-            joinedload(TrainingDataset.model)
-        ).filter(
-            TrainingDataset.id > last_id,
-            TrainingDataset.qdrant_id.is_(None)  # Incremental sync
-        ).order_by(TrainingDataset.id.asc()).limit(BATCH_SIZE).all()
-
-        if not batch:
-            break
-
-        for data in batch:
-            try:
-                # 이미지 임베딩 생성
-                embedding = await loop.run_in_executor(
-                    None, embedding_service.encode_image, data.image_path
-                )
-
-                # 제조사/모델 이름 (이미 joinedload로 로드됨, 추가 쿼리 없음)
-                mfr = data.manufacturer
-                mdl = data.model
-
-                # Qdrant에 추가
-                success = await loop.run_in_executor(
-                    None,
-                    functools.partial(
-                        vectordb_service.add_training_image,
-                        training_id=data.id,
-                        image_path=data.image_path,
-                        manufacturer_id=data.manufacturer_id,
-                        model_id=data.model_id,
-                        embedding=embedding,
-                        metadata=None,
-                        manufacturer_korean=mfr.korean_name if mfr else None,
-                        manufacturer_english=mfr.english_name if mfr else None,
-                        model_korean=mdl.korean_name if mdl else None,
-                        model_english=mdl.english_name if mdl else None,
-                    )
-                )
-
-                if success:
-                    results["training"]["synced"] += 1
-                    data.qdrant_id = f"train_{data.id}"
-                else:
-                    results["training"]["errors"] += 1
-
-            except Exception as e:
-                logger.error(f"Failed to sync training data {data.id}: {e}")
-                results["training"]["errors"] += 1
-
-        last_id = batch[-1].id
-        db.commit()  # 배치 단위 커밋
-
-    results["stats"] = vectordb_service.get_collection_stats()
-
-    return results
-
-
-# 벡터 DB 초기화 (마이그레이션용 — 완료 후 제거)
-@router.delete("/vectordb-reset")
-async def reset_vector_database():
-    """Qdrant 컬렉션 초기화: 1280d(EfficientNetV2-M) 스키마로 재생성.
-    마이그레이션 완료 후 이 엔드포인트를 제거할 것."""
-    from studio.services.vectordb import vectordb_service
-    vectordb_service.clear_all_collections()
-    return {"status": "reset complete, collection recreated at 1280d"}
-
-
-@router.post("/recreate-collection")
-async def recreate_qdrant_collection(db: Session = Depends(get_db)):
-    """
-    training_images Qdrant 컬렉션을 삭제하고 EfficientNetV2-M(1280d)으로 재생성.
-    training_dataset의 모든 레코드를 새 모델로 재임베딩하여 저장.
-
-    주의: 이 작업은 파괴적 연산이므로 운영자가 수동으로 실행해야 합니다.
-    작업 완료까지 수 분이 소요될 수 있습니다.
-    """
-    from sqlalchemy.orm import joinedload
-    from studio.models.training_dataset import TrainingDataset
-    from studio.services.vectordb import vectordb_service
-    from studio.services.embedding import embedding_service
-
-    records = (
-        db.query(TrainingDataset)
-        .options(
-            joinedload(TrainingDataset.manufacturer),
-            joinedload(TrainingDataset.model),
-        )
-        .all()
-    )
-
-    record_dicts = [
-        {
-            "id": r.id,
-            "image_path": r.image_path,
-            "manufacturer_id": r.manufacturer_id,
-            "model_id": r.model_id,
-            "manufacturer_korean": r.manufacturer.korean_name if r.manufacturer else None,
-            "manufacturer_english": r.manufacturer.english_name if r.manufacturer else None,
-            "model_korean": r.model.korean_name if r.model else None,
-            "model_english": r.model.english_name if r.model else None,
-        }
-        for r in records
-    ]
-
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None,
-        functools.partial(
-            vectordb_service.recreate_collection_with_reembedding,
-            embedding_fn=embedding_service.encode_batch_images,
-            records=record_dicts,
-        ),
-    )
-
-    logger.info(f"Qdrant 재임베딩 완료: {result}")
-    return {
-        "message": "Qdrant 컬렉션 재생성 및 재임베딩 완료",
-        **result,
-    }
-
-
-# 벡터 DB 통계 조회
-@router.get("/vectordb-stats")
-async def get_vectordb_stats():
-    """벡터 데이터베이스 통계 정보"""
-    from studio.services.vectordb import vectordb_service
-    from studio.services.embedding import embedding_service
-
-    return {
-        "collections": vectordb_service.get_collection_stats(),
-        "embedding": embedding_service.get_model_info()
-    }
 
 
 # 데이터베이스 통계 조회

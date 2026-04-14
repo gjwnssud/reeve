@@ -22,10 +22,6 @@ class Settings(BaseSettings):
     mysql_user: str = Field(default="reeve_user", alias="MYSQL_USER")
     mysql_password: str = Field(default="", alias="MYSQL_PASSWORD")
 
-    # Qdrant 설정
-    qdrant_host: str = Field(default="localhost", alias="QDRANT_HOST")
-    qdrant_port: int = Field(default=6333, alias="QDRANT_PORT")
-
     # OpenAI API
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: Optional[str] = Field(default="gpt-5-mini", alias="OPENAI_MODEL")
@@ -115,11 +111,6 @@ class Settings(BaseSettings):
     def async_database_url(self) -> str:
         """비동기 SQLAlchemy 데이터베이스 URL 생성"""
         return f"mysql+aiomysql://{self.mysql_user}:{self.mysql_password}@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}?charset=utf8mb4"
-
-    @property
-    def qdrant_url(self) -> str:
-        """Qdrant HTTP 클라이언트 URL 생성"""
-        return f"http://{self.qdrant_host}:{self.qdrant_port}"
 
     @property
     def allowed_extensions_list(self) -> list[str]:

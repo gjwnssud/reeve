@@ -29,7 +29,6 @@ class TrainingDataset(Base):
         index=True,
         comment="모델 ID"
     )
-    qdrant_id = Column(String(255), nullable=True, index=True, comment="QdrantDB 문서 ID")
     created_at = Column(DateTime, default=func.now(), index=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -38,7 +37,7 @@ class TrainingDataset(Base):
     model = relationship("VehicleModel", back_populates="training_datasets")
 
     def __repr__(self):
-        return f"<TrainingDataset(id={self.id}, image_path={self.image_path}, qdrant_id={self.qdrant_id})>"
+        return f"<TrainingDataset(id={self.id}, image_path={self.image_path})>"
 
     def to_dict(self):
         """딕셔너리 변환 (API 응답용)"""
@@ -47,7 +46,6 @@ class TrainingDataset(Base):
             "image_path": self.image_path,
             "manufacturer_id": self.manufacturer_id,
             "model_id": self.model_id,
-            "qdrant_id": self.qdrant_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
