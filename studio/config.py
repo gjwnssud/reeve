@@ -65,23 +65,6 @@ class Settings(BaseSettings):
         description="자동 정리 실행 시간 (0-23시)"
     )
 
-    # Qdrant 사전 중복제거 설정
-    dedup_enabled: bool = Field(
-        default=True,
-        alias="DEDUP_ENABLED",
-        description="분석 전 Qdrant 학습 데이터로 사전 중복제거 활성화"
-    )
-    dedup_similarity_threshold: float = Field(
-        default=0.92,
-        alias="DEDUP_SIMILARITY_THRESHOLD",
-        description="중복으로 판정할 코사인 유사도 임계값 (0.0~1.0)"
-    )
-    dedup_top_k: int = Field(
-        default=3,
-        alias="DEDUP_TOP_K",
-        description="중복제거 검색 시 조회할 상위 결과 수"
-    )
-
     # Trainer 서비스 URL (파인튜닝 API)
     trainer_url: str = Field(
         default="http://localhost:8002",

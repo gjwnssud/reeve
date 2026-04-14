@@ -978,27 +978,6 @@ function handleStreamEvent(imageId, data, countStats = false) {
         }
         updateStatus(imageId, 'analyzing', data.message || '분석 중');
 
-    } else if (data.event === 'dedup_match') {
-        // 학습 데이터 중복제거 매치
-        if (progressBar) {
-            const fill = progressBar.querySelector('.progress-bar');
-            fill.style.width = data.progress + '%';
-        }
-        updateStatus(imageId, 'analyzing', data.message || '학습 데이터 일치');
-
-        // dedup 배지 표시
-        const infoDiv = document.getElementById(`info-${imageId}`);
-        if (infoDiv) {
-            let badge = infoDiv.querySelector('.dedup-badge');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'badge bg-info-subtle text-info-emphasis mt-1';
-                const h4 = infoDiv.querySelector('h6') || infoDiv.querySelector('h4');
-                if (h4) h4.after(badge);
-            }
-            badge.textContent = data.message || `학습 데이터 일치 (유사도: ${data.similarity})`;
-        }
-
     } else if (data.event === 'completed') {
         imageState.result = data.result;
 

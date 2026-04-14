@@ -88,8 +88,6 @@ Three microservices communicate over a shared Docker network:
 | `GEMINI_MODEL` | gemini-2.5-flash | Gemini 모델 (교차 검증용) |
 | `STUDIO_VLM_MODEL` | qwen3-vl:8b | ollama 백엔드 VLM |
 | `FUZZY_MATCH_THRESHOLD` | 80 | 모델명 퍼지 매칭 임계값 (0~100) |
-| `DEDUP_ENABLED` | true | 중복 이미지 검사 |
-| `DEDUP_SIMILARITY_THRESHOLD` | 0.92 | 중복 판정 코사인 유사도 임계값 |
 | `ANALYZED_VEHICLES_RETENTION_DAYS` | 30 | 분석 결과 보관 기간 (일) |
 | `CLEANUP_HOUR` | 3 | 자동 정리 실행 시각 |
 

@@ -19,9 +19,6 @@ openai==1.59.7
 # Google Gemini API (교차 검증용)
 google-generativeai>=0.8.0
 
-# Local LLM (Phase 2 - Production)
-llama-cpp-python==0.3.4
-
 # Embeddings and NLP
 sentence-transformers==3.4.0
 torch==2.10.0
