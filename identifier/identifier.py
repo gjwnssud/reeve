@@ -4,7 +4,7 @@
 
 판별 모드 (IDENTIFIER_MODE):
   efficientnet : EfficientNetV2-M 분류기 (기본값)
-                 confidence ≥ classifier_confidence_threshold(기본 0.80) → identified
+                 confidence ≥ CLASSIFIER_CONFIDENCE_THRESHOLD(기본 0.80) → identified
                  그 미만 구간은 모두 low_confidence로 반환 (VLM 폴백 없음, 단건/배치 동일)
   vlm_only     : VLM만으로 판별
 """
@@ -107,7 +107,7 @@ class VehicleIdentifier:
     차량 이미지 판별기
 
     EfficientNetV2-M 분류기로 차량을 직접 판별한다.
-    신뢰도 ≥ classifier_confidence_threshold → identified,
+    신뢰도 ≥ CLASSIFIER_CONFIDENCE_THRESHOLD(기본 0.80) → identified,
     그 미만 구간은 모두 low_confidence 반환 (VLM 폴백 없음).
     """
 
@@ -362,13 +362,7 @@ class VehicleIdentifier:
                 class_idx, confidence = results[0]
                 entry = self.classifier.class_mapping["classes"][str(class_idx)]
 
-                # identified 기준: 고정값 > 0이면 사용, 아니면 confidence_threshold (0.80)
-                clf_identified = (
-                    settings.classifier_confidence_threshold
-                    if settings.classifier_confidence_threshold > 0
-                    else settings.confidence_threshold
-                )
-                # VLM 폴백 기준
+                clf_identified = settings.classifier_confidence_threshold
                 clf_vlm_fallback = settings.classifier_low_confidence_threshold
 
                 if confidence >= clf_identified:
@@ -477,7 +471,7 @@ class VehicleIdentifier:
         img_h: int,
     ) -> IdentificationResult:
         """VLMResult → IdentificationResult 변환"""
-        if vlm.manufacturer_korean and vlm.confidence >= settings.confidence_threshold:
+        if vlm.manufacturer_korean and vlm.confidence >= settings.classifier_confidence_threshold:
             status = "identified"
             message = "VLM이 차량을 판별하였습니다."
         elif vlm.manufacturer_korean:
@@ -695,11 +689,7 @@ class VehicleIdentifier:
             result_map: Dict[int, IdentificationResult] = {}
 
             if classify_indices and self.classifier and self.classifier.has_classification_head:
-                clf_identified = (
-                    settings.classifier_confidence_threshold
-                    if settings.classifier_confidence_threshold > 0
-                    else settings.confidence_threshold
-                )
+                clf_identified = settings.classifier_confidence_threshold
                 clf_vlm_fallback = settings.classifier_low_confidence_threshold
                 try:
                     clf_results = self.classifier.classify(

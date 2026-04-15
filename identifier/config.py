@@ -26,9 +26,6 @@ class IdentifierSettings(BaseSettings):
     max_upload_size: int = Field(default=5242880, alias="MAX_UPLOAD_SIZE")  # 5MB
     allowed_extensions: str = Field(default="jpg,jpeg,png,webp", alias="ALLOWED_EXTENSIONS")
 
-    # 판별 알고리즘 설정
-    confidence_threshold: float = Field(default=0.80, alias="IDENTIFIER_CONFIDENCE_THRESHOLD")
-
     # 차량 감지 (YOLO26)
     vehicle_detection: bool = Field(default=True, alias="IDENTIFIER_VEHICLE_DETECTION")
     yolo_confidence: float = Field(default=0.25, alias="IDENTIFIER_YOLO_CONFIDENCE")
@@ -57,18 +54,15 @@ class IdentifierSettings(BaseSettings):
         description="class_mapping.json 파일 경로"
     )
     classifier_confidence_threshold: float = Field(
-        default=0.0, alias="CLASSIFIER_CONFIDENCE_THRESHOLD",
-        description=(
-            "EfficientNetV2-M 분류기 'identified' 판정 최소 신뢰도. "
-            "0이면 confidence_threshold (IDENTIFIER_CONFIDENCE_THRESHOLD) 값을 자동 사용."
-        )
+        default=0.80, alias="CLASSIFIER_CONFIDENCE_THRESHOLD",
+        description="EfficientNetV2-M 분류기 'identified' 판정 최소 신뢰도."
     )
     classifier_low_confidence_threshold: float = Field(
         default=0.40, alias="CLASSIFIER_LOW_CONFIDENCE_THRESHOLD",
         description=(
-            "EfficientNetV2-M 분류기에서 VLM 폴백으로 내려가는 최소 신뢰도. "
-            "이 값 이상이면 분류기 결과를 low_confidence로 반환 (VLM 없음). "
-            "이 값 미만이면 VLM 폴백 실행."
+            "로그 메시지 구분용 하한 신뢰도. "
+            "이 값 이상이면 '중간', 미만이면 '부족'으로 로깅한다. "
+            "판별 결과(low_confidence)는 동일하며 실제 분기에는 영향 없음."
         )
     )
 

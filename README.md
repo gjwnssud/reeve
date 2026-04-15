@@ -32,8 +32,8 @@ Trainer (8002) — EfficientNet / LLM 파인튜닝 (LlamaFactory or MLX)
 **식별 파이프라인 (Identifier, efficientnet 모드 기준):**
 1. **YOLO26** — 차량 바운딩 박스 탐지 및 크롭
 2. **EfficientNetV2-M** — 1280차원 특징 벡터 추출 후 softmax 분류
-3. 신뢰도 ≥ identified 임계값 → `identified` 반환 (`CLASSIFIER_CONFIDENCE_THRESHOLD > 0`이면 그 값, 아니면 `IDENTIFIER_CONFIDENCE_THRESHOLD`(기본 0.80) 사용)
-4. 임계값 미달 → `low_confidence` 반환
+3. 신뢰도 ≥ `CLASSIFIER_CONFIDENCE_THRESHOLD`(기본 0.80) → `identified` 반환
+4. 임계값 미달 → `low_confidence` 반환 (VLM 폴백 없음)
 
 식별 모드는 `IDENTIFIER_MODE` 환경변수로 전환: `efficientnet`(기본) / `vlm_only`.
 
@@ -93,7 +93,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `EMBEDDING_DEVICE` | `cuda` | 임베딩 연산 장치 (`cuda` / `cpu`) |
+| `EMBEDDING_DEVICE` | `cpu` | 임베딩 연산 장치 (`cuda` / `cpu`) |
 | `LOG_LEVEL` | `INFO` | 로그 레벨 |
 
 ### Studio (포트 8000)
@@ -113,10 +113,10 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `IDENTIFIER_MODE` | `efficientnet` | 식별 모드 (`efficientnet` / `vlm_only`) |
-| `CLASSIFIER_CONFIDENCE_THRESHOLD` | `0.0` | EfficientNet identified 임계값 (0이면 `IDENTIFIER_CONFIDENCE_THRESHOLD` 사용) |
-| `VLM_MODEL_NAME` | `qwen3-vl:8b` | Ollama VLM 모델명 |
+| `CLASSIFIER_CONFIDENCE_THRESHOLD` | `0.80` | EfficientNet `identified` 판정 최소 신뢰도 |
+| `CLASSIFIER_LOW_CONFIDENCE_THRESHOLD` | `0.40` | 로그 구분용 하한 신뢰도 (실제 분기에는 영향 없음) |
+| `VLM_MODEL_NAME` | `qwen3-vl:8b` | Ollama VLM 모델명 (`vlm_only` 모드에서 사용) |
 | `VLM_TIMEOUT` | `30.0` | VLM 추론 타임아웃 (초) |
-| `IDENTIFIER_CONFIDENCE_THRESHOLD` | `0.80` | 식별 신뢰도 임계값 |
 | `IDENTIFIER_YOLO_CONFIDENCE` | `0.25` | YOLO 탐지 신뢰도 |
 | `IDENTIFIER_ENABLE_TORCH_COMPILE` | `true` | torch.compile 활성화 (ARM에서는 false) |
 | `IDENTIFIER_MAX_BATCH_FILES` | `100` | 배치 최대 파일 수 |
@@ -160,7 +160,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 }
 ```
 
-status 해석: `identified` — 신뢰할 수 있는 결과 / `low_confidence` — 후보 있음, 수동 확인 필요 / `no_match` — 유사 학습 데이터 없음
+status 해석: `identified` — 신뢰할 수 있는 결과 / `low_confidence` — 후보 있지만 확신 부족, 수동 확인 필요 / `no_match` — 분류기 미로드 또는 예외 발생
 
 ### 비동기 처리 흐름
 

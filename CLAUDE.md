@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Reeve** is an AI-powered vehicle manufacturer and model auto-classification system. A monorepo of three FastAPI microservices backed by MySQL, Redis, and Ollama.
+**Reeve** is an AI-powered vehicle manufacturer and model auto-classification system. A monorepo of three FastAPI microservices backed by MySQL, Redis, and Ollama. Qdrant 의존성 없음.
 
 ## Development Commands
 
@@ -31,7 +31,7 @@ Three microservices communicate over a shared Docker network:
 | Service | Port | Purpose |
 |---------|------|---------|
 | `studio` | 8000 | Web UI, admin CRUD, image upload, vision pre-analysis |
-| `identifier` | 8001 | ML pipeline: YOLO → EfficientNetV2-M → VLM fallback |
+| `identifier` | 8001 | ML pipeline: YOLO → EfficientNetV2-M (→ low_confidence, no VLM fallback) or vlm_only |
 | `trainer` | 8002 | EfficientNet / VLM fine-tuning |
 
 ---
@@ -93,7 +93,7 @@ Three microservices communicate over a shared Docker network:
 
 | 모드 | 동작 | 특징 |
 |------|------|------|
-| `efficientnet` (기본) | EfficientNet 분류 → confidence 미달 시 low_confidence | 빠름, 높은 정확도 |
+| `efficientnet` (기본) | EfficientNet 분류 → confidence 미달 시 low_confidence (VLM 폴백 없음) | 빠름, 높은 정확도 |
 | `vlm_only` | YOLO 크롭 → VLM만 사용, 실패 시 low_confidence | 느림, 파인튜닝 데이터 부족 시 유용 |
 
 ### efficientnet 모드 파이프라인
@@ -104,15 +104,19 @@ Three microservices communicate over a shared Docker network:
   → [EfficientNetV2-M] 크롭 이미지 → 1280d 특징 → softmax 분류
   → classifier_confidence_threshold 판단
       ├─ threshold 이상: "identified" 반환
-      └─ threshold 미만: "low_confidence" 반환
+      └─ threshold 미만: "low_confidence" 반환 (VLM 폴백 없음)
   → IdentificationResult 반환 (status, manufacturer, model, confidence)
 ```
 
 ### 분류기 신뢰도 임계값
 ```
-CLASSIFIER_CONFIDENCE_THRESHOLD > 0 → 해당 값을 'identified' 임계값으로 사용
-CLASSIFIER_CONFIDENCE_THRESHOLD = 0 (기본) → IDENTIFIER_CONFIDENCE_THRESHOLD (0.80) 폴백
-threshold 미만 → low_confidence 반환 (VLM 폴백 없음)
+confidence ≥ CLASSIFIER_CONFIDENCE_THRESHOLD (기본 0.80) → identified
+그 미만 → low_confidence 반환
+
+CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40): 로그 메시지 구분용
+  ≥ 0.40: "분류기 신뢰도 중간" 로그
+  < 0.40: "분류기 신뢰도 부족" 로그
+  (실제 반환 status는 동일하게 low_confidence)
 ```
 
 ### API 엔드포인트
@@ -128,7 +132,7 @@ threshold 미만 → low_confidence 반환 (VLM 폴백 없음)
 ### 주요 파일
 - `identifier/identifier.py` — 핵심 판별 로직 (VehicleIdentifier 클래스)
 - `identifier/efficientnet_classifier.py` — EfficientNetV2-M 래퍼 (분류 + 임베딩)
-- `identifier/vlm_service.py` — Ollama VLM 서비스
+- `identifier/vlm_service.py` — Ollama VLM 서비스 (`vlm_only` 모드 전용)
 - `identifier/tasks.py` — Celery 비동기 작업
 - `identifier/config.py` — 전체 설정값
 
@@ -136,11 +140,10 @@ threshold 미만 → low_confidence 반환 (VLM 폴백 없음)
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
 | `IDENTIFIER_MODE` | efficientnet | 판별 모드 (`efficientnet` \| `vlm_only`) |
-| `CLASSIFIER_CONFIDENCE_THRESHOLD` | 0.0 | identified 임계값 (0이면 `IDENTIFIER_CONFIDENCE_THRESHOLD` 폴백) |
-| `CLASSIFIER_LOW_CONFIDENCE_THRESHOLD` | 0.40 | low_confidence 반환 기준 임계값 |
-| `IDENTIFIER_CONFIDENCE_THRESHOLD` | 0.80 | 최종 판별 신뢰도 임계값 |
+| `CLASSIFIER_CONFIDENCE_THRESHOLD` | 0.80 | `identified` 판정 최소 신뢰도 |
+| `CLASSIFIER_LOW_CONFIDENCE_THRESHOLD` | 0.40 | 로그 tier 구분용 (실제 분기에 영향 없음) |
 | `IDENTIFIER_YOLO_CONFIDENCE` | 0.25 | YOLO 탐지 신뢰도 |
-| `VLM_MODEL_NAME` | qwen3-vl:8b | Ollama VLM 모델 |
+| `VLM_MODEL_NAME` | qwen3-vl:8b | Ollama VLM 모델 (`vlm_only` 모드에서 사용) |
 | `VLM_TIMEOUT` | 30.0 | VLM 타임아웃 (초) |
 | `EMBEDDING_DEVICE` | cpu | cuda \| cpu |
 | `IDENTIFIER_ENABLE_TORCH_COMPILE` | true | ARM에서는 false로 override |
@@ -207,10 +210,13 @@ threshold 미만 → low_confidence 반환 (VLM 폴백 없음)
 `docker/.env.example` → `docker/.env` 복사 후 설정:
 - `OPENAI_API_KEY` / `GEMINI_API_KEY` — 클라우드 Vision
 - `MYSQL_PASSWORD` — DB 비밀번호
-- `EMBEDDING_DEVICE` — `cuda` / `cpu`
-- `IDENTIFIER_MODE` — 판별 모드
+- `EMBEDDING_DEVICE` — `cuda` (Linux/Windows) / `cpu` (Mac)
+- `IDENTIFIER_MODE` — 판별 모드 (`efficientnet` / `vlm_only`)
 - `VISION_BACKEND` — `openai` / `ollama`
 - `ANALYZED_VEHICLES_RETENTION_DAYS` — 분석 결과 보관 기간
+
+**제거된 설정 (Qdrant 제거로 불필요):**
+`QDRANT_HOST`, `QDRANT_PORT`, `IDENTIFIER_TOP_K`, `IDENTIFIER_MIN_SIMILARITY`, `IDENTIFIER_VOTE_THRESHOLD`, `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD`, `VLM_FALLBACK_TO_EMBEDDING`
 
 ---
 
