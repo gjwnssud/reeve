@@ -7,3 +7,18 @@ dist
 .env.local
 .env.*.local
 coverage
+
+# TypeScript 컴파일 산물 (소스 옆 .js, .d.ts)
+apps/*/src/**/*.js
+apps/*/src/**/*.d.ts
+apps/*/vite.config.js
+apps/*/vite.config.d.ts
+apps/*/tailwind.config.js
+apps/*/tailwind.config.d.ts
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/ui/src/**/*.js
+packages/config/tailwind/*.d.ts
+
+# tsbuildinfo
+**/*.tsbuildinfo
