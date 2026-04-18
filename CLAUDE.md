@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Reeve** is an AI-powered vehicle manufacturer and model auto-classification system. A monorepo of three FastAPI microservices backed by MySQL, Redis, and Ollama. Qdrant 의존성 없음.
+**Reeve** is an AI-powered vehicle manufacturer and model auto-classification system. A monorepo of three FastAPI microservices (+ React/Vite 프론트엔드 pnpm 워크스페이스) backed by MySQL, Redis, and Ollama. Qdrant 의존성 없음(v2.1에서 제거).
 
 ## Development Commands
 
@@ -26,13 +26,16 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up 
 
 ## Architecture
 
-Three microservices communicate over a shared Docker network:
+Three microservices communicate over a shared Docker network. 두 개의 React SPA(`studio/static`, `identifier/static`)가 각 서비스의 `/static/`에 서빙됨.
 
 | Service | Port | Purpose |
 |---------|------|---------|
 | `studio` | 8000 | Web UI, admin CRUD, image upload, vision pre-analysis |
 | `identifier` | 8001 | ML pipeline: YOLO → EfficientNetV2-M (→ low_confidence, no VLM fallback) or vlm_only |
 | `trainer` | 8002 | EfficientNet / VLM fine-tuning |
+| `redis` | 6379 | Celery broker/backend (24h 결과 TTL) |
+| `ollama` | 11434 | Qwen3-VL 로컬 VLM (vlm_only 또는 Studio `ollama` 백엔드에서 사용) |
+| `mysql` | 3306 | 제조사·모델·분석 이력·학습 데이터 |
 
 ---
 
@@ -45,16 +48,21 @@ Three microservices communicate over a shared Docker network:
 
 ### API 엔드포인트
 - `POST /api/analyze/vehicle` — 이미지 분석 (OpenAI/Gemini/Ollama Vision)
+- `POST /api/detect-vehicle` — YOLO 탐지만 수행
+- `POST /api/analyze-vehicle-stream` — SSE 스트리밍 분석 (단계별 진행)
 - `GET/POST /admin/manufacturers` — 제조사 CRUD
 - `GET/POST /admin/vehicle-models` — 차량 모델 CRUD
 - `GET /admin/analyzed-vehicles` — 분석 결과 목록/검수 큐
 - `PATCH /admin/analyzed-vehicles/{id}/verify` — 검수 승인 → TrainingDataset 적재
+- `POST /admin/analyze-batch` — 배치 분석
 - `POST /finetune/export-efficientnet` — EfficientNet 학습용 CSV export (스레드풀 실행)
 - `POST /finetune/export` — VLM 학습용 ShareGPT JSON export
 - `POST /finetune/train/start` — Trainer 학습 시작 프록시
-- `GET /finetune/train/status` / `GET /finetune/train/raw-log` — 학습 상태 조회
+- `GET /finetune/train/status` / `GET /finetune/train/raw-log` / `GET /finetune/train/logs` — 학습 상태·로그 조회
 - `GET /finetune/evaluate` — Before/After 정확도 평가
+- `GET /finetune/hw-profile` — 하드웨어 권장 파라미터
 - `GET /health` — 헬스체크
+- SPA: `/` → `/static/` 리다이렉트, `/{any}` → `static/index.html` catch-all (모든 API 라우터 등록 후 마운트)
 
 ### 주요 파일
 - `studio/main.py` — 앱 진입점, 라이프사이클, cleanup 스케줄러
@@ -121,13 +129,16 @@ CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40): 로그 메시지 구분용
 
 ### API 엔드포인트
 - `POST /identify` — 단건 동기 판별
+- `POST /identify/stream` — SSE 스트리밍 판별 (단계별 진행: detect → classify → done)
 - `POST /identify/batch` — 배치 동기 판별 (최대 100개, 100MB)
 - `POST /async/identify` — 단건 비동기 판별 → task_id 반환
 - `POST /async/identify/batch` — 배치 비동기 → task_id 반환
 - `GET /async/result/{task_id}` — 비동기 결과 조회
 - `POST /detect` — YOLO 차량 탐지만 수행
 - `POST /admin/reload-efficientnet` — EfficientNet 모델 핫리로드
+- `POST /admin/reload-vlm` — VLM 모델 핫리로드 (`vlm_only` 모드)
 - `GET /health` — 헬스체크 (IDENTIFIER_MODE 포함)
+- SPA: `/` → `index.html`, `/{any}` → `static/index.html` catch-all (API 라우터 등록 이후)
 
 ### 주요 파일
 - `identifier/identifier.py` — 핵심 판별 로직 (VehicleIdentifier 클래스)
@@ -200,8 +211,47 @@ CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40): 로그 메시지 구분용
 - `POST /train/stop` — 학습 중지
 - `GET /train/logs` — JSONL 로그 (tail)
 - `GET /train/raw-log` — 원시 로그 (tail)
+- `GET /train/deploy-config` — 배포 대상·경로 설정 조회
+- `POST /train/export` — 학습 결과(Checkpoint/ONNX 등) export
+- `GET /model-info` — 현재 모델/백엔드 정보
+- `GET /deploy/cmd` — Identifier 측 배포 명령 힌트
+- `POST /deploy/ollama` — VLM 백엔드일 때 Ollama 모델 배포
 - `GET /hw-profile` — 하드웨어 감지 + 권장 파라미터
 - `GET /health` — 헬스체크
+
+---
+
+## Frontend (`frontend/`)
+
+pnpm 워크스페이스 모노레포 (Node ≥ 20, pnpm 9.15.0). 두 개의 React+Vite SPA가 각 백엔드의 `/static/`으로 빌드된다.
+
+### 구조
+```
+frontend/
+├── apps/
+│   ├── studio/         # @reeve/studio — Vite dev: 5173, build → ../../../studio/static
+│   └── identifier/     # @reeve/identifier — Vite dev: 5174, build → ../../../identifier/static
+├── packages/
+│   ├── shared/         # API 타입(openapi-typescript 생성), 공용 훅·유틸
+│   ├── ui/             # shadcn/ui 기반 공통 UI 컴포넌트
+│   └── config/         # eslint/tsconfig/tailwind 공통 설정
+└── scripts/gen-types.ts  # FastAPI OpenAPI → TypeScript 타입 생성
+```
+
+### 스크립트 (frontend/ 루트에서)
+| 명령 | 설명 |
+|------|------|
+| `pnpm dev:studio` | Studio SPA dev server (5173, `STUDIO_BACKEND_URL` → 기본 `http://studio:8000`) |
+| `pnpm dev:identifier` | Identifier SPA dev server (5174, `IDENTIFIER_BACKEND_URL`) |
+| `pnpm build:studio` / `pnpm build:identifier` / `pnpm build:all` | 정적 산출물 빌드 |
+| `pnpm gen:types` | 백엔드 OpenAPI로 타입 재생성 (PR에서 `gen:types:check`로 drift 검증) |
+| `pnpm typecheck` / `pnpm lint` / `pnpm format` | 전 워크스페이스 일괄 실행 |
+
+### 스택
+- React 18 + React Router + TypeScript (strict) + Vite (SWC)
+- TanStack Query / TanStack Table, Zustand 상태 관리
+- Tailwind + shadcn/ui
+- Vite `base: "/static/"`, 빌드 산출물은 백엔드 컨테이너가 FastAPI `StaticFiles`로 서빙
 
 ---
 
@@ -237,6 +287,10 @@ CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40): 로그 메시지 구분용
 | `docker/Dockerfile` | Studio 이미지 (`--reload-dir /app/studio`) |
 | `docker/docker-compose.dev.yml` | 개발 오버라이드 (Studio 메모리 4G) |
 | `docs/ASYNC_USAGE.md` | 비동기 API 사용 가이드 |
+| `frontend/apps/studio/` | Studio React SPA (Vite `base=/static/`, 빌드 → `studio/static/`) |
+| `frontend/apps/identifier/` | Identifier React SPA (Vite `base=/static/`, 빌드 → `identifier/static/`) |
+| `frontend/packages/shared/src/api-types/` | OpenAPI로 자동 생성되는 API 타입 (수정 금지) |
+| `frontend/scripts/gen-types.ts` | FastAPI OpenAPI → TypeScript 타입 생성 스크립트 |
 
 ---
 

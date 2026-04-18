@@ -94,7 +94,7 @@ package_dev() {
     rsync -a "${RSYNC_EXCLUDES[@]}" "${RSYNC_FRONTEND_EXCLUDES[@]}" "$ROOT/frontend/" "$dest/frontend/"
 
     # 빈 디렉토리 생성 (Docker 볼륨 마운트 대상)
-    mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
+    mkdir -p "$dest/data/mysql" "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
              "$dest/data/finetune" \
              "$dest/data/models/efficientnet" "$dest/data/models/vlm" \
@@ -184,7 +184,6 @@ echo "서비스가 시작되었습니다:"
 echo "  Studio        : http://localhost:8000"
 echo "  Identifier    : http://localhost:8001"
 echo "  Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)"
-echo "  Qdrant        : http://localhost:6333/dashboard"
 echo "  Ollama        : http://localhost:11434  (NVIDIA GPU)"
 EOF
 
@@ -290,7 +289,6 @@ echo 서비스가 시작되었습니다:
 echo   Studio        : http://localhost:8000
 echo   Identifier    : http://localhost:8001
 echo   Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)
-echo   Qdrant        : http://localhost:6333/dashboard
 EOF
 
     cat > "$dest/stop.bat" << 'EOF'
@@ -314,8 +312,8 @@ package_prod() {
     info "===== Prod $os 패키지 생성 시작 ====="
 
     rm -rf "$dest"
-    mkdir -p "$dest/snapshots" "$dest/models" \
-             "$dest/data/qdrant" "$dest/data/redis" \
+    mkdir -p "$dest/models" \
+             "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/shared" \
              "$dest/logs"
 
@@ -354,35 +352,17 @@ package_prod() {
     info "임시 이미지 삭제 중: $TMP_TAG"
     docker rmi "$TMP_TAG" > /dev/null 2>&1 || true
 
-    # Qdrant 스냅샷
-    set +e
-    if curl -s http://localhost:6333/healthz > /dev/null 2>&1; then
-        info "Qdrant 스냅샷 생성 중..."
-        local snapshot_resp
-        snapshot_resp=$(curl -s -X POST \
-            "http://localhost:6333/collections/training_images/snapshots" 2>/dev/null)
-        local snapshot_name
-        snapshot_name=$(echo "$snapshot_resp" | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); print(d['result']['name'])" 2>/dev/null)
-        if [ -n "$snapshot_name" ]; then
-            curl -s -o "$dest/snapshots/training_images.snapshot" \
-                "http://localhost:6333/collections/training_images/snapshots/$snapshot_name"
-            if [ $? -eq 0 ] && [ -s "$dest/snapshots/training_images.snapshot" ]; then
-                info "스냅샷 저장 완료: snapshots/training_images.snapshot"
-            else
-                rm -f "$dest/snapshots/training_images.snapshot"
-                warn "스냅샷 다운로드 실패. snapshots/ 폴더에 직접 넣으세요."
-            fi
-        else
-            warn "Qdrant 스냅샷 생성 실패."
-            warn "  Studio에서 데이터 동기화 후 다시 실행하거나 snapshots/ 에 직접 넣으세요."
-            [ -n "$snapshot_resp" ] && warn "  Qdrant 응답: $snapshot_resp"
-        fi
+    # EfficientNet 파인튜닝 모델 복사 (존재 시)
+    local eff_src="$ROOT/data/models/efficientnet"
+    if [ -d "$eff_src" ] && [ -n "$(ls -A "$eff_src" 2>/dev/null)" ]; then
+        info "EfficientNet 모델 복사 중..."
+        mkdir -p "$dest/models/efficientnet"
+        cp -r "$eff_src/." "$dest/models/efficientnet/"
+        info "EfficientNet 모델 복사 완료"
     else
-        warn "Qdrant가 실행되지 않아 스냅샷을 건너뜁니다."
-        warn "서비스 실행 후 다시 packaging하거나 snapshots/ 에 직접 넣으세요."
+        warn "data/models/efficientnet 가 비어있습니다."
+        warn "Trainer 학습 완료 후 다시 packaging하거나 models/efficientnet/ 에 .pth를 직접 넣으세요."
     fi
-    set -e
 
     # Ollama 모델 복사
     local ollama_src="$ROOT/data/ollama"
@@ -406,34 +386,11 @@ name: reeve-identifier
 
 # ──────────────────────────────────────────
 # Identifier 납품 패키지 (NVIDIA GPU)
-# 포함 서비스: qdrant + redis + identifier + celery-worker + ollama
+# 포함 서비스: redis + identifier + celery-worker + ollama
 # 이미지 빌드: docker build -t reeve-identifier:latest -f Dockerfile .
 # ──────────────────────────────────────────
 
 services:
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: reeve-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - ./data/qdrant:/qdrant/storage
-    environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-      - QDRANT__STORAGE__ON_DISK_PAYLOAD=true
-    networks:
-      - reeve-network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 3G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-
   redis:
     image: redis:7.4-alpine
     container_name: reeve-redis
@@ -461,14 +418,12 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data/shared:/app/shared
+      - ./models/efficientnet:/app/data/models/efficientnet
     environment:
-      - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - OLLAMA_BASE_URL=http://ollama:11434
       - EMBEDDING_DEVICE=cuda
     depends_on:
-      qdrant:
-        condition: service_started
       redis:
         condition: service_started
     networks:
@@ -492,15 +447,13 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data/shared:/app/shared
+      - ./models/efficientnet:/app/data/models/efficientnet
     environment:
-      - QDRANT_HOST=qdrant
       - REDIS_HOST=redis
       - OLLAMA_BASE_URL=http://ollama:11434
       - EMBEDDING_DEVICE=cuda
     depends_on:
       redis:
-        condition: service_started
-      qdrant:
         condition: service_started
     networks:
       - reeve-network
@@ -550,17 +503,13 @@ _write_prod_env_example() {
 # 이 파일을 .env로 복사 후 수정하세요
 # ──────────────────────────────────────────
 
-# Qdrant
-QDRANT_HOST=qdrant
-QDRANT_PORT=6333
-
 # Embedding
 EMBEDDING_DEVICE=cuda
 
-# 판별 모드: embedding_only | visual_rag | vlm_only
-IDENTIFIER_MODE=visual_rag
+# 판별 모드: efficientnet | vlm_only
+IDENTIFIER_MODE=efficientnet
 
-# VLM (Ollama)
+# VLM (Ollama) — vlm_only 모드에서만 사용
 # 기본 모델(파인튜닝 없음): qwen3-vl:8b
 # 파인튜닝 GGUF 배포 시: reeve-vlm-v1
 OLLAMA_BASE_URL=http://ollama:11434
@@ -569,17 +518,12 @@ VLM_MODEL_NAME=qwen3-vl:8b
 # 8192: ~1.1 GB (권장), 4096: ~0.6 GB, 16384: ~2.2 GB
 OLLAMA_NUM_CTX=8192
 VLM_TIMEOUT=30
-VLM_MAX_CANDIDATES=5
-VLM_FALLBACK_TO_EMBEDDING=true
 VLM_BATCH_CONCURRENCY=2
 
 # 판별 파라미터
 IDENTIFIER_PORT=8001
-IDENTIFIER_TOP_K=10
 CLASSIFIER_CONFIDENCE_THRESHOLD=0.80
-IDENTIFIER_MIN_SIMILARITY=0.70
-IDENTIFIER_VOTE_THRESHOLD=3
-IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD=0.3
+CLASSIFIER_LOW_CONFIDENCE_THRESHOLD=0.40
 IDENTIFIER_VEHICLE_DETECTION=true
 IDENTIFIER_YOLO_CONFIDENCE=0.25
 IDENTIFIER_CROP_PADDING=10
@@ -620,14 +564,14 @@ cd "$(dirname "$0")"
 echo "[Reeve Identifier] Linux 초기 설정"
 echo "======================================"
 
-echo "[1/5] Docker 확인 중..."
+echo "[1/6] Docker 확인 중..."
 if ! docker info > /dev/null 2>&1; then
     echo "[오류] Docker가 실행되지 않았습니다."
     exit 1
 fi
 echo "      OK"
 
-echo "[2/5] NVIDIA GPU 확인 중..."
+echo "[2/6] NVIDIA GPU 확인 중..."
 if ! nvidia-smi > /dev/null 2>&1; then
     echo "[오류] NVIDIA GPU를 감지하지 못했습니다."
     echo "       nvidia-container-toolkit이 설치되어 있는지 확인하세요."
@@ -637,7 +581,7 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | while read line
     echo "      GPU: $line"
 done
 
-echo "[3/5] 환경변수 파일 확인 중..."
+echo "[3/6] 환경변수 파일 확인 중..."
 if [ ! -f ".env" ]; then
     cp ".env.example" ".env"
     echo "      .env 파일이 생성되었습니다. 필요시 내용을 수정하세요."
@@ -645,7 +589,17 @@ else
     echo "      .env 파일 존재 확인"
 fi
 
-echo "[4/5] Identifier 이미지 확인 중..."
+echo "[4/6] EfficientNet 모델 확인 중..."
+EFF_MODEL=$(ls models/efficientnet/*.pth 2>/dev/null | head -1)
+if [ -n "$EFF_MODEL" ]; then
+    echo "      OK: $EFF_MODEL"
+else
+    echo "[경고] models/efficientnet/ 에 .pth 파일이 없습니다."
+    echo "       IDENTIFIER_MODE=efficientnet 모드에서는 파인튜닝된 모델이 필요합니다."
+    echo "       Trainer에서 학습 후 생성된 .pth 파일을 넣으세요."
+fi
+
+echo "[5/6] Identifier 이미지 확인 중..."
 if ! docker image inspect reeve-identifier:latest > /dev/null 2>&1; then
     IMAGE_TAR=$(ls reeve-identifier-*.tar.gz 2>/dev/null | head -1)
     if [ -n "$IMAGE_TAR" ]; then
@@ -667,39 +621,9 @@ else
     echo "      reeve-identifier:latest 확인"
 fi
 
-echo "[5/5] 서비스 시작 중..."
+echo "[6/6] 서비스 시작 중..."
 docker compose down 2>/dev/null || true
 docker compose up -d
-
-echo ""
-echo "Qdrant 준비 대기 중..."
-for i in $(seq 1 30); do
-    if curl -sf http://localhost:6333/healthz > /dev/null 2>&1; then
-        echo "Qdrant 준비 완료"
-        break
-    fi
-    sleep 2
-done
-
-set +e
-SNAPSHOT_FILE=$(ls snapshots/training_images*.snapshot 2>/dev/null | head -1)
-if [ -n "$SNAPSHOT_FILE" ]; then
-    echo ""
-    echo "Qdrant 스냅샷 복원 중: $SNAPSHOT_FILE"
-    if ! curl -sf http://localhost:6333/collections/training_images > /dev/null 2>&1; then
-        curl -s -X POST "http://localhost:6333/collections/training_images/snapshots/upload?priority=snapshot" \
-            -H "Content-Type:multipart/form-data" \
-            -F "snapshot=@$SNAPSHOT_FILE"
-        [ $? -eq 0 ] && echo "스냅샷 복원 완료" || echo "[경고] 스냅샷 복원 실패. setup.sh를 다시 실행하세요."
-    else
-        echo "training_images 컬렉션이 이미 존재합니다. 복원을 건너뜁니다."
-    fi
-else
-    echo ""
-    echo "[정보] snapshots/ 폴더에 스냅샷 파일이 없습니다."
-    echo "       Studio에서 스냅샷을 내보낸 후 이 폴더에 넣고 setup.sh를 다시 실행하세요."
-fi
-set -e
 
 echo ""
 echo "Ollama 준비 대기 중..."
@@ -739,7 +663,6 @@ echo "======================================"
 echo "설정 완료."
 echo "  Identifier API  : http://localhost:8001"
 echo "  Identifier Docs : http://localhost:8001/docs"
-echo "  Qdrant Dashboard: http://localhost:6333/dashboard"
 echo "======================================"
 EOF
 
@@ -756,7 +679,6 @@ echo ""
 echo "서비스가 시작되었습니다:"
 echo "  Identifier API  : http://localhost:8001"
 echo "  Identifier Docs : http://localhost:8001/docs"
-echo "  Qdrant Dashboard: http://localhost:6333/dashboard"
 EOF
 
     cat > "$dest/stop.sh" << 'EOF'
@@ -783,7 +705,7 @@ cd /d "%~dp0"
 echo [Reeve Identifier] Windows 초기 설정
 echo ======================================
 
-echo [1/5] Docker Desktop 확인 중...
+echo [1/6] Docker Desktop 확인 중...
 docker info > nul 2>&1
 if errorlevel 1 (
     echo [오류] Docker Desktop이 실행되지 않았습니다.
@@ -793,7 +715,7 @@ if errorlevel 1 (
 )
 echo       OK
 
-echo [2/5] NVIDIA GPU 확인 중...
+echo [2/6] NVIDIA GPU 확인 중...
 nvidia-smi > nul 2>&1
 if errorlevel 1 (
     echo [오류] NVIDIA GPU를 감지하지 못했습니다.
@@ -805,7 +727,7 @@ for /f "tokens=*" %%g in ('nvidia-smi --query-gpu=name,memory.total --format=csv
     echo       GPU: %%g
 )
 
-echo [3/5] 환경변수 파일 확인 중...
+echo [3/6] 환경변수 파일 확인 중...
 if not exist ".env" (
     copy ".env.example" ".env" > nul
     echo       .env 파일이 생성되었습니다. 필요시 내용을 수정하세요.
@@ -813,7 +735,18 @@ if not exist ".env" (
     echo       .env 파일 존재 확인
 )
 
-echo [4/5] Identifier 이미지 확인 중...
+echo [4/6] EfficientNet 모델 확인 중...
+set EFF_MODEL=
+for %%f in (models\efficientnet\*.pth) do set EFF_MODEL=%%f
+if defined EFF_MODEL (
+    echo       OK: %EFF_MODEL%
+) else (
+    echo [경고] models\efficientnet\ 에 .pth 파일이 없습니다.
+    echo        IDENTIFIER_MODE=efficientnet 모드에서는 파인튜닝된 모델이 필요합니다.
+    echo        Trainer에서 학습 후 생성된 .pth 파일을 넣으세요.
+)
+
+echo [5/6] Identifier 이미지 확인 중...
 docker image inspect reeve-identifier:latest > nul 2>&1
 if errorlevel 1 (
     set IMAGE_TAR=
@@ -847,46 +780,13 @@ if errorlevel 1 (
     echo       reeve-identifier:latest 확인
 )
 
-echo [5/5] 서비스 시작 중...
+echo [6/6] 서비스 시작 중...
 docker compose down 2>nul
 docker compose up -d
 if errorlevel 1 (
     echo [오류] 서비스 시작 실패.
     pause
     exit /b 1
-)
-
-echo.
-echo Qdrant 준비 대기 중...
-:QDRANT_WAIT
-timeout /t 2 /nobreak > nul
-curl -s http://localhost:6333/healthz > nul 2>&1
-if errorlevel 1 goto QDRANT_WAIT
-echo Qdrant 준비 완료
-
-set SNAPSHOT_FILE=
-for %%f in (snapshots\training_images*.snapshot) do set SNAPSHOT_FILE=%%f
-
-if defined SNAPSHOT_FILE (
-    echo.
-    echo Qdrant 스냅샷 복원 중: %SNAPSHOT_FILE%
-    curl -s http://localhost:6333/collections/training_images > nul 2>&1
-    if errorlevel 1 (
-        curl -s -X POST "http://localhost:6333/collections/training_images/snapshots/upload?priority=snapshot" ^
-            -H "Content-Type:multipart/form-data" ^
-            -F "snapshot=@%SNAPSHOT_FILE%"
-        if errorlevel 1 (
-            echo [경고] 스냅샷 복원 실패. setup.bat을 다시 실행하세요.
-        ) else (
-            echo 스냅샷 복원 완료
-        )
-    ) else (
-        echo training_images 컬렉션이 이미 존재합니다. 복원을 건너뜁니다.
-    )
-) else (
-    echo.
-    echo [정보] snapshots\ 폴더에 스냅샷 파일이 없습니다.
-    echo        Studio에서 스냅샷을 내보낸 후 이 폴더에 넣고 setup.bat을 다시 실행하세요.
 )
 
 echo.
@@ -937,7 +837,6 @@ echo ======================================
 echo 설정 완료.
 echo   Identifier API  : http://localhost:8001
 echo   Identifier Docs : http://localhost:8001/docs
-echo   Qdrant Dashboard: http://localhost:6333/dashboard
 echo ======================================
 pause
 EOF
@@ -961,7 +860,6 @@ echo.
 echo 서비스가 시작되었습니다:
 echo   Identifier API  : http://localhost:8001
 echo   Identifier Docs : http://localhost:8001/docs
-echo   Qdrant Dashboard: http://localhost:6333/dashboard
 EOF
 
     cat > "$dest/stop.bat" << 'EOF'
@@ -1015,7 +913,7 @@ package_dev_mac() {
     rsync -a "${RSYNC_EXCLUDES[@]}" "${RSYNC_FRONTEND_EXCLUDES[@]}" "$ROOT/frontend/" "$dest/frontend/"
 
     # 빈 디렉토리 생성
-    mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
+    mkdir -p "$dest/data/mysql" "$dest/data/redis" \
              "$dest/data/ollama" "$dest/data/hf-cache" "$dest/data/shared" \
              "$dest/data/finetune" \
              "$dest/data/models/efficientnet" "$dest/data/models/vlm" \
@@ -1062,7 +960,7 @@ if [ ! -d ".venv" ]; then
     echo "      .venv 가상환경 생성 완료"
 fi
 .venv/bin/pip install --quiet --upgrade pip
-# MLX (visual_rag / vlm_only 모드) + EfficientNet (efficientnet 모드) 양쪽 의존성 설치
+# MLX (vlm_only 모드) + EfficientNet (efficientnet 모드) 양쪽 의존성 설치
 .venv/bin/pip install --quiet mlx-lm mlx-vlm fastapi "uvicorn[standard]" pydantic-settings pyyaml psutil httpx
 .venv/bin/pip install --quiet torch==2.6.0 torchvision==0.21.0 timm Pillow
 echo "      mlx-lm, mlx-vlm, torch, timm, fastapi 설치 완료 (.venv)"
@@ -1133,7 +1031,7 @@ fi
 
 # 3. Trainer 네이티브 시작 — IDENTIFIER_MODE에 따라 백엔드 자동 결정
 #    efficientnet → TRAINER_BACKEND=efficientnet (Mac/Linux/Windows 공통)
-#    그 외(visual_rag, vlm_only) → Mac: mlx
+#    vlm_only → Mac: mlx
 if [ "${IDENTIFIER_MODE}" = "efficientnet" ]; then
     _TRAINER_BACKEND=efficientnet
     _TRAINER_LABEL="EfficientNet"
@@ -1157,7 +1055,7 @@ TRAINER_PID=$!
 echo "      PID: $TRAINER_PID (logs/trainer.log)"
 sleep 2
 
-# 4. Docker 서비스 시작 (studio, identifier, celery, mysql, qdrant, redis)
+# 4. Docker 서비스 시작 (studio, identifier, celery, mysql, redis)
 echo "[3/3] Docker 서비스 시작 중..."
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml down 2>/dev/null || true
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
@@ -1167,7 +1065,6 @@ echo "서비스가 시작되었습니다:"
 echo "  Studio        : http://localhost:8000"
 echo "  Identifier    : http://localhost:8001"
 echo "  Trainer (${_TRAINER_LABEL}) : http://localhost:8002  (네이티브 Apple Silicon)"
-echo "  Qdrant        : http://localhost:6333/dashboard"
 echo "  Ollama        : http://localhost:11434  (네이티브 Apple Silicon)"
 echo ""
 echo "로그 확인:"

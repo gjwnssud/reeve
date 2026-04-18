@@ -244,7 +244,7 @@ if static_path.exists():
 )
 async def health_check():
     """
-    EfficientNet-B3 임베딩 모델, YOLO 모델, Qdrant 연결 상태를 한번에 확인합니다.
+    EfficientNetV2-M 분류기와 YOLO 모델의 로드 상태를 한번에 확인합니다.
 
     모니터링 시스템의 헬스체크 엔드포인트 또는 서비스 점검 용도로 사용하세요.
 
