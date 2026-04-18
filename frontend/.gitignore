@@ -19,6 +19,7 @@ packages/*/src/**/*.js
 packages/*/src/**/*.d.ts
 packages/ui/src/**/*.js
 packages/config/tailwind/*.d.ts
+!packages/config/tailwind/preset.d.ts
 
 # tsbuildinfo
 **/*.tsbuildinfo

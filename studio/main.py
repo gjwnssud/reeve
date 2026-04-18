@@ -108,7 +108,7 @@ if settings.environment == "development":
 # 정적 파일 서빙 (React 빌드 결과물)
 static_path = Path(__file__).parent / "static"
 if static_path.exists():
-    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+    app.mount("/static", StaticFiles(directory=str(static_path), html=True), name="static")
 
 # 데이터 디렉토리 서빙 (업로드된 이미지)
 data_path = Path(__file__).parent.parent / "data"

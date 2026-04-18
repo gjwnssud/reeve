@@ -47,6 +47,7 @@ services:
       - "8000:8000"
     volumes:
       - ../studio:/app/studio
+      - /app/studio/static      # 이미지에서 빌드된 React 정적 파일 유지 (bind mount shadow 방지)
       - ../data:/app/data
       - ../logs:/app/logs
     environment:
@@ -72,6 +73,7 @@ services:
   identifier:
     volumes:
       - ../identifier:/app/identifier
+      - /app/identifier/static  # 이미지에서 빌드된 React 정적 파일 유지 (bind mount shadow 방지)
       - ../logs:/app/logs
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -80,6 +82,7 @@ services:
   celery-worker:
     volumes:
       - ../identifier:/app/identifier  # hot reload (identifier와 동일 코드베이스)
+      - /app/identifier/static
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     restart: no

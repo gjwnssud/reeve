@@ -9,7 +9,10 @@
     "./tsconfig/base.json": "./tsconfig/base.json",
     "./tsconfig/react.json": "./tsconfig/react.json",
     "./tsconfig/node.json": "./tsconfig/node.json",
-    "./tailwind/preset": "./tailwind/preset.js"
+    "./tailwind/preset": {
+      "types": "./tailwind/preset.d.ts",
+      "default": "./tailwind/preset.js"
+    }
   },
   "scripts": {
     "typecheck": "echo 'config: no typecheck'",
