@@ -1,3 +1,24 @@
+# ─── Stage 1: Frontend Build ───────────────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+
+RUN npm install -g pnpm@9.15.0 --quiet
+
+WORKDIR /workspace
+
+# Install dependencies (separate layer for caching — invalidated only on lockfile change)
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./frontend/
+COPY frontend/packages/config/package.json      ./frontend/packages/config/
+COPY frontend/packages/shared/package.json      ./frontend/packages/shared/
+COPY frontend/packages/ui/package.json          ./frontend/packages/ui/
+COPY frontend/apps/identifier/package.json      ./frontend/apps/identifier/
+
+RUN cd frontend && pnpm install --frozen-lockfile
+
+# Build — output goes to /workspace/identifier/static/ (vite outDir: ../../../identifier/static)
+COPY frontend/ ./frontend/
+RUN cd frontend/apps/identifier && pnpm build
+
+# ─── Stage 2: Python Runtime ───────────────────────────────────────────────
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -23,11 +44,12 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
 # EfficientNetV2-M 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "import timm; timm.create_model('tf_efficientnetv2_m.in21k_ft_in1k', pretrained=True, num_classes=0)"
 
-# YOLO26n 모델 사전 다운로드 (빌드 시 캐싱)
+# YOLO26m 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 
-# 애플리케이션 코드
 COPY identifier/ ./identifier/
+# 빌드된 React 프론트엔드로 교체
+COPY --from=frontend-builder /workspace/identifier/static/ ./identifier/static/
 
 # 시작 스크립트 실행 권한 및 LF 변환 (Windows 환경 대비)
 RUN sed -i 's/\r$//' /app/identifier/start.sh /app/identifier/start_worker.sh && \
@@ -38,5 +60,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8001
 
-# 시작 스크립트 사용 (workers 자동 계산)
 CMD ["/app/identifier/start.sh"]

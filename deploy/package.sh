@@ -34,6 +34,13 @@ RSYNC_EXCLUDES=(
     --exclude='.pytest_cache/'
 )
 
+RSYNC_FRONTEND_EXCLUDES=(
+    --exclude='node_modules/'
+    --exclude='.pnpm-store/'
+    --exclude='dist/'
+    --exclude='*.tsbuildinfo'
+)
+
 # ── compose 파일 경로 패치 (docker/ 기준 → 배포 패키지 루트 기준) ──
 # context: .. → context: .
 # dockerfile: docker/XXX → dockerfile: XXX
@@ -71,6 +78,7 @@ package_dev() {
     cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
     cp "$DOCKER_DIR/Dockerfile.trainer"    "$dest/"
     cp "$DOCKER_DIR/.env.example"          "$dest/"
+    cp "$ROOT/.dockerignore"               "$dest/"
 
     # 소스 코드 복사
     info "소스 코드 복사 중..."
@@ -80,6 +88,10 @@ package_dev() {
     rsync -a "$ROOT/sql/"                               "$dest/sql/"
     cp "$ROOT/requirements.txt"            "$dest/"
     cp "$ROOT/requirements-identifier.txt" "$dest/"
+
+    # 프론트엔드 소스 복사 (Docker 멀티스테이지 빌드에서 사용)
+    info "프론트엔드 소스 복사 중..."
+    rsync -a "${RSYNC_EXCLUDES[@]}" "${RSYNC_FRONTEND_EXCLUDES[@]}" "$ROOT/frontend/" "$dest/frontend/"
 
     # 빈 디렉토리 생성 (Docker 볼륨 마운트 대상)
     mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \
@@ -987,6 +999,7 @@ package_dev_mac() {
     cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
     # Dockerfile.trainer은 Mac에서 네이티브 실행이므로 미포함
     cp "$DOCKER_DIR/.env.example"          "$dest/"
+    cp "$ROOT/.dockerignore"               "$dest/"
 
     # 소스 코드 복사 (trainer 포함 — 네이티브 실행용)
     info "소스 코드 복사 중..."
@@ -996,6 +1009,10 @@ package_dev_mac() {
     rsync -a "$ROOT/sql/"                               "$dest/sql/"
     cp "$ROOT/requirements.txt"            "$dest/"
     cp "$ROOT/requirements-identifier.txt" "$dest/"
+
+    # 프론트엔드 소스 복사 (Docker 멀티스테이지 빌드에서 사용)
+    info "프론트엔드 소스 복사 중..."
+    rsync -a "${RSYNC_EXCLUDES[@]}" "${RSYNC_FRONTEND_EXCLUDES[@]}" "$ROOT/frontend/" "$dest/frontend/"
 
     # 빈 디렉토리 생성
     mkdir -p "$dest/data/mysql" "$dest/data/qdrant" "$dest/data/redis" \

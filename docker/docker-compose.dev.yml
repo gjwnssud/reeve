@@ -90,3 +90,40 @@ services:
       - ../data/finetune:/app/data/finetune
       - ../data/checkpoints/vlm:/app/output
     restart: no
+
+  # ── Vite 개발 서버 (선택적, --profile vite 로 활성화) ──────────────────
+  # 사용: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile vite up -d
+  # 또는 호스트에서 직접: pnpm dev:studio / pnpm dev:identifier
+  vite-studio:
+    image: node:20-alpine
+    working_dir: /workspace/frontend/apps/studio
+    command: sh -c "npm install -g pnpm@9.15.0 --quiet && pnpm install --frozen-lockfile && pnpm dev"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend:/workspace/frontend
+    environment:
+      - STUDIO_BACKEND_URL=http://studio:8000
+    depends_on:
+      - studio
+    networks:
+      - reeve-network
+    restart: no
+    profiles: ["vite"]
+
+  vite-identifier:
+    image: node:20-alpine
+    working_dir: /workspace/frontend/apps/identifier
+    command: sh -c "npm install -g pnpm@9.15.0 --quiet && pnpm install --frozen-lockfile && pnpm dev"
+    ports:
+      - "5174:5174"
+    volumes:
+      - ../frontend:/workspace/frontend
+    environment:
+      - IDENTIFIER_BACKEND_URL=http://identifier:8001
+    depends_on:
+      - identifier
+    networks:
+      - reeve-network
+    restart: no
+    profiles: ["vite"]

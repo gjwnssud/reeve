@@ -1,10 +1,28 @@
-# Use Python 3.12 slim image
+# ─── Stage 1: Frontend Build ───────────────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+
+RUN npm install -g pnpm@9.15.0 --quiet
+
+WORKDIR /workspace
+
+# Install dependencies (separate layer for caching — invalidated only on lockfile change)
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./frontend/
+COPY frontend/packages/config/package.json   ./frontend/packages/config/
+COPY frontend/packages/shared/package.json   ./frontend/packages/shared/
+COPY frontend/packages/ui/package.json       ./frontend/packages/ui/
+COPY frontend/apps/studio/package.json       ./frontend/apps/studio/
+
+RUN cd frontend && pnpm install --frozen-lockfile
+
+# Build — output goes to /workspace/studio/static/ (vite outDir: ../../../studio/static)
+COPY frontend/ ./frontend/
+RUN cd frontend/apps/studio && pnpm build
+
+# ─── Stage 2: Python Runtime ───────────────────────────────────────────────
 FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -20,27 +38,22 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # EfficientNetV2-M 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "import timm; timm.create_model('tf_efficientnetv2_m.in21k_ft_in1k', pretrained=True, num_classes=0)"
 
-# YOLO26n 모델 사전 다운로드 (빌드 시 캐싱)
+# YOLO26m 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 
-# Copy application code
 COPY studio/ ./studio/
+# 빌드된 React 프론트엔드로 교체 (COPY studio/ 에 포함된 구버전 static 덮어쓰기)
+COPY --from=frontend-builder /workspace/studio/static/ ./studio/static/
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Expose port
 EXPOSE 8000
 
-# Run the application
 CMD ["uvicorn", "studio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/studio"]

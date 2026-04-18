@@ -105,7 +105,7 @@ if settings.environment == "development":
     )
 
 
-# 정적 파일 서빙 (프론트엔드)
+# 정적 파일 서빙 (React 빌드 결과물)
 static_path = Path(__file__).parent / "static"
 if static_path.exists():
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
@@ -116,50 +116,9 @@ if data_path.exists():
     app.mount("/data", StaticFiles(directory=str(data_path)), name="data")
 
 
-# HTML 페이지 서빙
-from fastapi.responses import FileResponse
-
-@app.get("/admin-ui", tags=["UI"])
-async def admin_ui():
-    """관리자 UI 페이지"""
-    html_path = Path(__file__).parent / "static" / "index.html"
-    if html_path.exists():
-        return FileResponse(html_path)
-    return {"error": "Admin UI not found"}
-
-
-@app.get("/analyze-ui", tags=["UI"])
-async def analyze_ui():
-    """이미지 분석 UI 페이지 (차량 감지 + 바운딩 박스 편집 + SSE 스트리밍)"""
-    html_path = Path(__file__).parent / "static" / "analyze_v2.html"
-    if html_path.exists():
-        return FileResponse(html_path)
-    return {"error": "Analyze UI not found"}
-
-
-@app.get("/finetune-ui", tags=["UI"])
-async def finetune_ui():
-    """파인튜닝 관리 UI 페이지"""
-    html_path = Path(__file__).parent / "static" / "finetune.html"
-    if html_path.exists():
-        return FileResponse(html_path)
-    return {"error": "Finetune UI not found"}
-
-
-@app.get("/basic-data-ui", tags=["UI"])
-async def basic_data_ui():
-    """기초데이터 관리 UI 페이지 (제조사/차량모델 CRUD)"""
-    html_path = Path(__file__).parent / "static" / "basic_data.html"
-    if html_path.exists():
-        return FileResponse(html_path)
-    return {"error": "Basic Data UI not found"}
-
-
-
 # 전역 예외 핸들러
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """모든 예외를 캐치하여 JSON 응답으로 변환"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
@@ -170,31 +129,41 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# 헬스체크 엔드포인트
-@app.get("/", tags=["UI"])
-async def root():
-    """메인 페이지 - 이미지 분석 UI"""
-    html_path = Path(__file__).parent / "static" / "analyze_v2.html"
-    if html_path.exists():
-        return FileResponse(html_path)
-    return {"service": "Reeve", "status": "running"}
-
-
 @app.get("/health", tags=["Health"])
 async def health_check():
     """상세 헬스체크"""
     return {
         "status": "healthy",
-        "database": "connected",  # TODO: 실제 DB 연결 확인 추가
+        "database": "connected",
         "environment": settings.environment
     }
 
 
-# API 라우터 등록
+# API 라우터 등록 — SPA catch-all보다 먼저 등록해야 API 라우트가 가로채이지 않음
 from studio.api import admin, analyze, finetune
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 app.include_router(analyze.router, prefix="/api", tags=["Analysis"])
 app.include_router(finetune.router, prefix="/finetune", tags=["Finetune"])
+
+
+# SPA 라우팅 — 반드시 모든 API 라우터 include_router 이후에 등록
+from fastapi.responses import FileResponse
+
+_SPA_INDEX = Path(__file__).parent / "static" / "index.html"
+
+from fastapi.responses import RedirectResponse
+
+@app.get("/", include_in_schema=False)
+async def spa_root():
+    # Vite base="/static/" 이므로 루트는 /static/으로 리다이렉트
+    return RedirectResponse(url="/static/", status_code=302)
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_catch_all(full_path: str):
+    """React SPA catch-all — /static/ 하위 경로에 index.html 반환"""
+    if _SPA_INDEX.exists():
+        return FileResponse(_SPA_INDEX)
+    return {"service": "Reeve Studio", "status": "running"}
 
 
 if __name__ == "__main__":

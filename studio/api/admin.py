@@ -793,3 +793,19 @@ async def trigger_cleanup_now():
         )
 
 
+
+
+@router.post("/reload-efficientnet", tags=["Admin"])
+async def reload_efficientnet_proxy():
+    """Identifier 서비스의 EfficientNet 핫리로드 프록시 (Studio → Identifier)"""
+    import httpx
+    from studio.config import get_settings
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{settings.identifier_url}/admin/reload-efficientnet")
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Identifier 연결 실패: {e}")

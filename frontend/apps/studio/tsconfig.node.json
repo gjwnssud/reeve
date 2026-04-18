@@ -1,0 +1,8 @@
+{
+  "extends": "@reeve/config/tsconfig/node.json",
+  "compilerOptions": {
+    "composite": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts", "tailwind.config.ts"]
+}

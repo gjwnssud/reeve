@@ -1,0 +1,28 @@
+{
+  "name": "reeve-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:studio": "pnpm --filter @reeve/studio dev",
+    "dev:identifier": "pnpm --filter @reeve/identifier dev",
+    "build:studio": "pnpm --filter @reeve/studio build",
+    "build:identifier": "pnpm --filter @reeve/identifier build",
+    "build:all": "pnpm -r --filter='./apps/*' build",
+    "gen:types": "tsx scripts/gen-types.ts",
+    "gen:types:check": "tsx scripts/gen-types.ts && git diff --exit-code packages/shared/src/api-types",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "openapi-typescript": "^7.4.4",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
