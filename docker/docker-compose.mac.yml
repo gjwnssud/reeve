@@ -21,6 +21,9 @@ services:
 
   # ollama, trainer가 네이티브 실행이므로 host.docker.internal로 URL 교체
   identifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.identifier.mac
     volumes:
       - ./data/models/efficientnet:/app/models/efficientnet
     environment:
@@ -30,6 +33,9 @@ services:
       - IDENTIFIER_ENABLE_TORCH_COMPILE=false  # ARM torch.compile 불안정
 
   celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.identifier.mac
     volumes:
       - ./data/models/efficientnet:/app/models/efficientnet
     environment:

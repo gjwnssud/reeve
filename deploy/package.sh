@@ -922,8 +922,8 @@ package_dev_mac() {
     patch_compose "$DOCKER_DIR/docker-compose.yml"     > "$dest/docker-compose.yml"
     patch_compose "$DOCKER_DIR/docker-compose.dev.yml" > "$dest/docker-compose.dev.yml"
     cp "$DOCKER_DIR/docker-compose.mac.yml" "$dest/docker-compose.mac.yml"
-    cp "$DOCKER_DIR/Dockerfile"            "$dest/"
-    cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
+    cp "$DOCKER_DIR/Dockerfile"                  "$dest/"
+    cp "$DOCKER_DIR/Dockerfile.identifier.mac"   "$dest/Dockerfile.identifier.mac"
     # Dockerfile.trainer은 Mac에서 네이티브 실행이므로 미포함
     cp "$DOCKER_DIR/.env.example"          "$dest/"
     cp "$ROOT/.dockerignore"               "$dest/"
