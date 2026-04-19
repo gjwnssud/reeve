@@ -175,16 +175,27 @@ EOF
 set -e
 cd "$(dirname "$0")"
 
+# .env 로드 (포트, 백엔드 설정 등)
+if [ -f ".env" ]; then
+    set -o allexport; source .env; set +o allexport
+fi
+
+_STUDIO_PORT="${STUDIO_PORT:-8000}"
+_IDENTIFIER_PORT="${IDENTIFIER_PORT:-8001}"
+_TRAINER_PORT="${TRAINER_PORT:-8002}"
+_OLLAMA_PORT="${OLLAMA_PORT:-11434}"
+_TRAINER_BACKEND="${TRAINER_BACKEND:-efficientnet}"
+
 echo "[Reeve] Linux 서비스 시작 (GPU)"
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>/dev/null || true
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 
 echo ""
 echo "서비스가 시작되었습니다:"
-echo "  Studio        : http://localhost:8000"
-echo "  Identifier    : http://localhost:8001"
-echo "  Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)"
-echo "  Ollama        : http://localhost:11434  (NVIDIA GPU)"
+echo "  Studio        : http://localhost:${_STUDIO_PORT}"
+echo "  Identifier    : http://localhost:${_IDENTIFIER_PORT}"
+echo "  Trainer       : http://localhost:${_TRAINER_PORT}  (${_TRAINER_BACKEND}, NVIDIA GPU)"
+echo "  Ollama        : http://localhost:${_OLLAMA_PORT}  (NVIDIA GPU)"
 EOF
 
     cat > "$dest/stop.sh" << 'EOF'
@@ -271,7 +282,24 @@ EOF
 
     cat > "$dest/start.bat" << 'EOF'
 @echo off
+setlocal EnableDelayedExpansion
 cd /d "%~dp0"
+
+set _STUDIO_PORT=8000
+set _IDENTIFIER_PORT=8001
+set _TRAINER_PORT=8002
+set _OLLAMA_PORT=11434
+set _TRAINER_BACKEND=efficientnet
+
+if exist ".env" (
+    for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
+        if "%%a"=="STUDIO_PORT"      set _STUDIO_PORT=%%b
+        if "%%a"=="IDENTIFIER_PORT"  set _IDENTIFIER_PORT=%%b
+        if "%%a"=="TRAINER_PORT"     set _TRAINER_PORT=%%b
+        if "%%a"=="OLLAMA_PORT"      set _OLLAMA_PORT=%%b
+        if "%%a"=="TRAINER_BACKEND"  set _TRAINER_BACKEND=%%b
+    )
+)
 
 echo [Reeve] Windows 서비스 시작 (GPU)...
 docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>nul
@@ -286,9 +314,10 @@ if errorlevel 1 (
 
 echo.
 echo 서비스가 시작되었습니다:
-echo   Studio        : http://localhost:8000
-echo   Identifier    : http://localhost:8001
-echo   Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)
+echo   Studio        : http://localhost:!_STUDIO_PORT!
+echo   Identifier    : http://localhost:!_IDENTIFIER_PORT!
+echo   Trainer       : http://localhost:!_TRAINER_PORT!  (!_TRAINER_BACKEND!, NVIDIA GPU)
+echo   Ollama        : http://localhost:!_OLLAMA_PORT!  (NVIDIA GPU)
 EOF
 
     cat > "$dest/stop.bat" << 'EOF'

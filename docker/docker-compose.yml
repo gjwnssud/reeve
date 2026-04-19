@@ -6,7 +6,7 @@ services:
     image: redis:7.4-alpine
     container_name: reeve-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - ../data/redis:/data
     networks:
@@ -28,7 +28,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8001:8001"
+      - "${IDENTIFIER_PORT:-8001}:8001"
     volumes:
       - ../logs:/app/logs
       - ../data/shared:/app/shared  # 비동기 작업용 공유 스토리지
@@ -60,7 +60,7 @@ services:
     image: ollama/ollama:latest
     container_name: reeve-ollama
     ports:
-      - "11434:11434"
+      - "${OLLAMA_PORT:-11434}:11434"
     environment:
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
     volumes:
@@ -94,14 +94,14 @@ services:
       - reeve-network
     restart: "no"
 
-  # Trainer (파인튜닝 API 서비스 - LlamaFactory 또는 EfficientNet)
+  # Trainer (파인튜닝 API 서비스 - EfficientNet)
   trainer:
     build:
       context: ..
       dockerfile: docker/Dockerfile.trainer
     container_name: reeve-trainer
     ports:
-      - "8002:8002"
+      - "${TRAINER_PORT:-8002}:8002"
     volumes:
       - ../data/finetune:/app/data/finetune  # Studio에서 export한 학습 데이터
       - ../data/uploads:/app/data/uploads    # Studio 업로드 이미지 (EfficientNet 학습용)
@@ -111,7 +111,7 @@ services:
       - ../data/models/vlm:/app/models/vlm               # VLM 병합 모델 (export 결과)
       - ../data/models/efficientnet:/app/models/efficientnet  # 파인튜닝 완료 모델 (Identifier와 공유)
     environment:
-      - TRAINER_BACKEND=${TRAINER_BACKEND:-llamafactory}
+      - TRAINER_BACKEND=${TRAINER_BACKEND:-efficientnet}
       - OLLAMA_BASE_URL=http://ollama:11434
       - IDENTIFIER_URL=http://identifier:8001
       - STUDIO_URL=http://studio:8000

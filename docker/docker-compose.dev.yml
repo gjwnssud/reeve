@@ -12,7 +12,7 @@ services:
     env_file:
       - .env
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - ../data/mysql:/var/lib/mysql
       - ../sql/user_provided_ddl.sql:/docker-entrypoint-initdb.d/001_ddl.sql
@@ -44,7 +44,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      - "${STUDIO_PORT:-8000}:8000"
     volumes:
       - ../studio:/app/studio
       - ../data:/app/data
