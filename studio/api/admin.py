@@ -802,7 +802,7 @@ async def reload_efficientnet_proxy():
     from studio.config import get_settings
     settings = get_settings()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             resp = await client.post(f"{settings.identifier_url}/admin/reload-efficientnet")
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)

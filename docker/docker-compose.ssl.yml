@@ -18,3 +18,14 @@ services:
     environment:
       - SSL_KEYFILE=/certs/key.pem
       - SSL_CERTFILE=/certs/cert.pem
+
+  # 내부 서비스 URL을 https로 변경 (studio/identifier가 HTTPS로 전환되므로)
+  trainer:
+    environment:
+      - STUDIO_URL=https://studio:8000
+      - IDENTIFIER_URL=https://identifier:8001
+
+  celery-worker:
+    environment:
+      - STUDIO_URL=https://studio:8000
+      - IDENTIFIER_URL=https://identifier:8001

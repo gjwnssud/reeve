@@ -256,6 +256,7 @@ class EfficientNetTrainer:
                     f"{{STUDIO_URL}}/finetune/export-efficientnet",
                     json=export_body,
                     timeout=120.0,
+                    verify=False,
                 )
                 resp.raise_for_status()
                 export_info = resp.json()
@@ -627,6 +628,7 @@ class EfficientNetTrainer:
                     f"{{IDENTIFIER_URL}}/admin/reload-efficientnet",
                     json={{"model_path": IDENTIFIER_MODEL_PATH, "class_mapping_path": IDENTIFIER_CLASS_MAP_PATH}},
                     timeout=30.0,
+                    verify=False,
                 )
                 log_raw(f"Identifier 핫리로드: {{resp.status_code}}")
             except Exception as e:

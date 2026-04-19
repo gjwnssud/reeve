@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 async def _proxy_get(path: str, params: dict = None) -> dict:
     """Trainer 서비스 GET 프록시"""
     from studio.config import settings
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
         resp = await client.get(f"{settings.trainer_url}{path}", params=params)
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
@@ -43,7 +43,7 @@ async def _proxy_get(path: str, params: dict = None) -> dict:
 async def _proxy_post(path: str, body: dict = None) -> dict:
     """Trainer 서비스 POST 프록시"""
     from studio.config import settings
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
         resp = await client.post(f"{settings.trainer_url}{path}", json=body or {})
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
@@ -85,7 +85,7 @@ async def get_finetune_mode():
     """식별 서비스의 현재 판별 모드 조회 (IDENTIFIER_MODE)"""
     from studio.config import settings
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, verify=False) as client:
             resp = await client.get(f"{settings.identifier_url}/health")
             data = resp.json()
             return {"identifier_mode": data.get("identifier_mode", "efficientnet")}
@@ -690,7 +690,7 @@ async def evaluate_model(
     total_confidence = 0.0
     incorrect_samples = []
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
         for sample in samples:
             try:
                 # Identifier에 이미지 전송
