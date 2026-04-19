@@ -100,6 +100,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.trainer
     container_name: reeve-trainer
+    env_file:
+      - .env
     ports:
       - "${TRAINER_PORT:-8002}:8002"
     volumes:
