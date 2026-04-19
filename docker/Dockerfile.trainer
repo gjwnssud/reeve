@@ -1,13 +1,13 @@
-# Trainer 서비스 — EfficientNet 학습 (Linux/Windows/Mac 공통)
+# Trainer 서비스 — EfficientNet 학습 (Linux/Windows NVIDIA GPU)
 # Mac 환경에서는 네이티브 Python(MLX)으로 실행 (docker-compose.mac.yml에서 비활성화)
-FROM python:3.12-slim
+FROM pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
 
-# FastAPI + EfficientNet 학습 의존성
+# FastAPI + EfficientNet 학습 의존성 (torch/torchvision은 베이스 이미지에 포함)
 RUN pip install --no-cache-dir \
     fastapi uvicorn[standard] pydantic-settings pyyaml psutil httpx \
-    torch torchvision timm pillow
+    timm pillow
 
 # trainer 소스 복사
 COPY trainer/ ./trainer/
