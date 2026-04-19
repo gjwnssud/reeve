@@ -324,6 +324,13 @@ class EfficientNetTrainer:
                 log_raw("오류: 유효한 학습 이미지가 없습니다.")
                 sys.exit(1)
 
+            # ── 모델 생성 (DataLoader 전 — worker 시그널 간섭 방지) ──
+            backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
+            with torch.no_grad():
+                sample = torch.zeros(1, 3, 480, 480)
+                feat_dim = backbone(sample).shape[-1]
+            log_raw(f"특징 차원: {{feat_dim}}")
+
             # ── CutMix/MixUp (배치 레벨) ─────────────────────────────
             cutmix_or_mixup = None
             if USE_MIXUP:
@@ -389,13 +396,6 @@ class EfficientNetTrainer:
             log_raw(f"클래스 가중치: min={{class_weights.min():.3f}}, max={{class_weights.max():.3f}}")
 
             criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
-
-            # ── 모델 생성 ────────────────────────────────────────────
-            backbone = timm.create_model("tf_efficientnetv2_m.in21k_ft_in1k", pretrained=True, num_classes=0)
-            with torch.no_grad():
-                sample = torch.zeros(1, 3, 480, 480)
-                feat_dim = backbone(sample).shape[-1]
-            log_raw(f"특징 차원: {{feat_dim}}")
 
             model = nn.Sequential(
                 backbone,

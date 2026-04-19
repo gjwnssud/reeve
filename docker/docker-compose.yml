@@ -119,6 +119,7 @@ services:
       - STUDIO_URL=http://studio:8000
       - VLM_MODEL_DIR=/app/models/vlm
       - EFFICIENTNET_MODEL_DIR=/app/models/efficientnet
+    shm_size: '8g'
     networks:
       - reeve-network
     restart: unless-stopped
