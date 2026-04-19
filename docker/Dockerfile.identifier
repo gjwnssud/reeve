@@ -19,27 +19,20 @@ COPY frontend/ ./frontend/
 RUN cd frontend/apps/identifier && pnpm build
 
 # ─── Stage 2: Python Runtime ───────────────────────────────────────────────
-FROM python:3.12-slim
+# amd64/arm64(GB10) 모두 CUDA 지원. Mac Docker에서는 EMBEDDING_DEVICE=cpu로 override됨.
+FROM nvcr.io/nvidia/pytorch:25.03-py3
 
 WORKDIR /app
 
 # 시스템 의존성 (OpenCV + ultralytics 필요)
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 의존성 (amd64: CUDA torch, arm64: CPU torch)
-ARG TARGETPLATFORM
+# Python 의존성 (torch/torchvision은 베이스 이미지에 포함)
 COPY requirements-identifier.txt .
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-        pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124; \
-    else \
-        pip install --no-cache-dir torch==2.6.0; \
-    fi && \
-    pip install --no-cache-dir -r requirements-identifier.txt
+RUN pip install --no-cache-dir -r requirements-identifier.txt
 
 # EfficientNetV2-M 모델 사전 다운로드 (빌드 시 캐싱)
 RUN python -c "import timm; timm.create_model('tf_efficientnetv2_m.in21k_ft_in1k', pretrained=True, num_classes=0)"
