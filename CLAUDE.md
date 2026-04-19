@@ -166,9 +166,10 @@ CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40): 로그 메시지 구분용
 ### 백엔드 선택 (TRAINER_BACKEND)
 | 백엔드 | 플랫폼 | 용도 |
 |--------|--------|------|
-| `efficientnet` | 전체 (MPS/CUDA/CPU) | EfficientNetV2-M 이미지 분류 파인튜닝 |
-| `mlx` | Mac Apple Silicon | VLM (Qwen3-VL) 파인튜닝 |
-| `llamafactory` | Linux/Windows GPU | VLM (Qwen3-VL) 파인튜닝 |
+| `efficientnet` | 전체 (Docker: Linux/Windows, CUDA/CPU) | EfficientNetV2-M 이미지 분류 파인튜닝 |
+| `mlx` | Mac Apple Silicon (네이티브) | VLM (Qwen3-VL) 파인튜닝 |
+
+> `llamafactory` 백엔드 제거 — arm64 미지원 + efficientnet으로 통합
 
 ### EfficientNet 학습 파이프라인
 1. Studio `/finetune/export-efficientnet` → CSV 생성 (`data/finetune/train/chunk_*.csv`)
