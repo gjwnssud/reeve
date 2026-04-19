@@ -226,7 +226,7 @@ class TrainingConfig(BaseModel):
     lora_rank: Optional[int] = 8
     quantization_bit: Optional[int] = 4
     cutoff_len: Optional[int] = 1024
-    output_dir: str = "vehicle-vlm"
+    output_dir: str = "efficientnet"
     flash_attn: Optional[str] = None
     use_mps: bool = False
     fp16: bool = False
