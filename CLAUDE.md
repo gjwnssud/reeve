@@ -304,8 +304,11 @@ frontend/
 - **Mac**: Ollama + Trainer를 네이티브 실행, 나머지 Docker. `EMBEDDING_DEVICE=cpu`, `IDENTIFIER_ENABLE_TORCH_COMPILE=false`
 - **Linux/Windows**: 전체 Docker, NVIDIA GPU 사용. `EMBEDDING_DEVICE=cuda`
 - **Studio hot-reload**: `--reload-dir /app/studio`로 `logs/` 변경을 감시하지 않음 (Trainer 스크립트 생성 시 재시작 방지)
-- **Dockerfile.identifier**: multi-arch — `linux/amd64`는 CUDA, `linux/arm64`는 CPU
+- **Dockerfile.identifier**: Linux/Windows(NVIDIA GPU) 전용. `nvcr.io/nvidia/pytorch:25.03-py3` 기반으로 amd64(x86)·arm64(GB10) 모두 CUDA 지원
+- **Dockerfile.identifier.mac**: Mac Apple Silicon 전용. `python:3.12-slim` + CPU torch. `docker-compose.mac.yml`에서 자동 선택됨
 - **Uvicorn worker count**: `identifier/start.sh`에서 CPU 코어 수 기준 자동 계산
 - **export-efficientnet**: `run_in_executor`로 스레드풀 실행 + `SessionLocal()`로 독립 DB 세션 사용 (SQLAlchemy 스레드 안전성)
 - **정적 파일 경로**: Vite 빌드 결과가 `/static/`(프로젝트 루트)으로 출력되고 Docker `COPY --from=frontend-builder /workspace/static/ ./static/`으로 `/app/static/`에 복사됨. 개발 환경 바인드 마운트(`../studio:/app/studio`)와 겹치지 않아 익명 볼륨 불필요
+- **MySQL lower_case_table_names**: `docker-compose.dev.yml`에 `--lower-case-table-names=1` 적용됨. 플랫폼 간(Mac↔Linux) 데이터 디렉터리 이동 시 기존 데이터 초기화 필요(값 변경은 데이터 재초기화 필수)
+- **호스트 포트 동적 할당**: compose 파일의 호스트 포트는 모두 `${VAR:-default}` 패턴 사용. `.env`에서 `STUDIO_PORT`, `IDENTIFIER_PORT`, `TRAINER_PORT`, `OLLAMA_PORT`, `MYSQL_PORT`, `REDIS_PORT` 재정의 가능
 - **IDENTIFIER_URL**: Studio 컨테이너에서 `/finetune/evaluate` 호출 시 `http://identifier:8001` 필요. `docker-compose.dev.yml` Studio service에 명시적으로 설정되어 있음 (`.env`의 `localhost:8001`이 덮어쓰지 않도록)

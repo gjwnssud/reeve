@@ -293,15 +293,26 @@ powershell -NoProfile -Command ^
   "'set -e'," ^
   "'cd \"\$(dirname \"\$0\")\"'," ^
   "''," ^
+  "'if [ -f \".env\" ]; then'," ^
+  "'    set -o allexport; source .env; set +o allexport'," ^
+  "'fi'," ^
+  "''," ^
+  "'_STUDIO_PORT=\"\${STUDIO_PORT:-8000}\"'," ^
+  "'_IDENTIFIER_PORT=\"\${IDENTIFIER_PORT:-8001}\"'," ^
+  "'_TRAINER_PORT=\"\${TRAINER_PORT:-8002}\"'," ^
+  "'_OLLAMA_PORT=\"\${OLLAMA_PORT:-11434}\"'," ^
+  "'_TRAINER_BACKEND=\"\${TRAINER_BACKEND:-efficientnet}\"'," ^
+  "''," ^
   "'echo \"[Reeve] Linux 서비스 시작 (GPU)\"'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>/dev/null ^|^| true'," ^
   "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d'," ^
   "''," ^
   "'echo \"\"'," ^
   "'echo \"서비스가 시작되었습니다:\"'," ^
-  "'echo \"  Studio        : http://localhost:8000\"'," ^
-  "'echo \"  Identifier    : http://localhost:8001\"'," ^
-  "'echo \"  Trainer       : http://localhost:8002  (LlamaFactory, NVIDIA GPU)\"'," ^
-  "'echo \"  Ollama        : http://localhost:11434  (NVIDIA GPU)\"'" ^
+  "'echo \"  Studio        : http://localhost:\${_STUDIO_PORT}\"'," ^
+  "'echo \"  Identifier    : http://localhost:\${_IDENTIFIER_PORT}\"'," ^
+  "'echo \"  Trainer       : http://localhost:\${_TRAINER_PORT}  (\${_TRAINER_BACKEND}, NVIDIA GPU)\"'," ^
+  "'echo \"  Ollama        : http://localhost:\${_OLLAMA_PORT}  (NVIDIA GPU)\"'" ^
   "); [IO.File]::WriteAllText('%DEST%\start.sh', ($c -join [char]10) + [char]10)"
 
 :: Write stop.sh
@@ -346,7 +357,7 @@ echo echo [2/4] NVIDIA GPU 확인 중...
 echo nvidia-smi ^> nul 2^>^&1
 echo if errorlevel 1 ^(
 echo     echo [경고] NVIDIA GPU를 감지하지 못했습니다.
-echo     echo        ollama, llamafactory가 CPU로 실행됩니다.
+echo     echo        ollama가 CPU로 실행됩니다.
 echo     set /p CONTINUE="계속 진행하시겠습니까? ^(y/N^): "
 echo     if /i "%%CONTINUE%%" neq "y" exit /b 1
 echo ^) else ^(
@@ -394,7 +405,24 @@ echo @echo off
 echo chcp 65001 ^> nul
 echo cd /d "%%~dp0"
 echo.
+echo :: .env 파일에서 포트 설정 읽기
+echo set _STUDIO_PORT=8000
+echo set _IDENTIFIER_PORT=8001
+echo set _TRAINER_PORT=8002
+echo set _OLLAMA_PORT=11434
+echo set _TRAINER_BACKEND=efficientnet
+echo if exist ".env" ^(
+echo     for /f "usebackq tokens=1,* delims==" %%%%A in ^(".env"^) do ^(
+echo         if "%%%%A"=="STUDIO_PORT"      set _STUDIO_PORT=%%%%B
+echo         if "%%%%A"=="IDENTIFIER_PORT"  set _IDENTIFIER_PORT=%%%%B
+echo         if "%%%%A"=="TRAINER_PORT"     set _TRAINER_PORT=%%%%B
+echo         if "%%%%A"=="OLLAMA_PORT"      set _OLLAMA_PORT=%%%%B
+echo         if "%%%%A"=="TRAINER_BACKEND"  set _TRAINER_BACKEND=%%%%B
+echo     ^)
+echo ^)
+echo.
 echo echo [Reeve] Windows 서비스 시작 ^(GPU^)...
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down
 echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
 echo.
 echo if errorlevel 1 ^(
@@ -406,9 +434,10 @@ echo ^)
 echo.
 echo echo.
 echo echo 서비스가 시작되었습니다:
-echo echo   Studio        : http://localhost:8000
-echo echo   Identifier    : http://localhost:8001
-echo echo   Trainer       : http://localhost:8002  ^(LlamaFactory, NVIDIA GPU^)
+echo echo   Studio        : http://localhost:%%_STUDIO_PORT%%
+echo echo   Identifier    : http://localhost:%%_IDENTIFIER_PORT%%
+echo echo   Trainer       : http://localhost:%%_TRAINER_PORT%%  ^(%%_TRAINER_BACKEND%%, NVIDIA GPU^)
+echo echo   Ollama        : http://localhost:%%_OLLAMA_PORT%%
 ) > "%DEST%\start.bat"
 
 (
