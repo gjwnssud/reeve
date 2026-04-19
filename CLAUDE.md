@@ -229,8 +229,8 @@ pnpm 워크스페이스 모노레포 (Node ≥ 20, pnpm 9.15.0). 두 개의 Reac
 ```
 frontend/
 ├── apps/
-│   ├── studio/         # @reeve/studio — Vite dev: 5173, build → ../../../studio/static
-│   └── identifier/     # @reeve/identifier — Vite dev: 5174, build → ../../../identifier/static
+│   ├── studio/         # @reeve/studio — Vite dev: 5173, build → /static/ (Docker: /app/static/)
+│   └── identifier/     # @reeve/identifier — Vite dev: 5174, build → /static/ (Docker: /app/static/)
 ├── packages/
 │   ├── shared/         # API 타입(openapi-typescript 생성), 공용 훅·유틸
 │   ├── ui/             # shadcn/ui 기반 공통 UI 컴포넌트
@@ -251,7 +251,11 @@ frontend/
 - React 18 + React Router + TypeScript (strict) + Vite (SWC)
 - TanStack Query / TanStack Table, Zustand 상태 관리
 - Tailwind + shadcn/ui
-- Vite `base: "/static/"`, 빌드 산출물은 백엔드 컨테이너가 FastAPI `StaticFiles`로 서빙
+- Vite `base: "/static/"`, 빌드 산출물은 각 서비스의 `/app/static/`에 위치
+- **SPA 라우팅**: `StaticFiles` 마운트 대신 커스텀 `GET /static/{path}` 라우트 — 파일이 있으면 파일 반환, 없으면 `index.html` 반환. URL 직접 진입(새로고침) 정상 동작
+- **FolderTab 배치 처리**: 업로드 세마포어(50) / 분석 세마포어(8) 분리. 업로드 완료 즉시 원본 파일 삭제(`readwrite` 권한), AbortController로 중단 시 진행 중 작업 즉시 종료. 성공 이미지는 학습 데이터 자동 승인 후 UI에서 제거
+- **폴더 감시 이탈 경고**: 탭 전환(AnalyzePage) 및 사이드바 메뉴 클릭(StudioLayout) 시 confirm 다이얼로그, `folderWatchRunning` 상태는 Zustand store로 공유
+- **Identifier BatchTab**: IntersectionObserver 기반 lazy 썸네일(32K 이미지 대응), 행 클릭 시 상세 다이얼로그
 
 ---
 
@@ -287,8 +291,8 @@ frontend/
 | `docker/Dockerfile` | Studio 이미지 (`--reload-dir /app/studio`) |
 | `docker/docker-compose.dev.yml` | 개발 오버라이드 (Studio 메모리 4G) |
 | `docs/ASYNC_USAGE.md` | 비동기 API 사용 가이드 |
-| `frontend/apps/studio/` | Studio React SPA (Vite `base=/static/`, 빌드 → `studio/static/`) |
-| `frontend/apps/identifier/` | Identifier React SPA (Vite `base=/static/`, 빌드 → `identifier/static/`) |
+| `frontend/apps/studio/` | Studio React SPA (Vite `base=/static/`, 빌드 → `/static/` → Docker `/app/static/`) |
+| `frontend/apps/identifier/` | Identifier React SPA (Vite `base=/static/`, 빌드 → `/static/` → Docker `/app/static/`) |
 | `frontend/packages/shared/src/api-types/` | OpenAPI로 자동 생성되는 API 타입 (수정 금지) |
 | `frontend/scripts/gen-types.ts` | FastAPI OpenAPI → TypeScript 타입 생성 스크립트 |
 
@@ -302,3 +306,5 @@ frontend/
 - **Dockerfile.identifier**: multi-arch — `linux/amd64`는 CUDA, `linux/arm64`는 CPU
 - **Uvicorn worker count**: `identifier/start.sh`에서 CPU 코어 수 기준 자동 계산
 - **export-efficientnet**: `run_in_executor`로 스레드풀 실행 + `SessionLocal()`로 독립 DB 세션 사용 (SQLAlchemy 스레드 안전성)
+- **정적 파일 경로**: Vite 빌드 결과가 `/static/`(프로젝트 루트)으로 출력되고 Docker `COPY --from=frontend-builder /workspace/static/ ./static/`으로 `/app/static/`에 복사됨. 개발 환경 바인드 마운트(`../studio:/app/studio`)와 겹치지 않아 익명 볼륨 불필요
+- **IDENTIFIER_URL**: Studio 컨테이너에서 `/finetune/evaluate` 호출 시 `http://identifier:8001` 필요. `docker-compose.dev.yml` Studio service에 명시적으로 설정되어 있음 (`.env`의 `localhost:8001`이 덮어쓰지 않도록)

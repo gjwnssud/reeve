@@ -98,8 +98,8 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f 
 ```
 frontend/
 ├── apps/
-│   ├── studio/       # Studio UI (포트 5173, 빌드 결과: studio/static)
-│   └── identifier/   # Identifier UI (포트 5174, 빌드 결과: identifier/static)
+│   ├── studio/       # Studio UI (포트 5173, 빌드 결과: /static/ → Docker 이미지 내 /app/static/)
+│   └── identifier/   # Identifier UI (포트 5174, 빌드 결과: /static/ → Docker 이미지 내 /app/static/)
 └── packages/
     ├── shared/       # API 클라이언트, 타입(openapi-typescript 자동 생성), 훅
     ├── ui/           # shadcn/ui 컴포넌트 + BboxCanvas 등 공용 composites
@@ -115,11 +115,13 @@ pnpm dev:studio        # http://localhost:5173 (→ http://studio:8000 프록시
 pnpm dev:identifier    # http://localhost:5174 (→ http://identifier:8001 프록시)
 
 pnpm gen:types         # FastAPI OpenAPI → TS 타입 재생성
-pnpm build:all         # 두 앱 빌드 → {studio,identifier}/static
+pnpm build:all         # 두 앱 빌드 → 각 앱 루트의 /static/
 pnpm typecheck         # 전체 워크스페이스 타입 체크
 ```
 
 Docker 이미지(`Dockerfile`, `Dockerfile.identifier`)는 멀티스테이지 빌드로 프론트엔드를 자동으로 번들링합니다.
+
+> **SPA 라우팅**: `StaticFiles` 마운트 대신 커스텀 라우트를 사용하므로 `/static/analyze` 등 URL 직접 진입이 정상 동작합니다.
 
 ---
 
@@ -271,5 +273,7 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 - **Uvicorn 워커 수**: `identifier/start.sh`가 CPU 코어 수 기반으로 자동 계산합니다.
 - **멀티아키텍처 Docker**: `Dockerfile.identifier`는 `linux/amd64`에서 CUDA torch, `linux/arm64`에서 CPU torch를 설치합니다.
 - **파인튜닝 모델 공유**: `data/models/efficientnet/`가 Trainer와 Identifier 간 바인드 마운트로 공유됩니다 (핫리로드 지원).
+- **정적 파일 빌드 위치**: Vite 빌드 결과물은 각 서비스 디렉터리(`studio/static/`) 대신 프로젝트 루트의 `/static/`으로 출력됩니다. Docker 이미지에서 `/app/static/`으로 복사되며, 개발 환경 바인드 마운트와 충돌하지 않습니다.
+- **evaluate API**: Studio 컨테이너에서 Identifier를 호출할 때 `IDENTIFIER_URL=http://identifier:8001`이 반드시 설정되어야 합니다(`docker-compose.dev.yml` 참조).
 - 학습 데이터 결과: [docs/학습데이터결과서.md](docs/학습데이터결과서.md)
 - 시스템 아키텍처 다이어그램: [docs/architecture.svg](docs/architecture.svg)
