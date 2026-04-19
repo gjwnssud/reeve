@@ -438,17 +438,22 @@ class EfficientNetTrainer:
                 log_raw("head 재초기화 감지 → freeze_epochs 자동 보정: 1")
 
             # ── torch.compile (CUDA 전용) ─────────────────────────────
-            # sm_12x(Blackwell)는 현재 Triton ptxas 미지원 → suppress_errors로 eager fallback
+            # sm_12x(Blackwell): NGC 25.03 Triton이 LLVM 서브프로세스를 C 레벨에서 crash
+            # suppress_errors로는 못 막음 → sm_120+ 에서는 완전 비활성
             if device.type == "cuda":
-                import torch._dynamo
-                torch._dynamo.config.suppress_errors = True
-                # sm_12x(Blackwell): max-autotune 대신 reduce-overhead (ptxas sm_121 미지원)
-                compile_mode = "reduce-overhead"
-                try:
-                    model = torch.compile(model, mode=compile_mode)
-                    log_raw(f"torch.compile 적용 (mode={{compile_mode}})")
-                except Exception as e:
-                    log_raw(f"torch.compile 실패 (무시): {{e}}")
+                _major, _minor = torch.cuda.get_device_capability(device)
+                _sm_cap = _major * 10 + _minor
+                if _sm_cap >= 120:
+                    log_raw(f"torch.compile 비활성 (sm_{{_sm_cap}}, Blackwell — NGC Triton 미지원)")
+                else:
+                    import torch._dynamo
+                    torch._dynamo.config.suppress_errors = True
+                    compile_mode = "reduce-overhead"
+                    try:
+                        model = torch.compile(model, mode=compile_mode)
+                        log_raw(f"torch.compile 적용 (mode={{compile_mode}})")
+                    except Exception as e:
+                        log_raw(f"torch.compile 실패 (무시): {{e}}")
 
             # ── EMA 초기화 ───────────────────────────────────────────
             ema = EMAModel(model) if USE_EMA else None
