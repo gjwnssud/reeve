@@ -9,6 +9,9 @@ RUN pip install --no-cache-dir \
     fastapi uvicorn[standard] pydantic-settings pyyaml psutil httpx \
     timm pillow
 
+# EfficientNetV2-M 모델 사전 다운로드 (학습 시 대기 없이 즉시 사용)
+RUN python -c "import timm; timm.create_model('tf_efficientnetv2_m.in21k_ft_in1k', pretrained=True, num_classes=0)"
+
 # trainer 소스 복사
 COPY trainer/ ./trainer/
 
