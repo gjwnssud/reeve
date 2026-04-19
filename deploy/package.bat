@@ -95,12 +95,14 @@ cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.yml" "%DEST%\docker-compo
 cscript //nologo "%_PJS%" "%DOCKER_DIR%\docker-compose.dev.yml" "%DEST%\docker-compose.dev.yml"
 del "%_PJS%" 2>nul
 copy "%DOCKER_DIR%\docker-compose.gpu.yml" "%DEST%\docker-compose.gpu.yml" > nul
+copy "%DOCKER_DIR%\docker-compose.ssl.yml" "%DEST%\docker-compose.ssl.yml" > nul
 
 copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.trainer"    "%DEST%\" > nul
 copy "%DOCKER_DIR%\.env.example"          "%DEST%\" > nul
 copy "%ROOT%\.dockerignore"               "%DEST%\" > nul
+copy "%DOCKER_DIR%\gen-cert.sh"           "%DEST%\" > nul
 
 :: Copy source code
 robocopy "%ROOT%\studio"     "%DEST%\studio"     /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul

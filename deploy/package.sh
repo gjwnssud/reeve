@@ -74,11 +74,13 @@ package_dev() {
     patch_compose "$DOCKER_DIR/docker-compose.yml"     > "$dest/docker-compose.yml"
     patch_compose "$DOCKER_DIR/docker-compose.dev.yml" > "$dest/docker-compose.dev.yml"
     cp "$DOCKER_DIR/docker-compose.gpu.yml" "$dest/docker-compose.gpu.yml"
+    cp "$DOCKER_DIR/docker-compose.ssl.yml" "$dest/docker-compose.ssl.yml"
     cp "$DOCKER_DIR/Dockerfile"            "$dest/"
     cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
     cp "$DOCKER_DIR/Dockerfile.trainer"    "$dest/"
     cp "$DOCKER_DIR/.env.example"          "$dest/"
     cp "$ROOT/.dockerignore"               "$dest/"
+    install -m 755 "$DOCKER_DIR/gen-cert.sh" "$dest/gen-cert.sh"
 
     # 소스 코드 복사
     info "소스 코드 복사 중..."
@@ -921,12 +923,14 @@ package_dev_mac() {
     # docker 파일 복사 (base + dev + mac 오버라이드, 경로 패치 적용)
     patch_compose "$DOCKER_DIR/docker-compose.yml"     > "$dest/docker-compose.yml"
     patch_compose "$DOCKER_DIR/docker-compose.dev.yml" > "$dest/docker-compose.dev.yml"
-    cp "$DOCKER_DIR/docker-compose.mac.yml" "$dest/docker-compose.mac.yml"
+    cp "$DOCKER_DIR/docker-compose.mac.yml"  "$dest/docker-compose.mac.yml"
+    cp "$DOCKER_DIR/docker-compose.ssl.yml" "$dest/docker-compose.ssl.yml"
     cp "$DOCKER_DIR/Dockerfile"                  "$dest/"
     cp "$DOCKER_DIR/Dockerfile.identifier.mac"   "$dest/Dockerfile.identifier.mac"
     # Dockerfile.trainer은 Mac에서 네이티브 실행이므로 미포함
     cp "$DOCKER_DIR/.env.example"          "$dest/"
     cp "$ROOT/.dockerignore"               "$dest/"
+    install -m 755 "$DOCKER_DIR/gen-cert.sh" "$dest/gen-cert.sh"
 
     # 소스 코드 복사 (trainer 포함 — 네이티브 실행용)
     info "소스 코드 복사 중..."
