@@ -305,14 +305,21 @@ powershell -NoProfile -Command ^
   "'_OLLAMA_PORT=\"\${OLLAMA_PORT:-11434}\"'," ^
   "'_TRAINER_BACKEND=\"\${TRAINER_BACKEND:-efficientnet}\"'," ^
   "''," ^
+  "'SSL_COMPOSE=\"\"'," ^
+  "'if [ -f \"certs/cert.pem\" ] ^&^& [ -f \"certs/key.pem\" ]; then'," ^
+  "'    SSL_COMPOSE=\"-f docker-compose.ssl.yml\"'," ^
+  "'fi'," ^
+  "'PROTO=\"http\"'," ^
+  "'[ -n \"\$SSL_COMPOSE\" ] ^&^& PROTO=\"https\"'," ^
+  "''," ^
   "'echo \"[Reeve] Linux 서비스 시작 (GPU)\"'," ^
-  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>/dev/null ^|^| true'," ^
-  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml \$SSL_COMPOSE down 2>/dev/null ^|^| true'," ^
+  "'docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml \$SSL_COMPOSE up -d'," ^
   "''," ^
   "'echo \"\"'," ^
   "'echo \"서비스가 시작되었습니다:\"'," ^
-  "'echo \"  Studio        : http://localhost:\${_STUDIO_PORT}\"'," ^
-  "'echo \"  Identifier    : http://localhost:\${_IDENTIFIER_PORT}\"'," ^
+  "'echo \"  Studio        : \${PROTO}://localhost:\${_STUDIO_PORT}\"'," ^
+  "'echo \"  Identifier    : \${PROTO}://localhost:\${_IDENTIFIER_PORT}\"'," ^
   "'echo \"  Trainer       : http://localhost:\${_TRAINER_PORT}  (\${_TRAINER_BACKEND}, NVIDIA GPU)\"'," ^
   "'echo \"  Ollama        : http://localhost:\${_OLLAMA_PORT}  (NVIDIA GPU)\"'" ^
   "); [IO.File]::WriteAllText('%DEST%\start.sh', ($c -join [char]10) + [char]10)"
@@ -423,9 +430,14 @@ echo         if "%%%%A"=="TRAINER_BACKEND"  set _TRAINER_BACKEND=%%%%B
 echo     ^)
 echo ^)
 echo.
+echo set SSL_COMPOSE=
+echo if exist "certs\cert.pem" if exist "certs\key.pem" set SSL_COMPOSE=-f docker-compose.ssl.yml
+echo set PROTO=http
+echo if defined SSL_COMPOSE set PROTO=https
+echo.
 echo echo [Reeve] Windows 서비스 시작 ^(GPU^)...
-echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down
-echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml ^^!SSL_COMPOSE^^! down 2^>nul
+echo docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml ^^!SSL_COMPOSE^^! up -d
 echo.
 echo if errorlevel 1 ^(
 echo     echo [오류] 서비스 시작 실패. 로그를 확인하세요:
@@ -436,10 +448,10 @@ echo ^)
 echo.
 echo echo.
 echo echo 서비스가 시작되었습니다:
-echo echo   Studio        : http://localhost:%%_STUDIO_PORT%%
-echo echo   Identifier    : http://localhost:%%_IDENTIFIER_PORT%%
-echo echo   Trainer       : http://localhost:%%_TRAINER_PORT%%  ^(%%_TRAINER_BACKEND%%, NVIDIA GPU^)
-echo echo   Ollama        : http://localhost:%%_OLLAMA_PORT%%
+echo echo   Studio        : ^^!PROTO^^!://localhost:^^!_STUDIO_PORT^^!
+echo echo   Identifier    : ^^!PROTO^^!://localhost:^^!_IDENTIFIER_PORT^^!
+echo echo   Trainer       : http://localhost:^^!_TRAINER_PORT^^!  ^(^^!_TRAINER_BACKEND^^!, NVIDIA GPU^)
+echo echo   Ollama        : http://localhost:^^!_OLLAMA_PORT^^!
 ) > "%DEST%\start.bat"
 
 (

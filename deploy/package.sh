@@ -188,14 +188,22 @@ _TRAINER_PORT="${TRAINER_PORT:-8002}"
 _OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 _TRAINER_BACKEND="${TRAINER_BACKEND:-efficientnet}"
 
+SSL_COMPOSE=""
+if [ -f "certs/cert.pem" ] && [ -f "certs/key.pem" ]; then
+    SSL_COMPOSE="-f docker-compose.ssl.yml"
+fi
+
+PROTO="http"
+[ -n "$SSL_COMPOSE" ] && PROTO="https"
+
 echo "[Reeve] Linux 서비스 시작 (GPU)"
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>/dev/null || true
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml $SSL_COMPOSE down 2>/dev/null || true
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml $SSL_COMPOSE up -d
 
 echo ""
 echo "서비스가 시작되었습니다:"
-echo "  Studio        : http://localhost:${_STUDIO_PORT}"
-echo "  Identifier    : http://localhost:${_IDENTIFIER_PORT}"
+echo "  Studio        : ${PROTO}://localhost:${_STUDIO_PORT}"
+echo "  Identifier    : ${PROTO}://localhost:${_IDENTIFIER_PORT}"
 echo "  Trainer       : http://localhost:${_TRAINER_PORT}  (${_TRAINER_BACKEND}, NVIDIA GPU)"
 echo "  Ollama        : http://localhost:${_OLLAMA_PORT}  (NVIDIA GPU)"
 EOF
@@ -303,9 +311,15 @@ if exist ".env" (
     )
 )
 
+set SSL_COMPOSE=
+if exist "certs\cert.pem" if exist "certs\key.pem" set SSL_COMPOSE=-f docker-compose.ssl.yml
+
+set PROTO=http
+if defined SSL_COMPOSE set PROTO=https
+
 echo [Reeve] Windows 서비스 시작 (GPU)...
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml down 2>nul
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml !SSL_COMPOSE! down 2>nul
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.gpu.yml !SSL_COMPOSE! up -d
 
 if errorlevel 1 (
     echo [오류] 서비스 시작 실패. 로그를 확인하세요:
@@ -316,8 +330,8 @@ if errorlevel 1 (
 
 echo.
 echo 서비스가 시작되었습니다:
-echo   Studio        : http://localhost:!_STUDIO_PORT!
-echo   Identifier    : http://localhost:!_IDENTIFIER_PORT!
+echo   Studio        : !PROTO!://localhost:!_STUDIO_PORT!
+echo   Identifier    : !PROTO!://localhost:!_IDENTIFIER_PORT!
 echo   Trainer       : http://localhost:!_TRAINER_PORT!  (!_TRAINER_BACKEND!, NVIDIA GPU)
 echo   Ollama        : http://localhost:!_OLLAMA_PORT!  (NVIDIA GPU)
 EOF
@@ -1092,13 +1106,20 @@ sleep 2
 
 # 4. Docker 서비스 시작 (studio, identifier, celery, mysql, redis)
 echo "[3/3] Docker 서비스 시작 중..."
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml down 2>/dev/null || true
-docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml up -d
+SSL_COMPOSE=""
+if [ -f "certs/cert.pem" ] && [ -f "certs/key.pem" ]; then
+    SSL_COMPOSE="-f docker-compose.ssl.yml"
+fi
+PROTO="http"
+[ -n "$SSL_COMPOSE" ] && PROTO="https"
+
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml $SSL_COMPOSE down 2>/dev/null || true
+docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mac.yml $SSL_COMPOSE up -d
 
 echo ""
 echo "서비스가 시작되었습니다:"
-echo "  Studio        : http://localhost:8000"
-echo "  Identifier    : http://localhost:8001"
+echo "  Studio        : ${PROTO}://localhost:8000"
+echo "  Identifier    : ${PROTO}://localhost:8001"
 echo "  Trainer (${_TRAINER_LABEL}) : http://localhost:8002  (네이티브 Apple Silicon)"
 echo "  Ollama        : http://localhost:11434  (네이티브 Apple Silicon)"
 echo ""
