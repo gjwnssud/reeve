@@ -437,9 +437,13 @@ class EfficientNetTrainer:
                 FREEZE_EPOCHS = 1
                 log_raw("head 재초기화 감지 → freeze_epochs 자동 보정: 1")
 
-            # ── torch.compile (CUDA 전용, 모드 분기) ─────────────────
+            # ── torch.compile (CUDA 전용) ─────────────────────────────
+            # sm_12x(Blackwell)는 현재 Triton ptxas 미지원 → suppress_errors로 eager fallback
             if device.type == "cuda":
-                compile_mode = "max-autotune" if (cc_major >= 12 or vram_gb >= 100) else "reduce-overhead"
+                import torch._dynamo
+                torch._dynamo.config.suppress_errors = True
+                # sm_12x(Blackwell): max-autotune 대신 reduce-overhead (ptxas sm_121 미지원)
+                compile_mode = "reduce-overhead"
                 try:
                     model = torch.compile(model, mode=compile_mode)
                     log_raw(f"torch.compile 적용 (mode={{compile_mode}})")
