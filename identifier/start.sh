@@ -21,9 +21,16 @@ echo "PyTorch threads: $TORCH_THREADS"
 echo "Uvicorn workers: $WORKERS"
 echo "=========================================="
 
+# SSL 설정 (SSL_KEYFILE, SSL_CERTFILE 환경변수로 활성화)
+SSL_ARGS=()
+if [ -n "$SSL_KEYFILE" ] && [ -n "$SSL_CERTFILE" ]; then
+  SSL_ARGS=(--ssl-keyfile "$SSL_KEYFILE" --ssl-certfile "$SSL_CERTFILE")
+fi
+
 # uvicorn 실행
 exec uvicorn identifier.main:app \
     --host 0.0.0.0 \
     --port 8001 \
     --workers "$WORKERS" \
-    --no-access-log
+    --no-access-log \
+    "${SSL_ARGS[@]}"

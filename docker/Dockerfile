@@ -50,9 +50,11 @@ RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 COPY studio/ ./studio/
 COPY --from=frontend-builder /workspace/static/ ./static/
 
+RUN sed -i 's/\r$//' /app/studio/start.sh && chmod +x /app/studio/start.sh
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "studio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/studio"]
+CMD ["/app/studio/start.sh"]

@@ -1,0 +1,20 @@
+# ──────────────────────────────────────────
+# SSL overlay — self-signed 인증서 적용
+# 실행: docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ssl.yml up -d
+# 인증서 생성: ./gen-cert.sh <SERVER_IP>
+# ──────────────────────────────────────────
+
+services:
+  studio:
+    volumes:
+      - ./certs:/certs:ro
+    environment:
+      - SSL_KEYFILE=/certs/key.pem
+      - SSL_CERTFILE=/certs/cert.pem
+
+  identifier:
+    volumes:
+      - ./certs:/certs:ro
+    environment:
+      - SSL_KEYFILE=/certs/key.pem
+      - SSL_CERTFILE=/certs/cert.pem
