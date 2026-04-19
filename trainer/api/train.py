@@ -339,7 +339,7 @@ async def get_raw_training_log(tail: int = Query(default=100, ge=1, le=1000)):
     """원시 학습 로그 반환 (stderr/nohup 출력)"""
     try:
         content = await _get_trainer().get_raw_log(tail=tail)
-        return {"content": content}
+        return {"lines": content.splitlines() if content else []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

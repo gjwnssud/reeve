@@ -89,12 +89,17 @@ export interface FinetuneStats {
 }
 
 export interface HwProfile {
-  device?: string;
-  batch_size?: number;
-  gradient_accumulation?: number;
-  num_workers?: number;
-  use_ema?: boolean;
-  use_mixup?: boolean;
+  hw?: string;
+  backend?: string;
+  label?: string;
+  preset?: {
+    batch_size?: number;
+    gradient_accumulation?: number;
+    num_workers?: number;
+    use_ema?: boolean;
+    use_mixup?: boolean;
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 

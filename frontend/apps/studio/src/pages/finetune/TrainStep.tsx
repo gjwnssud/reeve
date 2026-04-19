@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { cn } from "@reeve/ui";
 import { Button, Badge, Input, Label, Skeleton } from "@reeve/ui";
 import { ArrowLeft, ArrowRight, Play, Square, Loader2 } from "lucide-react";
 import { usePolling } from "@reeve/shared";
@@ -88,14 +89,15 @@ export function TrainStep({ onBack, onNext }: Props) {
 
   useEffect(() => {
     if (!hw && !freezeInfo) return;
+    const p = hw?.preset;
     reset((prev) => ({
       ...prev,
-      batch_size: (hw?.batch_size as number | undefined) ?? prev.batch_size,
+      batch_size: p?.batch_size ?? prev.batch_size,
       freeze_epochs: freezeInfo?.freeze_epochs ?? prev.freeze_epochs,
-      gradient_accumulation: (hw?.gradient_accumulation as number | undefined) ?? prev.gradient_accumulation,
-      use_ema: hw?.use_ema != null ? Boolean(hw.use_ema) : prev.use_ema,
-      use_mixup: hw?.use_mixup != null ? Boolean(hw.use_mixup) : prev.use_mixup,
-      num_workers: (hw?.num_workers as number | undefined) ?? prev.num_workers,
+      gradient_accumulation: p?.gradient_accumulation ?? prev.gradient_accumulation,
+      use_ema: p?.use_ema != null ? Boolean(p.use_ema) : prev.use_ema,
+      use_mixup: p?.use_mixup != null ? Boolean(p.use_mixup) : prev.use_mixup,
+      num_workers: p?.num_workers ?? prev.num_workers,
     }));
   }, [hw, freezeInfo, reset]);
 
@@ -214,53 +216,56 @@ export function TrainStep({ onBack, onNext }: Props) {
         </div>
       </div>
 
-      {/* Config form */}
-      {!isRunning && (
-        <div className="rounded-lg border">
-          <div className="border-b bg-muted/30 px-4 py-3">
-            <h3 className="text-sm font-semibold">학습 설정</h3>
-            {freezeInfo && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                freeze_epochs 권장: {freezeInfo.freeze_epochs} ({freezeInfo.reason})
-              </p>
-            )}
+      {/* Config form — always visible; inputs disabled while running */}
+      <div className="rounded-lg border">
+        <div className="border-b bg-muted/30 px-4 py-3">
+          <h3 className="text-sm font-semibold">학습 설정</h3>
+          {freezeInfo && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              freeze_epochs 권장: {freezeInfo.freeze_epochs} ({freezeInfo.reason})
+            </p>
+          )}
+          {isRunning && (
+            <p className="text-xs text-amber-500 mt-0.5">학습 중에는 설정을 변경할 수 없습니다.</p>
+          )}
+        </div>
+        <form className="p-4 space-y-4" onSubmit={handleSubmit(onSubmit)}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {[
+              { name: "learning_rate" as const, label: "학습률" },
+              { name: "num_epochs" as const, label: "에폭 수" },
+              { name: "batch_size" as const, label: "배치 크기" },
+              { name: "freeze_epochs" as const, label: "Freeze 에폭" },
+              { name: "gradient_accumulation" as const, label: "Gradient Accum." },
+              { name: "num_workers" as const, label: "Workers" },
+              { name: "max_per_class" as const, label: "클래스당 최대" },
+              { name: "early_stopping_patience" as const, label: "Early Stop" },
+            ].map(({ name, label }) => (
+              <div key={name} className="space-y-1">
+                <Label htmlFor={name} className="text-xs">{label}</Label>
+                <Input id={name} {...register(name)} disabled={isRunning} className="h-8 text-sm" />
+                {errors[name] && <p className="text-xs text-destructive">{errors[name]?.message}</p>}
+              </div>
+            ))}
           </div>
-          <form className="p-4 space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {[
-                { name: "learning_rate" as const, label: "학습률" },
-                { name: "num_epochs" as const, label: "에폭 수" },
-                { name: "batch_size" as const, label: "배치 크기" },
-                { name: "freeze_epochs" as const, label: "Freeze 에폭" },
-                { name: "gradient_accumulation" as const, label: "Gradient Accum." },
-                { name: "num_workers" as const, label: "Workers" },
-                { name: "max_per_class" as const, label: "클래스당 최대" },
-                { name: "early_stopping_patience" as const, label: "Early Stop" },
-              ].map(({ name, label }) => (
-                <div key={name} className="space-y-1">
-                  <Label htmlFor={name} className="text-xs">{label}</Label>
-                  <Input id={name} {...register(name)} className="h-8 text-sm" />
-                  {errors[name] && <p className="text-xs text-destructive">{errors[name]?.message}</p>}
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-4">
-              {[
-                { name: "use_ema" as const, label: "EMA 사용" },
-                { name: "use_mixup" as const, label: "MixUp 사용" },
-              ].map(({ name, label }) => (
-                <label key={name} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary" {...register(name)} />
-                  {label}
-                </label>
-              ))}
-            </div>
+          <div className="flex gap-4">
+            {[
+              { name: "use_ema" as const, label: "EMA 사용" },
+              { name: "use_mixup" as const, label: "MixUp 사용" },
+            ].map(({ name, label }) => (
+              <label key={name} className={cn("flex items-center gap-2 text-sm", isRunning ? "cursor-not-allowed opacity-50" : "cursor-pointer")}>
+                <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary" disabled={isRunning} {...register(name)} />
+                {label}
+              </label>
+            ))}
+          </div>
+          {!isRunning && (
             <Button type="submit" disabled={isStarting} className="w-full">
               {isStarting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> 시작 중...</> : <><Play className="mr-1 h-4 w-4" /> 학습 시작</>}
             </Button>
-          </form>
-        </div>
-      )}
+          )}
+        </form>
+      </div>
 
       <div className="flex justify-between">
         <Button variant="outline" onClick={onBack}>
