@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -71,20 +71,33 @@ export function TrainStep({ onBack, onNext }: Props) {
     staleTime: 0,
   });
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       learning_rate: 1e-4,
       num_epochs: 10,
-      batch_size: (hw?.batch_size as number | undefined) ?? 16,
-      freeze_epochs: freezeInfo?.freeze_epochs ?? 1,
-      gradient_accumulation: (hw?.gradient_accumulation as number | undefined) ?? 4,
-      use_ema: Boolean(hw?.use_ema),
-      use_mixup: Boolean(hw?.use_mixup),
-      num_workers: (hw?.num_workers as number | undefined) ?? 2,
+      batch_size: 16,
+      freeze_epochs: 1,
+      gradient_accumulation: 4,
+      use_ema: false,
+      use_mixup: false,
+      num_workers: 2,
       early_stopping_patience: 3,
     },
   });
+
+  useEffect(() => {
+    if (!hw && !freezeInfo) return;
+    reset((prev) => ({
+      ...prev,
+      batch_size: (hw?.batch_size as number | undefined) ?? prev.batch_size,
+      freeze_epochs: freezeInfo?.freeze_epochs ?? prev.freeze_epochs,
+      gradient_accumulation: (hw?.gradient_accumulation as number | undefined) ?? prev.gradient_accumulation,
+      use_ema: hw?.use_ema != null ? Boolean(hw.use_ema) : prev.use_ema,
+      use_mixup: hw?.use_mixup != null ? Boolean(hw.use_mixup) : prev.use_mixup,
+      num_workers: (hw?.num_workers as number | undefined) ?? prev.num_workers,
+    }));
+  }, [hw, freezeInfo, reset]);
 
   const { mutateAsync: doStart, isPending: isStarting } = useMutation({
     mutationFn: (config: EfficientNetTrainConfig) => startTraining(config),

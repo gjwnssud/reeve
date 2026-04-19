@@ -48,8 +48,7 @@ RUN python -c "import timm; timm.create_model('tf_efficientnetv2_m.in21k_ft_in1k
 RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 
 COPY identifier/ ./identifier/
-# 빌드된 React 프론트엔드로 교체
-COPY --from=frontend-builder /workspace/identifier/static/ ./identifier/static/
+COPY --from=frontend-builder /workspace/identifier/static/ ./static/
 
 # 시작 스크립트 실행 권한 및 LF 변환 (Windows 환경 대비)
 RUN sed -i 's/\r$//' /app/identifier/start.sh /app/identifier/start_worker.sh && \

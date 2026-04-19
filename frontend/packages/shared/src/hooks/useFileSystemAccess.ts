@@ -19,7 +19,7 @@ export function useFileSystemAccess(): FSASupport {
   const pickDirectory = useCallback(async () => {
     if (!supported || !window.showDirectoryPicker) return null;
     try {
-      return await window.showDirectoryPicker({ mode: 'read' });
+      return await window.showDirectoryPicker({ mode: 'readwrite' });
     } catch (e) {
       if ((e as DOMException)?.name === 'AbortError') return null;
       throw e;

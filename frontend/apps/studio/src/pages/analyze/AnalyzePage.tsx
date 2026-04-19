@@ -1,15 +1,30 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { cn } from "@reeve/ui";
 import { FileTab } from "./FileTab";
 import { FolderTab } from "./FolderTab";
 import { ImageDetailDialog } from "./ImageDetailDialog";
+import { useAnalyzeStore } from "../../stores/analyze-store";
 import type { ImageState } from "../../stores/analyze-store";
 
 type Tab = "file" | "folder";
 
+const LEAVE_MSG = "폴더 감시가 진행 중입니다. 이동하면 감시가 중지됩니다. 계속하시겠습니까?";
+
 export function AnalyzePage() {
   const [tab, setTab] = useState<Tab>("file");
   const [selected, setSelected] = useState<ImageState | null>(null);
+  const folderRunning = useAnalyzeStore((s) => s.folderWatchRunning);
+
+  const handleTabChange = useCallback(
+    (t: Tab) => {
+      if (t === tab) return;
+      if (folderRunning && tab === "folder") {
+        if (!confirm(LEAVE_MSG)) return;
+      }
+      setTab(t);
+    },
+    [tab, folderRunning],
+  );
 
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-4">
@@ -24,7 +39,7 @@ export function AnalyzePage() {
           <button
             key={t}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => handleTabChange(t)}
             className={cn(
               "px-4 py-2 text-sm font-medium border-b-2 transition",
               tab === t

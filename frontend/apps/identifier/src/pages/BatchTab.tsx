@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Badge, Button, Card, CardContent } from "@reeve/ui";
+import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle } from "@reeve/ui";
 import { Semaphore } from "@reeve/shared";
 import { Download, FolderOpen, Play, Square, Trash2 } from "lucide-react";
 
@@ -164,6 +164,8 @@ export function BatchTab() {
     return { success, error };
   }, [rows]);
 
+  const [selectedRow, setSelectedRow] = useState<BatchRow | null>(null);
+
   const progressPct = rows.length > 0 ? Math.round((processed / rows.length) * 100) : 0;
   const elapsed = startedAt ? Math.round((Date.now() - startedAt) / 1000) : 0;
   const eta =
@@ -303,7 +305,7 @@ export function BatchTab() {
                 </thead>
                 <tbody>
                   {rows.map((row, i) => (
-                    <BatchRowView key={i} row={row} index={i} />
+                    <BatchRowView key={i} row={row} index={i} onSelect={() => setSelectedRow(row)} />
                   ))}
                 </tbody>
               </table>
@@ -311,11 +313,50 @@ export function BatchTab() {
           </CardContent>
         </Card>
       ) : null}
+
+      <BatchDetailDialog row={selectedRow} onClose={() => setSelectedRow(null)} />
     </div>
   );
 }
 
-function BatchRowView({ row, index }: { row: BatchRow; index: number }) {
+function LazyThumbnail({ file, preloaded }: { file: File; preloaded: string | null }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [url, setUrl] = useState<string | null>(preloaded);
+  const localUrl = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (preloaded) { setUrl(preloaded); return; }
+    const el = wrapRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !localUrl.current) {
+          localUrl.current = URL.createObjectURL(file);
+          setUrl(localUrl.current);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (localUrl.current) { URL.revokeObjectURL(localUrl.current); localUrl.current = null; }
+    };
+  }, [file, preloaded]);
+
+  return (
+    <div ref={wrapRef} className="h-12 w-16 shrink-0">
+      {url ? (
+        <img src={url} alt={file.name} className="h-12 w-16 rounded object-cover" />
+      ) : (
+        <div className="h-12 w-16 rounded bg-muted" />
+      )}
+    </div>
+  );
+}
+
+function BatchRowView({ row, index, onSelect }: { row: BatchRow; index: number; onSelect: () => void }) {
   const status = resolveStatus({
     status: row.status,
     error: row.error,
@@ -335,18 +376,10 @@ function BatchRowView({ row, index }: { row: BatchRow; index: number }) {
     row.confidence != null && !row.error ? `${(row.confidence * 100).toFixed(1)}%` : "-";
 
   return (
-    <tr className="border-t">
+    <tr className="border-t cursor-pointer hover:bg-muted/40" onClick={onSelect}>
       <td className="px-2 py-2 text-xs text-muted-foreground">{index + 1}</td>
       <td className="px-2 py-2">
-        {row.thumbnailUrl ? (
-          <img
-            src={row.thumbnailUrl}
-            alt={row.file.name}
-            className="h-12 w-16 rounded object-cover"
-          />
-        ) : (
-          <div className="h-12 w-16 rounded bg-muted" />
-        )}
+        <LazyThumbnail file={row.file} preloaded={row.thumbnailUrl} />
       </td>
       <td className="max-w-[220px] truncate px-2 py-2" title={row.file.name}>
         {row.file.name}
@@ -363,5 +396,66 @@ function BatchRowView({ row, index }: { row: BatchRow; index: number }) {
         </span>
       </td>
     </tr>
+  );
+}
+
+function BatchDetailDialog({ row, onClose }: { row: BatchRow | null; onClose: () => void }) {
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!row) { setImgUrl(null); return; }
+    const url = row.thumbnailUrl ?? URL.createObjectURL(row.file);
+    setImgUrl(url);
+    return () => { if (!row.thumbnailUrl) URL.revokeObjectURL(url); };
+  }, [row]);
+
+  const status = row
+    ? resolveStatus({
+        status: row.status,
+        error: row.error,
+        yolo_detected: row.detection != null,
+        message: row.message,
+      })
+    : null;
+
+  return (
+    <Dialog open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="truncate text-sm">{row?.file.name}</DialogTitle>
+        </DialogHeader>
+        {row && (
+          <div className="space-y-4">
+            {imgUrl && (
+              <img src={imgUrl} alt={row.file.name} className="w-full rounded-md object-contain max-h-72" />
+            )}
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="text-muted-foreground">제조사</div>
+              <div className="font-medium">{row.manufacturer_korean ?? "-"}</div>
+              <div className="text-muted-foreground">모델</div>
+              <div className="font-medium">{row.model_korean ?? "-"}</div>
+              <div className="text-muted-foreground">신뢰도</div>
+              <div className="font-medium">
+                {row.confidence != null ? `${(row.confidence * 100).toFixed(1)}%` : "-"}
+              </div>
+              <div className="text-muted-foreground">상태</div>
+              <div>
+                {status && (
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
+                    {status.label}
+                  </span>
+                )}
+              </div>
+              {row.error && (
+                <>
+                  <div className="text-muted-foreground">오류</div>
+                  <div className="text-red-500 text-xs break-all">{row.error}</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

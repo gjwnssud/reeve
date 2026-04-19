@@ -100,6 +100,7 @@ copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.trainer"    "%DEST%\" > nul
 copy "%DOCKER_DIR%\.env.example"          "%DEST%\" > nul
+copy "%ROOT%\.dockerignore"               "%DEST%\" > nul
 
 :: Copy source code
 robocopy "%ROOT%\studio"     "%DEST%\studio"     /e /xd __pycache__ .pytest_cache *.egg-info /xf *.pyc *.pyo .DS_Store > nul
@@ -110,6 +111,8 @@ robocopy "%ROOT%\trainer"    "%DEST%\trainer"    /e /xd __pycache__ .pytest_cach
 if errorlevel 2 echo [WARN] robocopy error: trainer
 robocopy "%ROOT%\sql"        "%DEST%\sql"        /e > nul
 if errorlevel 2 echo [WARN] robocopy error: sql
+robocopy "%ROOT%\frontend"   "%DEST%\frontend"   /e /xd __pycache__ node_modules .pnpm-store dist /xf *.pyc *.pyo .DS_Store *.tsbuildinfo > nul
+if errorlevel 2 echo [WARN] robocopy error: frontend
 copy "%ROOT%\requirements.txt"            "%DEST%\" > nul
 copy "%ROOT%\requirements-identifier.txt" "%DEST%\" > nul
 

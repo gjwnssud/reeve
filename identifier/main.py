@@ -23,7 +23,6 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import json
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field as PydanticField
 
 from identifier.config import settings
@@ -224,10 +223,7 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
-# 정적 파일
-static_path = Path(__file__).parent / "static"
-if static_path.exists():
-    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+# 정적 파일 (data 디렉토리 없음, StaticFiles 미사용 — SPA 라우팅은 아래 catch-all에서 처리)
 
 
 # ──────────────────────────────────────────────
@@ -1031,21 +1027,39 @@ async def global_exception_handler(request, exc: Exception):
     )
 
 
-# SPA 라우팅 — 반드시 모든 API 라우트 이후에 등록 (catch-all이 API를 가로채지 않도록)
-_SPA_INDEX = Path(__file__).parent / "static" / "index.html"
+# SPA 라우팅 — 반드시 모든 API 라우트 이후에 등록
+from fastapi import HTTPException as _HTTPException
+from fastapi.responses import RedirectResponse as _RedirectResponse
+
+_STATIC_DIR = Path(__file__).parent.parent / "static"
+_SPA_INDEX = _STATIC_DIR / "index.html"
+
 
 @app.get("/", include_in_schema=False)
 async def spa_root():
+    return _RedirectResponse(url="/static/", status_code=302)
+
+
+@app.get("/static", include_in_schema=False)
+@app.get("/static/", include_in_schema=False)
+async def spa_static_root():
     if _SPA_INDEX.exists():
         return FileResponse(_SPA_INDEX)
     return {"service": "Reeve Identifier", "status": "running"}
 
-@app.get("/{full_path:path}", include_in_schema=False)
-async def spa_catch_all(full_path: str):
-    """React SPA catch-all — API/static 이외의 경로에 index.html 반환"""
+
+@app.get("/static/{path:path}", include_in_schema=False)
+async def serve_static(path: str):
+    try:
+        file_path = (_STATIC_DIR / path).resolve()
+        file_path.relative_to(_STATIC_DIR.resolve())
+    except ValueError:
+        raise _HTTPException(status_code=403)
+    if file_path.is_file():
+        return FileResponse(file_path)
     if _SPA_INDEX.exists():
         return FileResponse(_SPA_INDEX)
-    return {"service": "Reeve Identifier", "status": "running"}
+    raise _HTTPException(status_code=404)
 
 
 # ──────────────────────────────────────────────

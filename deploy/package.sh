@@ -954,16 +954,18 @@ if ! command -v python3 > /dev/null 2>&1; then
 fi
 echo "      Python: $(python3 --version)"
 
-echo "[3/5] 가상환경 및 Trainer 의존성 설치 중..."
+echo "[3/5] 가상환경 및 Trainer 의존성 확인 중..."
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
     echo "      .venv 가상환경 생성 완료"
+    .venv/bin/pip install --upgrade pip
+    # MLX (vlm_only 모드) + EfficientNet (efficientnet 모드) 양쪽 의존성 설치
+    .venv/bin/pip install mlx-lm mlx-vlm fastapi "uvicorn[standard]" pydantic-settings pyyaml psutil httpx
+    .venv/bin/pip install torch==2.6.0 torchvision==0.21.0 timm Pillow
+    echo "      의존성 설치 완료"
+else
+    echo "      .venv 존재 — 설치 건너뜀 (재설치: .venv 삭제 후 재실행)"
 fi
-.venv/bin/pip install --quiet --upgrade pip
-# MLX (vlm_only 모드) + EfficientNet (efficientnet 모드) 양쪽 의존성 설치
-.venv/bin/pip install --quiet mlx-lm mlx-vlm fastapi "uvicorn[standard]" pydantic-settings pyyaml psutil httpx
-.venv/bin/pip install --quiet torch==2.6.0 torchvision==0.21.0 timm Pillow
-echo "      mlx-lm, mlx-vlm, torch, timm, fastapi 설치 완료 (.venv)"
 
 echo "[4/5] 환경변수 파일 확인 중..."
 if [ ! -f ".env" ]; then

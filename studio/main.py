@@ -2,10 +2,9 @@
 Reeve - 차량 제조사/모델 자동 분류 시스템
 FastAPI 메인 애플리케이션
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import logging.handlers
@@ -105,12 +104,8 @@ if settings.environment == "development":
     )
 
 
-# 정적 파일 서빙 (React 빌드 결과물)
-static_path = Path(__file__).parent / "static"
-if static_path.exists():
-    app.mount("/static", StaticFiles(directory=str(static_path), html=True), name="static")
-
 # 데이터 디렉토리 서빙 (업로드된 이미지)
+from fastapi.staticfiles import StaticFiles
 data_path = Path(__file__).parent.parent / "data"
 if data_path.exists():
     app.mount("/data", StaticFiles(directory=str(data_path)), name="data")
@@ -147,23 +142,48 @@ app.include_router(finetune.router, prefix="/finetune", tags=["Finetune"])
 
 
 # SPA 라우팅 — 반드시 모든 API 라우터 include_router 이후에 등록
-from fastapi.responses import FileResponse
-
-_SPA_INDEX = Path(__file__).parent / "static" / "index.html"
-
+# StaticFiles 마운트 대신 커스텀 라우트를 사용해 SPA 딥링크를 지원한다.
+# (StaticFiles 마운트는 파일 미존재 시 FastAPI catch-all을 우회하고 자체 404를 반환함)
 from fastapi.responses import RedirectResponse
+
+# 신규 이미지: /app/static/ (studio/ bind-mount와 분리)
+# 구 이미지(재빌드 전): /app/studio/static/ (anonymous volume 보호)
+_STATIC_DIR = next(
+    (p for p in [
+        Path(__file__).parent.parent / "static",
+        Path(__file__).parent / "static",
+    ] if p.is_dir()),
+    Path(__file__).parent.parent / "static",
+)
+_SPA_INDEX = _STATIC_DIR / "index.html"
+
 
 @app.get("/", include_in_schema=False)
 async def spa_root():
-    # Vite base="/static/" 이므로 루트는 /static/으로 리다이렉트
     return RedirectResponse(url="/static/", status_code=302)
 
-@app.get("/{full_path:path}", include_in_schema=False)
-async def spa_catch_all(full_path: str):
-    """React SPA catch-all — /static/ 하위 경로에 index.html 반환"""
+
+@app.get("/static", include_in_schema=False)
+@app.get("/static/", include_in_schema=False)
+async def spa_static_root():
     if _SPA_INDEX.exists():
         return FileResponse(_SPA_INDEX)
     return {"service": "Reeve Studio", "status": "running"}
+
+
+@app.get("/static/{path:path}", include_in_schema=False)
+async def serve_static(path: str):
+    """정적 파일이 있으면 반환, 없으면 SPA index.html 반환 (딥링크 지원)"""
+    try:
+        file_path = (_STATIC_DIR / path).resolve()
+        file_path.relative_to(_STATIC_DIR.resolve())  # path traversal 방지
+    except ValueError:
+        raise HTTPException(status_code=403)
+    if file_path.is_file():
+        return FileResponse(file_path)
+    if _SPA_INDEX.exists():
+        return FileResponse(_SPA_INDEX)
+    raise HTTPException(status_code=404)
 
 
 if __name__ == "__main__":

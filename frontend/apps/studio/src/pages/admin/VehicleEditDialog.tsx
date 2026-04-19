@@ -13,6 +13,7 @@ import {
   updateAnalyzedVehicle, saveToTraining, reanalyzeVehicle,
   extractErrorMessage, type AnalyzedVehicle,
 } from "../../lib/api";
+import { streamAnalyze } from "../../lib/analyzeApi";
 
 type Bbox = [number, number, number, number];
 
@@ -28,7 +29,9 @@ export function VehicleEditDialog({ vehicle, open, onClose }: Props) {
   const [mfId, setMfId] = useState<number | null>(null);
   const [modelId, setModelId] = useState<number | null>(null);
   const [isReanalyzing, setReanalyzing] = useState(false);
+  const [isReanalyzingBbox, setReanalyzingBbox] = useState(false);
   const [reanalyzeMsg, setReanalyzeMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [progressText, setProgressText] = useState<string | null>(null);
   const [inlineAddMf, setInlineAddMf] = useState(false);
   const [inlineAddModel, setInlineAddModel] = useState(false);
   const [newMfCode, setNewMfCode] = useState("");
@@ -108,6 +111,7 @@ export function VehicleEditDialog({ vehicle, open, onClose }: Props) {
     if (!vehicle) return;
     setReanalyzing(true);
     setReanalyzeMsg(null);
+    setProgressText(null);
     try {
       const res = await reanalyzeVehicle(vehicle.id);
       const d = res.data;
@@ -119,6 +123,38 @@ export function VehicleEditDialog({ vehicle, open, onClose }: Props) {
       setReanalyzeMsg({ text: extractErrorMessage(e), ok: false });
     } finally {
       setReanalyzing(false);
+    }
+  };
+
+  const handleReanalyzeBbox = async () => {
+    if (!vehicle) return;
+    const useBbox: Bbox = bbox ?? [0, 0, 1, 1];
+    setReanalyzingBbox(true);
+    setReanalyzeMsg(null);
+    setProgressText("재분석 시작 중...");
+    try {
+      for await (const ev of streamAnalyze(vehicle.id, useBbox)) {
+        if (ev.event === "progress") {
+          setProgressText(ev.message);
+        } else if (ev.event === "completed" && ev.result) {
+          setMfId(ev.result.matched_manufacturer_id);
+          setModelId(ev.result.matched_model_id);
+          setReanalyzeMsg({
+            text: `${ev.result.manufacturer ?? "-"} / ${ev.result.model ?? "-"}`,
+            ok: true,
+          });
+          setProgressText(null);
+          invalidate();
+        } else if (ev.event === "error") {
+          setReanalyzeMsg({ text: ev.message, ok: false });
+          setProgressText(null);
+        }
+      }
+    } catch (e) {
+      setReanalyzeMsg({ text: extractErrorMessage(e), ok: false });
+      setProgressText(null);
+    } finally {
+      setReanalyzingBbox(false);
     }
   };
 
@@ -275,6 +311,11 @@ export function VehicleEditDialog({ vehicle, open, onClose }: Props) {
               )}
             </div>
 
+            {progressText && (
+              <p className="rounded bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+                {progressText}
+              </p>
+            )}
             {reanalyzeMsg && (
               <p className={`text-xs rounded p-2 ${reanalyzeMsg.ok ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400" : "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"}`}>
                 {reanalyzeMsg.ok ? "완료: " : "오류: "}{reanalyzeMsg.text}
@@ -290,9 +331,23 @@ export function VehicleEditDialog({ vehicle, open, onClose }: Props) {
                 {isSavingTraining ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                 저장완료 (학습 데이터 적재)
               </Button>
-              <Button variant="outline" onClick={handleReanalyze} disabled={isReanalyzing} className="w-full">
+              <Button
+                variant="outline"
+                onClick={handleReanalyzeBbox}
+                disabled={isReanalyzingBbox || isReanalyzing || !bbox}
+                className="w-full"
+              >
+                {isReanalyzingBbox ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+                재분석 (선택 영역 기준)
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleReanalyze}
+                disabled={isReanalyzing || isReanalyzingBbox}
+                className="w-full"
+              >
                 {isReanalyzing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
-                재분석
+                재분석 (기존 이미지)
               </Button>
               <Button variant="ghost" onClick={onClose} className="w-full">닫기</Button>
             </div>

@@ -78,7 +78,7 @@ export function DataStep({ onNext }: Props) {
               <div className="text-xs font-medium text-muted-foreground">제조사별 분포</div>
               <div className="max-h-64 overflow-y-auto rounded-md border">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 border-b bg-muted/50">
+                  <thead className="sticky top-0 border-b bg-muted">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium text-muted-foreground">제조사</th>
                       <th className="px-3 py-2 text-right font-medium text-muted-foreground">이미지</th>

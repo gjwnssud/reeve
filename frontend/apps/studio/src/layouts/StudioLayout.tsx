@@ -1,7 +1,10 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Camera, Database, ListChecks, Settings2, Car, Moon, Sun } from "lucide-react";
 import { useThemeContext } from "@reeve/shared";
 import { Button, cn } from "@reeve/ui";
+import { useAnalyzeStore } from "../stores/analyze-store";
+
+const LEAVE_MSG = "폴더 감시가 진행 중입니다. 이동하면 감시가 중지됩니다. 계속하시겠습니까?";
 
 const navItems = [
   { to: "/analyze", icon: Camera, label: "이미지 분석" },
@@ -12,6 +15,18 @@ const navItems = [
 
 function SidebarContent() {
   const { theme, toggle } = useThemeContext();
+  const folderRunning = useAnalyzeStore((s) => s.folderWatchRunning);
+  const navigate = useNavigate();
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, to: string) => {
+    if (folderRunning) {
+      e.preventDefault();
+      if (confirm(LEAVE_MSG)) {
+        navigate(to);
+      }
+    }
+  };
+
   return (
     <div className="flex h-full flex-col" style={{ background: "linear-gradient(180deg,#667eea 0%,#764ba2 100%)" }}>
       <div className="flex items-center justify-center border-b border-white/20 px-4 py-5">
@@ -25,6 +40,7 @@ function SidebarContent() {
           <NavLink
             key={to}
             to={to}
+            onClick={(e) => handleNavClick(e, to)}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",

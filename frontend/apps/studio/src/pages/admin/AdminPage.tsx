@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button, Badge, Skeleton, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@reeve/ui";
-import { Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Loader2 } from "lucide-react";
 
 import {
   getAnalyzedVehicles, getVehicleCounts, deleteAnalyzedVehicle, deleteAllUnverified,
-  getManufacturers, extractErrorMessage,
+  saveToTraining, getManufacturers, extractErrorMessage,
   type AnalyzedVehicle, type StatusFilter,
 } from "../../lib/api";
 import { VehicleEditDialog } from "./VehicleEditDialog";
@@ -44,6 +44,8 @@ export function AdminPage() {
   const [mfFilter, setMfFilter] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(0);
   const [editVehicle, setEditVehicle] = useState<AnalyzedVehicle | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<"delete" | "approve" | null>(null);
 
   const { data: counts } = useQuery({
     queryKey: ["vehicle-counts"],
@@ -65,6 +67,11 @@ export function AdminPage() {
       manufacturer_id: mfFilter,
     }),
   });
+
+  // Reset selection when page/filter changes
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page, statusFilter, mfFilter, data?.items]);
 
   const { mutateAsync: doDelete } = useMutation({
     mutationFn: deleteAnalyzedVehicle,
@@ -96,11 +103,66 @@ export function AdminPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) { toast.error("선택된 항목이 없습니다"); return; }
+    if (!confirm(`선택한 ${selected.size}개 항목을 삭제하시겠습니까? (복구 불가)`)) return;
+    setBulkBusy("delete");
+    let ok = 0, fail = 0;
+    for (const id of selected) {
+      try { await deleteAnalyzedVehicle(id); ok++; } catch { fail++; }
+    }
+    await qc.invalidateQueries({ queryKey: ["analyzed-vehicles"] });
+    await qc.invalidateQueries({ queryKey: ["vehicle-counts"] });
+    setSelected(new Set());
+    setBulkBusy(null);
+    if (fail === 0) toast.success(`삭제 완료: ${ok}개`);
+    else toast.error(`삭제 완료: ${ok}개 (실패: ${fail}개)`);
+  };
+
+  const handleBulkApprove = async () => {
+    if (selected.size === 0) { toast.error("선택된 항목이 없습니다"); return; }
+    if (!confirm(`선택한 ${selected.size}개 항목을 검수 승인하시겠습니까?`)) return;
+    setBulkBusy("approve");
+    let ok = 0, fail = 0;
+    for (const id of selected) {
+      try { await saveToTraining(id); ok++; } catch { fail++; }
+    }
+    await qc.invalidateQueries({ queryKey: ["analyzed-vehicles"] });
+    await qc.invalidateQueries({ queryKey: ["vehicle-counts"] });
+    setSelected(new Set());
+    setBulkBusy(null);
+    if (fail === 0) toast.success(`검수 승인 완료: ${ok}개`);
+    else toast.error(`검수 승인 완료: ${ok}개 (실패: ${fail}개)`);
+  };
+
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const changeTab = (s: StatusFilter) => { setStatusFilter(s); setPage(0); };
   const changeMf = (v: string) => { setMfFilter(v === "all" ? undefined : Number(v)); setPage(0); };
+
+  const allOnPageSelected = useMemo(() => {
+    const items = data?.items ?? [];
+    return items.length > 0 && items.every((it) => selected.has(it.id));
+  }, [data, selected]);
+
+  const togglePageSelectAll = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const it of data?.items ?? []) {
+        if (checked) next.add(it.id); else next.delete(it.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleOne = (id: number, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -144,8 +206,8 @@ export function AdminPage() {
         })}
       </div>
 
-      {/* Manufacturer filter */}
-      <div className="mb-4 flex items-center gap-2">
+      {/* Manufacturer filter + bulk actions */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select value={mfFilter !== undefined ? String(mfFilter) : "all"} onValueChange={changeMf}>
           <SelectTrigger className="w-52">
             <SelectValue placeholder="전체 제조사" />
@@ -158,6 +220,34 @@ export function AdminPage() {
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">총 {total}개</span>
+
+        {selected.size > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{selected.size}개 선택</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={bulkBusy !== null}
+              onClick={() => void handleBulkApprove()}
+            >
+              {bulkBusy === "approve"
+                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                : <CheckCircle2 className="mr-1 h-4 w-4" />}
+              일괄 검수 승인
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={bulkBusy !== null}
+              onClick={() => void handleBulkDelete()}
+            >
+              {bulkBusy === "delete"
+                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                : <Trash2 className="mr-1 h-4 w-4" />}
+              일괄 삭제
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -165,6 +255,15 @@ export function AdminPage() {
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
+              <th className="w-10 px-3 py-3 text-left">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-input accent-primary"
+                  checked={allOnPageSelected}
+                  onChange={(e) => togglePageSelectAll(e.target.checked)}
+                  aria-label="전체 선택"
+                />
+              </th>
               {["이미지", "상태", "제조사", "모델", "등록일", "작업"].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium text-muted-foreground">{h}</th>
               ))}
@@ -174,14 +273,14 @@ export function AdminPage() {
             {isLoading ? (
               Array.from({ length: 10 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: 6 }).map((__, j) => (
+                  {Array.from({ length: 7 }).map((__, j) => (
                     <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
             ) : !data?.items.length ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                   데이터가 없습니다
                 </td>
               </tr>
@@ -195,8 +294,18 @@ export function AdminPage() {
                       dateStyle: "short", timeStyle: "short",
                     })
                   : "-";
+                const checked = selected.has(item.id);
                 return (
-                  <tr key={item.id} className="border-b hover:bg-muted/30 transition-colors">
+                  <tr key={item.id} className={`border-b transition-colors ${checked ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-input accent-primary"
+                        checked={checked}
+                        onChange={(e) => toggleOne(item.id, e.target.checked)}
+                        aria-label={`#${item.id} 선택`}
+                      />
+                    </td>
                     <td className="px-4 py-2">
                       {imgSrc ? (
                         <img

@@ -6,6 +6,7 @@ import { useClientUUID } from "@reeve/shared";
 import { useAnalyzeStore } from "../../stores/analyze-store";
 import { uploadFile, detectVehicle, streamAnalyze } from "../../lib/analyzeApi";
 import { ImageGrid } from "./ImageGrid";
+import { BulkApproveButton } from "./BulkApproveButton";
 import type { ImageState } from "../../stores/analyze-store";
 
 const detectSema = new Semaphore(4);
@@ -132,7 +133,8 @@ export function FileTab({ onSelectImage }: Props) {
 
       {/* Actions */}
       {fileImages.length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <BulkApproveButton source="file" />
           <Button
             variant="outline"
             size="sm"

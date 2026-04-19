@@ -44,8 +44,10 @@ interface AnalyzeStore {
   images: Record<string, ImageState>;
   fileStats: Stats;
   folderStats: Stats;
+  folderWatchRunning: boolean;
 
   addImage: (img: ImageState) => void;
+  setFolderWatchRunning: (v: boolean) => void;
   updateImage: (id: string, patch: Partial<ImageState>) => void;
   removeImage: (id: string) => void;
   clearImages: (source: ImageSource) => void;
@@ -67,6 +69,7 @@ function getUUID(): string {
 export const useAnalyzeStore = create<AnalyzeStore>()(
   (set) => ({
     images: {},
+    folderWatchRunning: false,
     fileStats: (() => {
       try {
         const uuid = getUUID();
@@ -81,6 +84,8 @@ export const useAnalyzeStore = create<AnalyzeStore>()(
         return saved ? (JSON.parse(saved) as Stats) : emptyStats();
       } catch { return emptyStats(); }
     })(),
+
+    setFolderWatchRunning: (v) => set({ folderWatchRunning: v }),
 
     addImage: (img) =>
       set((s) => ({ images: { ...s.images, [img.id]: img } })),

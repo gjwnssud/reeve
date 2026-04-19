@@ -1,40 +1,73 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@reeve/ui";
 import { FolderOpen, Play, Square, Trash2, AlertCircle } from "lucide-react";
-import { useFileSystemAccess, useFolderWatch, useClientUUID } from "@reeve/shared";
+import { useFileSystemAccess, useFolderWatch, useClientUUID, Semaphore } from "@reeve/shared";
 import { useAnalyzeStore } from "../../stores/analyze-store";
 import { uploadFile, detectVehicle, streamAnalyze } from "../../lib/analyzeApi";
+import { saveToTraining, extractErrorMessage } from "../../lib/api";
 import { ImageGrid } from "./ImageGrid";
+import { BulkApproveButton } from "./BulkApproveButton";
 import type { ImageState } from "../../stores/analyze-store";
+
+const MAX_DISPLAY = 100;
 
 interface Props {
   onSelectImage: (img: ImageState) => void;
+  onRunningChange?: (running: boolean) => void;
 }
 
-export function FolderTab({ onSelectImage }: Props) {
+export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   const clientUUID = useClientUUID();
   const { supported, pickDirectory } = useFileSystemAccess();
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const { addImage, updateImage, clearImages, incrementStat } = useAnalyzeStore();
+  const { addImage, updateImage, clearImages, incrementStat, setFolderWatchRunning } = useAnalyzeStore();
+  const abortRef = useRef<AbortController>(new AbortController());
+  const analyzeSema = useRef(new Semaphore(8));
 
   const folderImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
     (i) => i.source === "folder",
   );
+  const displayImages = folderImages.slice(-MAX_DISPLAY);
 
   const processFile = useCallback(
-    async (file: File, release: () => void) => {
+    async (wf: { name: string; file: File }, release: () => void) => {
+      const { name, file } = wf;
+      const signal = abortRef.current.signal;
       const id = crypto.randomUUID();
       const preview = URL.createObjectURL(file);
       addImage({ id, source: "folder", file, preview, status: "queued" });
       incrementStat("folder", "total");
 
+      let analyzed_id: number | undefined;
       try {
+        // ── Phase 1: Upload (concurrency 50, release slot immediately after) ──
+        if (signal.aborted) return;
         updateImage(id, { status: "uploading" });
-        const { analyzed_id, original_image_path } = await uploadFile(file, "folder", clientUUID);
-        updateImage(id, { analyzedId: analyzed_id, originalImagePath: original_image_path });
+        const result = await uploadFile(file, "folder", clientUUID);
+        analyzed_id = result.analyzed_id;
+        updateImage(id, { analyzedId: analyzed_id, originalImagePath: result.original_image_path });
 
+        try {
+          await dirHandle?.removeEntry(name);
+        } catch (e) {
+          console.warn("file delete failed", name, e);
+        }
+      } catch (err) {
+        if (!signal.aborted) {
+          updateImage(id, { status: "failed", error: String(err) });
+          incrementStat("folder", "analysisError");
+        }
+        return;
+      } finally {
+        release(); // 업로드 슬롯 즉시 반환
+      }
+
+      // ── Phase 2: Detect + Analyze + Save (concurrency 8) ──
+      const releaseAnalyze = await analyzeSema.current.acquire();
+      try {
+        if (signal.aborted) return;
         updateImage(id, { status: "detecting" });
-        const detectResult = await detectVehicle(analyzed_id);
+        const detectResult = await detectVehicle(analyzed_id!);
         const detections = detectResult.detections;
 
         if (detections.length === 0) {
@@ -43,35 +76,74 @@ export function FolderTab({ onSelectImage }: Props) {
           return;
         }
 
+        if (signal.aborted) return;
         incrementStat("folder", "detected");
         const bbox = detections[0]!.bbox;
         updateImage(id, { detections, selectedBbox: bbox, status: "analyzing" });
 
-        for await (const ev of streamAnalyze(analyzed_id, bbox)) {
+        for await (const ev of streamAnalyze(analyzed_id!, bbox)) {
+          if (signal.aborted) break;
           useAnalyzeStore.getState().applySSEEvent(id, ev);
         }
 
+        if (signal.aborted) return;
         const finalImg = useAnalyzeStore.getState().images[id];
         if (finalImg?.status === "done") {
           incrementStat("folder", "analyzed");
+          const res = finalImg.result;
+          if (res?.matched_manufacturer_id != null && res?.matched_model_id != null) {
+            try {
+              await saveToTraining(res.id);
+              useAnalyzeStore.getState().removeImage(id);
+            } catch (e) {
+              console.error("auto-approve failed", id, extractErrorMessage(e));
+            }
+          }
         } else {
           incrementStat("folder", "analysisError");
         }
       } catch (err) {
-        updateImage(id, { status: "failed", error: String(err) });
-        incrementStat("folder", "analysisError");
+        if (!signal.aborted) {
+          updateImage(id, { status: "failed", error: String(err) });
+          incrementStat("folder", "analysisError");
+        }
       } finally {
-        release();
+        releaseAnalyze();
       }
     },
-    [clientUUID, addImage, updateImage, incrementStat],
+    [clientUUID, addImage, updateImage, incrementStat, dirHandle],
   );
 
   const { running, start, stop } = useFolderWatch({
     dirHandle,
-    onNewFile: (wf, release) => processFile(wf.file, release),
-    concurrency: 4,
+    onNewFile: (wf, release) => processFile(wf, release),
+    concurrency: 50,
   });
+
+  const handleStop = useCallback(() => {
+    abortRef.current.abort();
+    abortRef.current = new AbortController();
+    stop();
+  }, [stop]);
+
+  useEffect(() => {
+    return () => { abortRef.current.abort(); };
+  }, []);
+
+  useEffect(() => {
+    setFolderWatchRunning(running);
+    onRunningChange?.(running);
+  }, [running, onRunningChange, setFolderWatchRunning]);
+
+  useEffect(() => {
+    if (!running) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [running]);
 
   const handlePickFolder = async () => {
     const handle = await pickDirectory();
@@ -107,24 +179,26 @@ export function FolderTab({ onSelectImage }: Props) {
           </Button>
         )}
         {running && (
-          <Button variant="destructive" onClick={stop}>
+          <Button variant="destructive" onClick={handleStop}>
             <Square className="mr-1 h-4 w-4" /> 감시 중지
           </Button>
         )}
 
-        {folderImages.length > 0 && !running && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={() => {
-              clearImages("folder");
-              useAnalyzeStore.getState().resetStats("folder");
-            }}
-          >
-            <Trash2 className="mr-1 h-4 w-4" /> 초기화
-          </Button>
-        )}
+        <div className="ml-auto flex gap-2">
+          {folderImages.length > 0 && <BulkApproveButton source="folder" />}
+          {stats.total > 0 && !running && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                clearImages("folder");
+                useAnalyzeStore.getState().resetStats("folder");
+              }}
+            >
+              <Trash2 className="mr-1 h-4 w-4" /> 초기화
+            </Button>
+          )}
+        </div>
       </div>
 
       {running && (
@@ -152,7 +226,12 @@ export function FolderTab({ onSelectImage }: Props) {
         </div>
       )}
 
-      <ImageGrid images={folderImages} onSelect={onSelectImage} />
+      {folderImages.length > MAX_DISPLAY && (
+        <p className="text-xs text-muted-foreground text-right">
+          최신 {MAX_DISPLAY}개만 표시 중 (전체 {folderImages.length}개)
+        </p>
+      )}
+      <ImageGrid images={displayImages} onSelect={onSelectImage} />
 
       {folderImages.length === 0 && (
         <div className="flex flex-col items-center py-8 text-muted-foreground">

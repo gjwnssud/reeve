@@ -48,8 +48,7 @@ RUN python -c "import timm; timm.create_model('tf_efficientnetv2_m.in21k_ft_in1k
 RUN python -c "from ultralytics import YOLO; YOLO('yolo26m.pt')"
 
 COPY studio/ ./studio/
-# 빌드된 React 프론트엔드로 교체 (COPY studio/ 에 포함된 구버전 static 덮어쓰기)
-COPY --from=frontend-builder /workspace/studio/static/ ./studio/static/
+COPY --from=frontend-builder /workspace/static/ ./static/
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
