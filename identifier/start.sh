@@ -24,6 +24,6 @@ echo "=========================================="
 # uvicorn 실행
 exec uvicorn identifier.main:app \
     --host 0.0.0.0 \
-    --port ${IDENTIFIER_PORT:-8001} \
+    --port 8001 \
     --workers "$WORKERS" \
     --no-access-log
