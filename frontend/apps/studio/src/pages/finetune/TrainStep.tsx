@@ -196,12 +196,27 @@ export function TrainStep({ onBack, onNext }: Props) {
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {isRunning ? (
-              <Button variant="destructive" size="sm" disabled={isStopping} onClick={() => void doStop()}>
-                {isStopping ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Square className="mr-1 h-4 w-4" />}
-                학습 중지
-              </Button>
+              <>
+                <Button variant="destructive" size="sm" disabled={isStopping} onClick={() => void doStop()}>
+                  {isStopping ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Square className="mr-1 h-4 w-4" />}
+                  학습 중지
+                </Button>
+                {(status?.current_steps ?? 0) === 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isStopping}
+                    onClick={async () => {
+                      await doStop();
+                      setPollingEnabled(false);
+                    }}
+                  >
+                    강제 초기화
+                  </Button>
+                )}
+              </>
             ) : (
               <Button
                 variant="outline"

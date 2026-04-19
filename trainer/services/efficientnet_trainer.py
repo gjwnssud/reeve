@@ -637,8 +637,10 @@ class EfficientNetTrainer:
 
     async def get_status(self) -> dict:
         """학습 진행 상태 조회"""
+        import time
+        pid = None
+        is_running = False
         try:
-            # 프로세스 실행 여부 확인
             proc = await asyncio.create_subprocess_shell(
                 f"pgrep -f '{_SCRIPT_FILENAME}' | head -1",
                 stdout=asyncio.subprocess.PIPE,
@@ -646,7 +648,16 @@ class EfficientNetTrainer:
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
             pid = stdout.decode().strip()
-            is_running = bool(pid)
+            if pid:
+                # 좀비 프로세스 제외 (ps stat 확인)
+                ps_proc = await asyncio.create_subprocess_shell(
+                    f"ps -p {pid} -o stat= 2>/dev/null",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                ps_out, _ = await asyncio.wait_for(ps_proc.communicate(), timeout=3)
+                stat = ps_out.decode().strip()
+                is_running = bool(stat) and "Z" not in stat
         except Exception:
             is_running = False
             pid = None
@@ -654,6 +665,7 @@ class EfficientNetTrainer:
         # 로그 파싱
         log_dir = self._log_dir("efficientnet")
         jsonl_path = log_dir / _JSONL_LOG_FILENAME
+        raw_log_path = log_dir / _RAW_LOG_FILENAME
         last_entry = {}
         last_val_acc = None
 
@@ -662,7 +674,6 @@ class EfficientNetTrainer:
                 lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
                 if lines:
                     last_entry = json.loads(lines[-1])
-                    # val_acc는 epoch 단위로만 기록되므로 별도로 역순 탐색
                     for line in reversed(lines):
                         try:
                             entry = json.loads(line)
@@ -674,7 +685,21 @@ class EfficientNetTrainer:
             except Exception:
                 pass
 
-        status = "running" if is_running else ("done" if last_entry else "idle")
+        # 프로세스가 살아있지만 120초 이상 JSONL 로그가 없으면 → failed
+        if is_running and not last_entry and raw_log_path.exists():
+            try:
+                age = time.time() - raw_log_path.stat().st_mtime
+                if age > 120:
+                    is_running = False
+            except Exception:
+                pass
+
+        if is_running:
+            status = "running"
+        elif last_entry:
+            status = "done"
+        else:
+            status = "idle"
 
         return {
             "is_running": is_running,
@@ -689,14 +714,14 @@ class EfficientNetTrainer:
         }
 
     async def stop_training(self) -> dict:
-        """학습 중지"""
+        """학습 중지 (SIGTERM 후 SIGKILL)"""
         try:
             proc = await asyncio.create_subprocess_shell(
-                f"pkill -f '{_SCRIPT_FILENAME}'",
+                f"pkill -f '{_SCRIPT_FILENAME}' ; sleep 2 ; pkill -9 -f '{_SCRIPT_FILENAME}' ; true",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await asyncio.wait_for(proc.communicate(), timeout=10)
+            await asyncio.wait_for(proc.communicate(), timeout=15)
             return {"status": "stopped"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
