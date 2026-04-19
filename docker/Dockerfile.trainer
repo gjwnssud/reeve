@@ -1,6 +1,6 @@
 # Trainer 서비스 — EfficientNet 학습 (Linux/Windows NVIDIA GPU)
 # Mac 환경에서는 네이티브 Python(MLX)으로 실행 (docker-compose.mac.yml에서 비활성화)
-FROM pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
+FROM nvcr.io/nvidia/pytorch:25.03-py3
 
 WORKDIR /app
 
