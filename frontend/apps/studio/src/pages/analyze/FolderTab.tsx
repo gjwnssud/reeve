@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@reeve/ui";
 import { FolderOpen, Play, Square, Trash2, AlertCircle } from "lucide-react";
 import { useFileSystemAccess, useFolderWatch, useClientUUID, Semaphore } from "@reeve/shared";
+import type { WatchedFile } from "@reeve/shared";
 import { useAnalyzeStore } from "../../stores/analyze-store";
 import { uploadFile, detectVehicle, streamAnalyze } from "../../lib/analyzeApi";
 import { saveToTraining, extractErrorMessage } from "../../lib/api";
@@ -22,66 +23,82 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const { addImage, updateImage, clearImages, incrementStat, setFolderWatchRunning } = useAnalyzeStore();
   const abortRef = useRef<AbortController>(new AbortController());
+  const detectSema = useRef(new Semaphore(4));
   const analyzeSema = useRef(new Semaphore(8));
+  const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
   const folderImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
     (i) => i.source === "folder",
   );
   const displayImages = folderImages.slice(-MAX_DISPLAY);
 
-  const processFile = useCallback(
-    async (wf: { name: string; file: File }, release: () => void) => {
+  useEffect(() => { dirHandleRef.current = dirHandle; }, [dirHandle]);
+
+  // Stage 2+3: 업로드 + 탐지 (업로드 동시 무제한, 탐지 최대 4개)
+  const uploadAndDetect = useCallback(
+    async (wf: WatchedFile): Promise<string | null> => {
       const { name, file } = wf;
       const signal = abortRef.current.signal;
+      if (signal.aborted) return null;
+
       const id = crypto.randomUUID();
       const preview = URL.createObjectURL(file);
       addImage({ id, source: "folder", file, preview, status: "queued" });
       incrementStat("folder", "total");
 
-      let analyzed_id: number | undefined;
       try {
-        // ── Phase 1: Upload (concurrency 50, release slot immediately after) ──
-        if (signal.aborted) return;
         updateImage(id, { status: "uploading" });
         const result = await uploadFile(file, "folder", clientUUID);
-        analyzed_id = result.analyzed_id;
-        updateImage(id, { analyzedId: analyzed_id, originalImagePath: result.original_image_path });
+        updateImage(id, { analyzedId: result.analyzed_id, originalImagePath: result.original_image_path });
 
+        try { await dirHandleRef.current?.removeEntry(name); } catch { /* ignore */ }
+
+        if (signal.aborted) return null;
+
+        // 탐지 세마포어(4) 획득 후 즉시 탐지
+        const releaseDetect = await detectSema.current.acquire();
         try {
-          await dirHandle?.removeEntry(name);
-        } catch (e) {
-          console.warn("file delete failed", name, e);
+          if (signal.aborted) return null;
+          updateImage(id, { status: "detecting" });
+          const detectResult = await detectVehicle(result.analyzed_id);
+          const detections = detectResult.detections;
+
+          if (detections.length === 0) {
+            incrementStat("folder", "detectionFailed");
+            updateImage(id, { status: "done", detections: [] });
+            return null; // 탐지 실패 — 분석 대상 아님
+          }
+
+          incrementStat("folder", "detected");
+          const bbox = detections[0]!.bbox;
+          updateImage(id, { detections, selectedBbox: bbox, status: "queued" });
+          return id;
+        } finally {
+          releaseDetect();
         }
       } catch (err) {
-        if (!signal.aborted) {
+        if (!abortRef.current.signal.aborted) {
           updateImage(id, { status: "failed", error: String(err) });
           incrementStat("folder", "analysisError");
         }
-        return;
-      } finally {
-        release(); // 업로드 슬롯 즉시 반환
+        return null;
       }
+    },
+    [clientUUID, addImage, updateImage, incrementStat],
+  );
 
-      // ── Phase 2: Detect + Analyze + Save (concurrency 8) ──
+  // Stage 4+5: 분석 + 저장 (최대 8개 동시)
+  const analyzeAndSave = useCallback(
+    async (id: string) => {
+      const signal = abortRef.current.signal;
       const releaseAnalyze = await analyzeSema.current.acquire();
       try {
         if (signal.aborted) return;
-        updateImage(id, { status: "detecting" });
-        const detectResult = await detectVehicle(analyzed_id!);
-        const detections = detectResult.detections;
+        const img = useAnalyzeStore.getState().images[id];
+        if (!img?.analyzedId || !img.selectedBbox) return;
 
-        if (detections.length === 0) {
-          incrementStat("folder", "detectionFailed");
-          updateImage(id, { status: "done", detections: [] });
-          return;
-        }
-
-        if (signal.aborted) return;
-        incrementStat("folder", "detected");
-        const bbox = detections[0]!.bbox;
-        updateImage(id, { detections, selectedBbox: bbox, status: "analyzing" });
-
-        for await (const ev of streamAnalyze(analyzed_id!, bbox)) {
+        updateImage(id, { status: "analyzing" });
+        for await (const ev of streamAnalyze(img.analyzedId, img.selectedBbox)) {
           if (signal.aborted) break;
           useAnalyzeStore.getState().applySSEEvent(id, ev);
         }
@@ -103,7 +120,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
           incrementStat("folder", "analysisError");
         }
       } catch (err) {
-        if (!signal.aborted) {
+        if (!abortRef.current.signal.aborted) {
           updateImage(id, { status: "failed", error: String(err) });
           incrementStat("folder", "analysisError");
         }
@@ -111,13 +128,24 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         releaseAnalyze();
       }
     },
-    [clientUUID, addImage, updateImage, incrementStat, dirHandle],
+    [updateImage, incrementStat],
+  );
+
+  // 배치 처리: 업로드+탐지 전부 완료 → 분석+저장 전부 완료
+  const processBatch = useCallback(
+    async (batch: WatchedFile[]) => {
+      // Stage 2+3: 배치 내 전체 동시 업로드+탐지, 완료 대기
+      const detectedIds = (await Promise.all(batch.map(uploadAndDetect))).filter(Boolean) as string[];
+      if (detectedIds.length === 0) return;
+      // Stage 4+5: 탐지된 것 전체 동시 분석+저장, 완료 대기
+      await Promise.all(detectedIds.map(analyzeAndSave));
+    },
+    [uploadAndDetect, analyzeAndSave],
   );
 
   const { running, start, stop } = useFolderWatch({
     dirHandle,
-    onNewFile: (wf, release) => processFile(wf, release),
-    concurrency: 50,
+    onBatch: processBatch,
   });
 
   const handleStop = useCallback(() => {
@@ -147,16 +175,13 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
 
   const handlePickFolder = async () => {
     const handle = await pickDirectory();
-    if (handle) {
-      setDirHandle(handle);
-    }
+    if (handle) setDirHandle(handle);
   };
 
   const stats = useAnalyzeStore((s) => s.folderStats);
 
   return (
     <div className="space-y-4">
-      {/* FSA not supported banner */}
       {!supported && (
         <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -166,7 +191,6 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         </div>
       )}
 
-      {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" onClick={handlePickFolder} disabled={!supported || running}>
           <FolderOpen className="mr-1 h-4 w-4" />
@@ -208,7 +232,6 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         </p>
       )}
 
-      {/* Stats */}
       {stats.total > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {[
