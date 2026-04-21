@@ -2,11 +2,18 @@ import { useState, useCallback } from "react";
 import { cn } from "@reeve/ui";
 import { FileTab } from "./FileTab";
 import { FolderTab } from "./FolderTab";
+import { ServerFolderTab } from "./ServerFolderTab";
 import { ImageDetailDialog } from "./ImageDetailDialog";
 import { useAnalyzeStore } from "../../stores/analyze-store";
 import type { ImageState } from "../../stores/analyze-store";
 
-type Tab = "file" | "folder";
+type Tab = "file" | "folder" | "server";
+
+const TAB_LABELS: Record<Tab, string> = {
+  file: "파일 업로드",
+  folder: "로컬 폴더 감시",
+  server: "서버 폴더 감시",
+};
 
 const LEAVE_MSG = "폴더 감시가 진행 중입니다. 이동하면 감시가 중지됩니다. 계속하시겠습니까?";
 
@@ -18,7 +25,7 @@ export function AnalyzePage() {
   const handleTabChange = useCallback(
     (t: Tab) => {
       if (t === tab) return;
-      if (folderRunning && tab === "folder") {
+      if (folderRunning && (tab === "folder" || tab === "server")) {
         if (!confirm(LEAVE_MSG)) return;
       }
       setTab(t);
@@ -35,7 +42,7 @@ export function AnalyzePage() {
 
       {/* Tab buttons */}
       <div className="flex border-b">
-        {(["file", "folder"] as Tab[]).map((t) => (
+        {(["file", "folder", "server"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -47,13 +54,14 @@ export function AnalyzePage() {
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {t === "file" ? "파일 업로드" : "폴더 감시"}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
       {tab === "file" && <FileTab onSelectImage={setSelected} />}
       {tab === "folder" && <FolderTab onSelectImage={setSelected} />}
+      {tab === "server" && <ServerFolderTab onSelectImage={setSelected} />}
 
       <ImageDetailDialog image={selected} onClose={() => setSelected(null)} />
     </div>

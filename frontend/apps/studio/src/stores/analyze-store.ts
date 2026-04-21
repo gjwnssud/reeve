@@ -4,7 +4,7 @@ import { STORAGE_KEYS } from "@reeve/shared";
 import type { Detection, AnalyzeSSEEvent } from "../lib/analyzeApi";
 
 export type ImageStatus = "queued" | "uploading" | "detecting" | "analyzing" | "done" | "failed";
-export type ImageSource = "file" | "folder";
+export type ImageSource = "file" | "folder" | "server";
 
 export interface AnalysisResult {
   id: number;

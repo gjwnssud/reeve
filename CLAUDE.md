@@ -61,6 +61,9 @@ Three microservices communicate over a shared Docker network. 두 개의 React S
 - `GET /finetune/train/status` / `GET /finetune/train/raw-log` / `GET /finetune/train/logs` — 학습 상태·로그 조회
 - `GET /finetune/evaluate` — Before/After 정확도 평가
 - `GET /finetune/hw-profile` — 하드웨어 권장 파라미터
+- `GET /api/server-files` — 서버 디렉토리 이미지 파일 목록 (`SERVER_WATCH_BASE_DIR` 하위만 허용)
+- `POST /api/server-files/register` — 서버 경로 파일을 `data/uploads/`로 복사 후 AnalyzedVehicle 등록 (`/api/upload`와 동일 응답)
+- `GET /api/server-files/image` — 서버 경로 이미지 파일 제공 (프리뷰용)
 - `GET /health` — 헬스체크
 - SPA: `/` → `/static/` 리다이렉트, `/{any}` → `static/index.html` catch-all (모든 API 라우터 등록 후 마운트)
 
@@ -92,6 +95,7 @@ Three microservices communicate over a shared Docker network. 두 개의 React S
 | `FUZZY_MATCH_THRESHOLD` | 80 | 모델명 퍼지 매칭 임계값 (0~100) |
 | `ANALYZED_VEHICLES_RETENTION_DAYS` | 30 | 분석 결과 보관 기간 (일) |
 | `CLEANUP_HOUR` | 3 | 자동 정리 실행 시각 |
+| `SERVER_WATCH_BASE_DIR` | /mnt/ | 서버 폴더 감시 허용 기본 경로 (이 경로 하위만 접근 가능) |
 
 ---
 
@@ -255,7 +259,8 @@ frontend/
 - Vite `base: "/static/"`, 빌드 산출물은 각 서비스의 `/app/static/`에 위치
 - **SPA 라우팅**: `StaticFiles` 마운트 대신 커스텀 `GET /static/{path}` 라우트 — 파일이 있으면 파일 반환, 없으면 `index.html` 반환. URL 직접 진입(새로고침) 정상 동작
 - **FolderTab 배치 처리**: 업로드 세마포어(50) / 분석 세마포어(8) 분리. 업로드 완료 즉시 원본 파일 삭제(`readwrite` 권한), AbortController로 중단 시 진행 중 작업 즉시 종료. 성공 이미지는 학습 데이터 자동 승인 후 UI에서 제거
-- **폴더 감시 이탈 경고**: 탭 전환(AnalyzePage) 및 사이드바 메뉴 클릭(StudioLayout) 시 confirm 다이얼로그, `folderWatchRunning` 상태는 Zustand store로 공유
+- **ServerFolderTab (서버 폴더 감시)**: 3초 폴링으로 서버 디렉토리(`/mnt/nas/yyMMdd` 형태)의 신규 이미지 감지. 발견된 파일은 `data/uploads/`로 복사 후 기존 detect → analyze stream → save 파이프라인 그대로 실행. 원본 NAS 파일 삭제 없음. 경로 접근은 `SERVER_WATCH_BASE_DIR` 하위로 제한
+- **폴더 감시 이탈 경고**: 탭 전환(AnalyzePage) 및 사이드바 메뉴 클릭(StudioLayout) 시 confirm 다이얼로그, `folderWatchRunning` 상태는 Zustand store로 공유 (로컬 폴더·서버 폴더 모두 적용)
 - **Identifier BatchTab**: IntersectionObserver 기반 lazy 썸네일(32K 이미지 대응), 행 클릭 시 상세 다이얼로그
 
 ---

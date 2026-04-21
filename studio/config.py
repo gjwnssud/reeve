@@ -74,6 +74,13 @@ class Settings(BaseSettings):
         description="Identifier 서비스 URL (Before/After 평가용)"
     )
 
+    # 서버 폴더 감시 설정
+    server_watch_base_dir: str = Field(
+        default="/mnt/",
+        alias="SERVER_WATCH_BASE_DIR",
+        description="서버 폴더 감시 허용 기본 경로 (보안: 이 경로 하위만 접근 가능)"
+    )
+
     # Vision 백엔드 설정
     vision_backend: str = Field(
         default="openai",

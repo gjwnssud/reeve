@@ -614,6 +614,105 @@ async def analyze_feed(client_uuid: Optional[str] = None, source: Optional[str] 
     )
 
 
-# TODO: 추가 예정
-# - POST /api/analyze/batch (일괄 분석 - 구현 필요)
-# - GET /api/analysis-history (분석 이력)
+#=============================================================================
+# 서버 폴더 감시 엔드포인트
+#=============================================================================
+
+def _validate_server_path(raw_path: str) -> Path:
+    """경로가 허용된 기본 디렉토리 하위인지 검증하고 Path 반환."""
+    base = Path(settings.server_watch_base_dir).resolve()
+    try:
+        resolved = Path(raw_path).resolve()
+        resolved.relative_to(base)  # base 외부면 ValueError
+    except ValueError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"허용되지 않은 경로입니다. {settings.server_watch_base_dir} 하위 경로만 접근 가능합니다."
+        )
+    return resolved
+
+
+@router.get("/server-files")
+async def list_server_files(path: str):
+    """
+    서버 디렉토리의 이미지 파일 목록 반환
+
+    path: 감시할 서버 디렉토리 경로 (SERVER_WATCH_BASE_DIR 하위만 허용)
+    """
+    dir_path = _validate_server_path(path)
+    if not dir_path.is_dir():
+        raise HTTPException(status_code=404, detail=f"디렉토리를 찾을 수 없습니다: {path}")
+
+    allowed = set(settings.allowed_extensions_list)
+    files = [
+        {"name": f.name, "path": str(f)}
+        for f in sorted(dir_path.iterdir())
+        if f.is_file() and f.suffix.lstrip(".").lower() in allowed
+    ]
+    return {"files": files}
+
+
+class RegisterServerFileRequest(BaseModel):
+    file_path: str
+    source: str = "server"
+    client_uuid: Optional[str] = None
+
+
+@router.post("/server-files/register")
+async def register_server_file(
+    body: RegisterServerFileRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    서버 파일을 data/uploads 로 복사한 뒤 AnalyzedVehicle 레코드 생성.
+
+    /api/upload 와 동일한 업로드 흐름을 따르되 파일은 NAS가 아닌 로컬에서 읽음.
+    응답 형태는 {analyzed_id, original_image_path} 로 동일.
+    """
+    import shutil
+    from datetime import datetime
+
+    src_path = _validate_server_path(body.file_path)
+    if not src_path.is_file():
+        raise HTTPException(status_code=404, detail=f"파일을 찾을 수 없습니다: {body.file_path}")
+
+    ext = src_path.suffix.lstrip(".").lower()
+    if ext not in settings.allowed_extensions_list:
+        raise HTTPException(
+            status_code=400,
+            detail=f"허용되지 않은 파일 형식입니다. 허용: {settings.allowed_extensions}"
+        )
+
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    dest_dir = Path(f"data/uploads/{date_str}")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / f"{os.urandom(16).hex()}_{src_path.name}"
+
+    await asyncio.get_event_loop().run_in_executor(
+        None, shutil.copy2, str(src_path), str(dest_path)
+    )
+
+    analyzed = AnalyzedVehicle(
+        image_path=str(dest_path),
+        original_image_path=str(dest_path),
+        processing_stage="uploaded",
+        is_verified=False,
+        source=body.source,
+        client_uuid=body.client_uuid,
+    )
+    db.add(analyzed)
+    db.commit()
+    db.refresh(analyzed)
+
+    return {"analyzed_id": analyzed.id, "original_image_path": str(dest_path)}
+
+
+@router.get("/server-files/image")
+async def serve_server_image(path: str):
+    """서버 경로의 이미지 파일 제공 (프리뷰용, SERVER_WATCH_BASE_DIR 하위만 허용)."""
+    file_path = _validate_server_path(path)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+    from fastapi.responses import FileResponse as FR
+    return FR(str(file_path))

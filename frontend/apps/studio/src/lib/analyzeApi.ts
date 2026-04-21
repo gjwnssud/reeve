@@ -48,6 +48,28 @@ export async function uploadFile(
   return apiRequest<UploadResponse>('/api/upload', { method: 'POST', body: form });
 }
 
+export interface ServerFileInfo {
+  name: string;
+  path: string;
+}
+
+export async function listServerFiles(dirPath: string): Promise<{ files: ServerFileInfo[] }> {
+  return apiRequest<{ files: ServerFileInfo[] }>(
+    `/api/server-files?path=${encodeURIComponent(dirPath)}`,
+  );
+}
+
+export async function registerServerFile(
+  filePath: string,
+  clientUuid: string,
+): Promise<UploadResponse> {
+  return apiRequest<UploadResponse>('/api/server-files/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_path: filePath, source: 'server', client_uuid: clientUuid }),
+  });
+}
+
 export async function detectVehicle(analyzedId: number): Promise<DetectResponse> {
   const form = new FormData();
   form.append('analyzed_id', String(analyzedId));
