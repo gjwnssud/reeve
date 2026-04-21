@@ -174,8 +174,11 @@ class VehicleIdentifier:
 
         try:
             from ultralytics import YOLO
+            device = settings.embedding_device if settings.embedding_device != "cpu" else None
             self.yolo_model = YOLO("yolo26m.pt")
-            logger.info("YOLO26m model loaded for vehicle detection")
+            if device:
+                self.yolo_model.to(device)
+            logger.info(f"YOLO26m model loaded for vehicle detection (device={device or 'cpu'})")
         except Exception as e:
             logger.warning(f"Failed to load YOLO26 model, will use full images: {e}")
             self.yolo_model = None

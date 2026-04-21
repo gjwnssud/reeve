@@ -65,7 +65,7 @@ services:
       resources:
         limits:
           cpus: '3.0'
-          memory: 3G
+          memory: 4G
         reservations:
           cpus: '0.5'
           memory: 512M

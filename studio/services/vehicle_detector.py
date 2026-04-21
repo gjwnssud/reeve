@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import logging
 from ultralytics import YOLO
+from studio.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,12 @@ class VehicleDetector:
         """YOLO26 모델 로드"""
         try:
             model_name = f"yolo26{self.model_size}.pt"
-            logger.info(f"Loading YOLO26 model: {model_name}")
+            device = settings.embedding_device if settings.embedding_device != "cpu" else None
+            logger.info(f"Loading YOLO26 model: {model_name} (device={device or 'cpu'})")
 
-            # 첫 실행 시 자동으로 모델 다운로드
             self.model = YOLO(model_name)
+            if device:
+                self.model.to(device)
             logger.info("YOLO26 model loaded successfully")
 
         except Exception as e:
