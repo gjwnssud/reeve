@@ -151,8 +151,9 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const drainQueue = useCallback(async () => {
     if (processingRef.current) return;
     processingRef.current = true;
+    const signal = abortRef.current.signal; // 중지 시 교체되기 전 signal 캡처
     try {
-      while (fileQueue.current.length > 0 && !abortRef.current.signal.aborted) {
+      while (fileQueue.current.length > 0 && !signal.aborted) {
         const batch = fileQueue.current.splice(0, BATCH_SIZE);
         await processBatch(batch);
       }

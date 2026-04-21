@@ -17,13 +17,16 @@ export function useFolderWatch(opts: UseFolderWatchOptions) {
   const seen = useRef(new Set<string>());
   const timerRef = useRef<number | null>(null);
   const processingRef = useRef(false);
+  const stoppedRef = useRef(false);
 
   const start = useCallback(() => {
     if (!opts.dirHandle) return;
+    stoppedRef.current = false;
     setRunning(true);
   }, [opts.dirHandle]);
 
   const stop = useCallback(() => {
+    stoppedRef.current = true;
     setRunning(false);
     if (timerRef.current !== null) {
       window.clearInterval(timerRef.current);
@@ -61,6 +64,7 @@ export function useFolderWatch(opts: UseFolderWatchOptions) {
       processingRef.current = true;
       try {
         for (let i = 0; i < newFiles.length; i += batchSize) {
+          if (stoppedRef.current) break;
           await opts.onBatch(newFiles.slice(i, i + batchSize));
         }
       } finally {
