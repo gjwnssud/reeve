@@ -31,6 +31,8 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const uploadSema = useRef(new Semaphore(50));
   const analyzeSema = useRef(new Semaphore(8));
   const processedPaths = useRef(new Set<string>());
+  const fileQueue = useRef<{ path: string; name: string }[]>([]);
+  const workerRunning = useRef(false);
 
   const stats = useAnalyzeStore((s) => s.serverStats);
 
@@ -116,21 +118,39 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     [clientUUID, addImage, updateImage, incrementStat],
   );
 
+  // Worker: 큐에서 파일을 꺼내 uploadSema(50) 슬롯 확보 후 processFile 디스패치
+  // 단일 인스턴스만 실행 — poll이 여러 번 호출돼도 중복 실행 없음
+  const drainQueue = useCallback(async () => {
+    if (workerRunning.current) return;
+    workerRunning.current = true;
+    try {
+      while (fileQueue.current.length > 0 && !abortRef.current.signal.aborted) {
+        const item = fileQueue.current.shift()!;
+        const release = await uploadSema.current.acquire();
+        if (abortRef.current.signal.aborted) { release(); break; }
+        void processFile(item.path, item.name, release);
+      }
+    } finally {
+      workerRunning.current = false;
+    }
+  }, [processFile]);
+
   useEffect(() => {
     if (!running || !serverPath.trim()) return;
 
+    // Poll: 신규 파일 발견만 담당, 처리는 worker에 위임
     const poll = async () => {
       try {
         const { files } = await listServerFiles(serverPath.trim());
+        let hasNew = false;
         for (const f of files) {
-          if (abortRef.current.signal.aborted) break;
-          if (processedPaths.current.has(f.path)) continue;
-          processedPaths.current.add(f.path);
-          // useFolderWatch와 동일 패턴: 슬롯 확보 후 디스패치 → 한 번에 최대 50개만 태스크 생성
-          const release = await uploadSema.current.acquire();
-          if (abortRef.current.signal.aborted) { release(); break; }
-          void processFile(f.path, f.name, release);
+          if (!processedPaths.current.has(f.path) && !abortRef.current.signal.aborted) {
+            processedPaths.current.add(f.path);
+            fileQueue.current.push({ path: f.path, name: f.name });
+            hasNew = true;
+          }
         }
+        if (hasNew) void drainQueue();
       } catch {
         // 디렉토리가 아직 없거나 일시적 오류는 무시하고 다음 폴링에서 재시도
       }
@@ -139,7 +159,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     poll();
     const timerId = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(timerId);
-  }, [running, serverPath, processFile]);
+  }, [running, serverPath, drainQueue]);
 
   useEffect(() => {
     return () => {
@@ -168,6 +188,8 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     uploadSema.current = new Semaphore(50);
     analyzeSema.current = new Semaphore(8);
     processedPaths.current.clear();
+    fileQueue.current = [];
+    workerRunning.current = false;
     setRunning(true);
   };
 
