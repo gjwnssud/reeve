@@ -65,8 +65,7 @@ export async function registerServerFile(
 ): Promise<UploadResponse> {
   return apiRequest<UploadResponse>('/api/server-files/register', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_path: filePath, source: 'server', client_uuid: clientUuid }),
+    body: { file_path: filePath, source: 'server', client_uuid: clientUuid },
   });
 }
 
