@@ -227,7 +227,7 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 
 **UI (React SPA)** — 모든 페이지는 `/static/` 하위에 서빙됩니다.
 - `/` → `/static/` 리다이렉트
-- `/static/analyze` — 차량 분석 (파일/폴더 업로드 + YOLO 탐지 + SSE 스트리밍)
+- `/static/analyze` — 차량 분석 (파일/폴더 업로드, 서버 폴더 감시 + YOLO 탐지 + SSE 스트리밍). 로컬·서버 폴더 감시 처리 통계는 localStorage에 저장되어 새로고침 후에도 유지됨
 - `/static/admin` — 분석 결과 검수 큐 및 승인
 - `/static/basic-data` — 제조사·모델 기준 데이터 CRUD
 - `/static/finetune` — 파인튜닝 관리 (데이터 export → 학습 → 배포)
