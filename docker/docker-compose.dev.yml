@@ -49,6 +49,7 @@ services:
       - ../studio:/app/studio
       - ../data:/app/data
       - ../logs:/app/logs
+      - /mnt:/mnt:ro
     environment:
       - MYSQL_HOST=mysql
       - OLLAMA_BASE_URL=http://ollama:11434
