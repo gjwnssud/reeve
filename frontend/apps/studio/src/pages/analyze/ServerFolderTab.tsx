@@ -28,6 +28,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const [running, setRunning] = useState(false);
   const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
+  const uploadSema = useRef(new Semaphore(50));
   const analyzeSema = useRef(new Semaphore(8));
   const processedPaths = useRef(new Set<string>());
 
@@ -49,19 +50,22 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
       incrementStat("server", "total");
 
       let analyzed_id: number | undefined;
+      const releaseUpload = await uploadSema.current.acquire();
       try {
-        if (signal.aborted) return;
+        if (signal.aborted) { releaseUpload(); return; }
         updateImage(id, { status: "uploading" });
         const result = await registerServerFile(filePath, clientUUID);
         analyzed_id = result.analyzed_id;
         updateImage(id, { analyzedId: analyzed_id, originalImagePath: result.original_image_path });
       } catch (err) {
+        releaseUpload();
         if (!signal.aborted) {
           updateImage(id, { status: "failed", error: String(err) });
           incrementStat("server", "analysisError");
         }
         return;
       }
+      releaseUpload(); // 업로드 슬롯 즉시 반환 후 분석 슬롯 대기
 
       const releaseAnalyze = await analyzeSema.current.acquire();
       try {
@@ -160,6 +164,8 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const handleStart = () => {
     if (!serverPath.trim()) return;
     abortRef.current = new AbortController();
+    uploadSema.current = new Semaphore(50);
+    analyzeSema.current = new Semaphore(8);
     processedPaths.current.clear();
     setRunning(true);
   };
