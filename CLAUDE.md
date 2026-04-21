@@ -259,7 +259,7 @@ frontend/
 - Vite `base: "/static/"`, 빌드 산출물은 각 서비스의 `/app/static/`에 위치
 - **SPA 라우팅**: `StaticFiles` 마운트 대신 커스텀 `GET /static/{path}` 라우트 — 파일이 있으면 파일 반환, 없으면 `index.html` 반환. URL 직접 진입(새로고침) 정상 동작
 - **FolderTab 배치 처리**: 업로드 세마포어(50) / 분석 세마포어(8) 분리. 업로드 완료 즉시 원본 파일 삭제(`readwrite` 권한), AbortController로 중단 시 진행 중 작업 즉시 종료. 성공 이미지는 학습 데이터 자동 승인 후 UI에서 제거
-- **ServerFolderTab (서버 폴더 감시)**: 3초 폴링으로 서버 디렉토리(`/mnt/nas/yyMMdd` 형태)의 신규 이미지 감지. 발견된 파일은 `data/uploads/`로 복사 후 기존 detect → analyze stream → save 파이프라인 그대로 실행. 원본 NAS 파일 삭제 없음. 경로 접근은 `SERVER_WATCH_BASE_DIR` 하위로 제한
+- **ServerFolderTab (서버 폴더 감시)**: 3초 폴링으로 서버 디렉토리(`/mnt/nas/yyMMdd` 형태)의 신규 이미지 감지. 발견된 파일은 `data/uploads/`로 복사 후 기존 detect → analyze stream → save 파이프라인 그대로 실행. 원본 NAS 파일 삭제 없음. 경로 접근은 `SERVER_WATCH_BASE_DIR` 하위로 제한. 처리 통계(전체·감지·감지 실패·분석 완료·분석 오류)는 Zustand store의 `serverStats`로 관리되며 localStorage(`reeve_server_stats_${uuid}`)에 지속 저장 — 새로고침 후에도 유지
 - **폴더 감시 이탈 경고**: 탭 전환(AnalyzePage) 및 사이드바 메뉴 클릭(StudioLayout) 시 confirm 다이얼로그, `folderWatchRunning` 상태는 Zustand store로 공유 (로컬 폴더·서버 폴더 모두 적용)
 - **Identifier BatchTab**: IntersectionObserver 기반 lazy 썸네일(32K 이미지 대응), 행 클릭 시 상세 다이얼로그
 

@@ -44,6 +44,7 @@ interface AnalyzeStore {
   images: Record<string, ImageState>;
   fileStats: Stats;
   folderStats: Stats;
+  serverStats: Stats;
   folderWatchRunning: boolean;
 
   addImage: (img: ImageState) => void;
@@ -81,6 +82,13 @@ export const useAnalyzeStore = create<AnalyzeStore>()(
       try {
         const uuid = getUUID();
         const saved = localStorage.getItem(STORAGE_KEYS.folderStats(uuid));
+        return saved ? (JSON.parse(saved) as Stats) : emptyStats();
+      } catch { return emptyStats(); }
+    })(),
+    serverStats: (() => {
+      try {
+        const uuid = getUUID();
+        const saved = localStorage.getItem(STORAGE_KEYS.serverStats(uuid));
         return saved ? (JSON.parse(saved) as Stats) : emptyStats();
       } catch { return emptyStats(); }
     })(),
@@ -135,11 +143,11 @@ export const useAnalyzeStore = create<AnalyzeStore>()(
 
     incrementStat: (source, key, delta = 1) =>
       set((s) => {
-        const field = source === "file" ? "fileStats" : "folderStats";
+        const field = source === "file" ? "fileStats" : source === "folder" ? "folderStats" : "serverStats";
         const next = { ...s[field], [key]: s[field][key] + delta };
         try {
           const uuid = getUUID();
-          const storageKey = source === "file" ? STORAGE_KEYS.fileStats(uuid) : STORAGE_KEYS.folderStats(uuid);
+          const storageKey = source === "file" ? STORAGE_KEYS.fileStats(uuid) : source === "folder" ? STORAGE_KEYS.folderStats(uuid) : STORAGE_KEYS.serverStats(uuid);
           localStorage.setItem(storageKey, JSON.stringify(next));
         } catch {}
         return { [field]: next };
@@ -147,10 +155,10 @@ export const useAnalyzeStore = create<AnalyzeStore>()(
 
     resetStats: (source) =>
       set(() => {
-        const field = source === "file" ? "fileStats" : "folderStats";
+        const field = source === "file" ? "fileStats" : source === "folder" ? "folderStats" : "serverStats";
         try {
           const uuid = getUUID();
-          const storageKey = source === "file" ? STORAGE_KEYS.fileStats(uuid) : STORAGE_KEYS.folderStats(uuid);
+          const storageKey = source === "file" ? STORAGE_KEYS.fileStats(uuid) : source === "folder" ? STORAGE_KEYS.folderStats(uuid) : STORAGE_KEYS.serverStats(uuid);
           localStorage.removeItem(storageKey);
         } catch {}
         return { [field]: emptyStats() };

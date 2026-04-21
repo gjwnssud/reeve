@@ -17,22 +17,6 @@ import type { ImageState } from "../../stores/analyze-store";
 const MAX_DISPLAY = 100;
 const POLL_INTERVAL_MS = 3000;
 
-interface Stats {
-  total: number;
-  detected: number;
-  detectionFailed: number;
-  analyzed: number;
-  analysisError: number;
-}
-
-const emptyStats = (): Stats => ({
-  total: 0,
-  detected: 0,
-  detectionFailed: 0,
-  analyzed: 0,
-  analysisError: 0,
-});
-
 interface Props {
   onSelectImage: (img: ImageState) => void;
   onRunningChange?: (running: boolean) => void;
@@ -42,20 +26,17 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const clientUUID = useClientUUID();
   const [serverPath, setServerPath] = useState("");
   const [running, setRunning] = useState(false);
-  const [stats, setStats] = useState<Stats>(emptyStats);
-  const { addImage, updateImage, clearImages, setFolderWatchRunning } = useAnalyzeStore();
+  const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
   const analyzeSema = useRef(new Semaphore(8));
   const processedPaths = useRef(new Set<string>());
+
+  const stats = useAnalyzeStore((s) => s.serverStats);
 
   const serverImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
     (i) => i.source === "server",
   );
   const displayImages = serverImages.slice(-MAX_DISPLAY);
-
-  const incStat = useCallback((key: keyof Stats) => {
-    setStats((s) => ({ ...s, [key]: s[key] + 1 }));
-  }, []);
 
   const processFile = useCallback(
     async (filePath: string, fileName: string) => {
@@ -65,7 +46,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
       const placeholderFile = new File([], fileName, { type: "image/jpeg" });
 
       addImage({ id, source: "server", file: placeholderFile, preview, status: "queued" });
-      incStat("total");
+      incrementStat("server", "total");
 
       let analyzed_id: number | undefined;
       try {
@@ -77,7 +58,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
       } catch (err) {
         if (!signal.aborted) {
           updateImage(id, { status: "failed", error: String(err) });
-          incStat("analysisError");
+          incrementStat("server", "analysisError");
         }
         return;
       }
@@ -90,13 +71,13 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         const detections = detectResult.detections;
 
         if (detections.length === 0) {
-          incStat("detectionFailed");
+          incrementStat("server", "detectionFailed");
           updateImage(id, { status: "done", detections: [] });
           return;
         }
 
         if (signal.aborted) return;
-        incStat("detected");
+        incrementStat("server", "detected");
         const bbox = detections[0]!.bbox;
         updateImage(id, { detections, selectedBbox: bbox, status: "analyzing" });
 
@@ -108,7 +89,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         if (signal.aborted) return;
         const finalImg = useAnalyzeStore.getState().images[id];
         if (finalImg?.status === "done") {
-          incStat("analyzed");
+          incrementStat("server", "analyzed");
           const res = finalImg.result;
           if (res?.matched_manufacturer_id != null && res?.matched_model_id != null) {
             try {
@@ -119,18 +100,18 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
             }
           }
         } else {
-          incStat("analysisError");
+          incrementStat("server", "analysisError");
         }
       } catch (err) {
         if (!signal.aborted) {
           updateImage(id, { status: "failed", error: String(err) });
-          incStat("analysisError");
+          incrementStat("server", "analysisError");
         }
       } finally {
         releaseAnalyze();
       }
     },
-    [clientUUID, addImage, updateImage, incStat],
+    [clientUUID, addImage, updateImage, incrementStat],
   );
 
   useEffect(() => {
@@ -219,7 +200,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
               size="sm"
               onClick={() => {
                 clearImages("server");
-                setStats(emptyStats());
+                resetStats("server");
               }}
             >
               <Trash2 className="mr-1 h-4 w-4" /> 초기화
