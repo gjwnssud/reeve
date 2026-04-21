@@ -16,8 +16,6 @@ import type { ImageState } from "../../stores/analyze-store";
 
 const MAX_DISPLAY = 100;
 const POLL_INTERVAL_MS = 3000;
-const UPLOAD_BATCH = 50;
-const ANALYZE_CONCURRENCY = 8;
 
 interface Props {
   onSelectImage: (img: ImageState) => void;
@@ -30,7 +28,8 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const [running, setRunning] = useState(false);
   const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
-  const analyzeSema = useRef(new Semaphore(ANALYZE_CONCURRENCY));
+  const uploadSema = useRef(new Semaphore(50));  // FolderTab과 동일: 복사 동시 50
+  const analyzeSema = useRef(new Semaphore(8));   // FolderTab과 동일: 분석 동시 8
   const processedPaths = useRef(new Set<string>());
   const fileQueue = useRef<{ path: string; name: string }[]>([]);
   const workerRunning = useRef(false);
@@ -42,116 +41,110 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   );
   const displayImages = serverImages.slice(-MAX_DISPLAY);
 
-  // 단일 파일 분석 (YOLO → stream analyze → save)
-  const analyzeOne = useCallback(
-    async (id: string, analyzed_id: number) => {
+  // FolderTab.processFile과 동일한 구조
+  // 차이: uploadFile(file) → registerServerFile(filePath) (복사), 원본 삭제 없음
+  const processFile = useCallback(
+    async (filePath: string, fileName: string, release: () => void) => {
       const signal = abortRef.current.signal;
-      if (signal.aborted) return;
+      const id = crypto.randomUUID();
+      const preview = `/api/server-files/image?path=${encodeURIComponent(filePath)}`;
+      const placeholderFile = new File([], fileName, { type: "image/jpeg" });
 
-      updateImage(id, { status: "detecting" });
-      const detectResult = await detectVehicle(analyzed_id);
-      const detections = detectResult.detections;
+      addImage({ id, source: "server", file: placeholderFile, preview, status: "queued" });
+      incrementStat("server", "total");
 
-      if (detections.length === 0) {
-        incrementStat("server", "detectionFailed");
-        updateImage(id, { status: "done", detections: [] });
-        return;
-      }
-
-      if (signal.aborted) return;
-      incrementStat("server", "detected");
-      const bbox = detections[0]!.bbox;
-      updateImage(id, { detections, selectedBbox: bbox, status: "analyzing" });
-
-      for await (const ev of streamAnalyze(analyzed_id, bbox)) {
-        if (signal.aborted) break;
-        useAnalyzeStore.getState().applySSEEvent(id, ev);
-      }
-
-      if (signal.aborted) return;
-      const finalImg = useAnalyzeStore.getState().images[id];
-      if (finalImg?.status === "done") {
-        incrementStat("server", "analyzed");
-        const res = finalImg.result;
-        if (res?.matched_manufacturer_id != null && res?.matched_model_id != null) {
-          try {
-            await saveToTraining(res.id);
-            useAnalyzeStore.getState().removeImage(id);
-          } catch (e) {
-            console.error("auto-approve failed", id, extractErrorMessage(e));
-          }
+      let analyzed_id: number | undefined;
+      try {
+        // ── Phase 1: 복사·등록 (동시 50, 완료 즉시 슬롯 반환) ──
+        if (signal.aborted) return;
+        updateImage(id, { status: "uploading" });
+        const result = await registerServerFile(filePath, clientUUID);
+        analyzed_id = result.analyzed_id;
+        updateImage(id, { analyzedId: analyzed_id, originalImagePath: result.original_image_path });
+      } catch (err) {
+        if (!signal.aborted) {
+          updateImage(id, { status: "failed", error: String(err) });
+          incrementStat("server", "analysisError");
         }
-      } else {
-        incrementStat("server", "analysisError");
+        return;
+      } finally {
+        release(); // 복사 슬롯 즉시 반환 (FolderTab과 동일)
+      }
+
+      // ── Phase 2: YOLO 탐지 → 분석 → 저장 (동시 8) ──
+      const releaseAnalyze = await analyzeSema.current.acquire();
+      try {
+        if (signal.aborted) return;
+        updateImage(id, { status: "detecting" });
+        const detectResult = await detectVehicle(analyzed_id!);
+        const detections = detectResult.detections;
+
+        if (detections.length === 0) {
+          incrementStat("server", "detectionFailed");
+          updateImage(id, { status: "done", detections: [] });
+          return;
+        }
+
+        if (signal.aborted) return;
+        incrementStat("server", "detected");
+        const bbox = detections[0]!.bbox;
+        updateImage(id, { detections, selectedBbox: bbox, status: "analyzing" });
+
+        for await (const ev of streamAnalyze(analyzed_id!, bbox)) {
+          if (signal.aborted) break;
+          useAnalyzeStore.getState().applySSEEvent(id, ev);
+        }
+
+        if (signal.aborted) return;
+        const finalImg = useAnalyzeStore.getState().images[id];
+        if (finalImg?.status === "done") {
+          incrementStat("server", "analyzed");
+          const res = finalImg.result;
+          if (res?.matched_manufacturer_id != null && res?.matched_model_id != null) {
+            try {
+              await saveToTraining(res.id);
+              useAnalyzeStore.getState().removeImage(id);
+            } catch (e) {
+              console.error("auto-approve failed", id, extractErrorMessage(e));
+            }
+          }
+        } else {
+          incrementStat("server", "analysisError");
+        }
+      } catch (err) {
+        if (!signal.aborted) {
+          updateImage(id, { status: "failed", error: String(err) });
+          incrementStat("server", "analysisError");
+        }
+      } finally {
+        releaseAnalyze();
       }
     },
-    [updateImage, incrementStat],
+    [clientUUID, addImage, updateImage, incrementStat],
   );
 
-  // Worker: 배치 순차처리
-  // 1단계: 50개 업로드 동시 실행 → 전체 완료 대기
-  // 2단계: 업로드된 파일 분석 (8개 동시) → 전체 완료 대기
-  // 3단계: 다음 배치
+  // Worker: useFolderWatch의 scan 루프와 동일한 구조
+  // 큐에서 파일을 꺼내 uploadSema 슬롯 확보 후 processFile fire-and-forget
+  // 단일 인스턴스만 실행 → poll 중첩 실행 문제 없음
   const drainQueue = useCallback(async () => {
     if (workerRunning.current) return;
     workerRunning.current = true;
     try {
       while (fileQueue.current.length > 0 && !abortRef.current.signal.aborted) {
-        const batch = fileQueue.current.splice(0, UPLOAD_BATCH);
-        const signal = abortRef.current.signal;
-
-        // ── 1단계: 업로드 (배치 전체 동시, 완료 대기) ──
-        const toAnalyze: { id: string; analyzed_id: number }[] = [];
-        await Promise.all(
-          batch.map(async ({ path: filePath, name: fileName }) => {
-            if (signal.aborted) return;
-            const id = crypto.randomUUID();
-            const preview = `/api/server-files/image?path=${encodeURIComponent(filePath)}`;
-            const placeholderFile = new File([], fileName, { type: "image/jpeg" });
-            addImage({ id, source: "server", file: placeholderFile, preview, status: "uploading" });
-            incrementStat("server", "total");
-            try {
-              const result = await registerServerFile(filePath, clientUUID);
-              updateImage(id, { analyzedId: result.analyzed_id, originalImagePath: result.original_image_path });
-              toAnalyze.push({ id, analyzed_id: result.analyzed_id });
-            } catch (err) {
-              if (!signal.aborted) {
-                updateImage(id, { status: "failed", error: String(err) });
-                incrementStat("server", "analysisError");
-              }
-            }
-          }),
-        );
-
-        if (signal.aborted) break;
-
-        // ── 2단계: 분석 (8개 동시, 완료 대기) ──
-        const sema = analyzeSema.current;
-        await Promise.all(
-          toAnalyze.map(async ({ id, analyzed_id }) => {
-            const release = await sema.acquire();
-            try {
-              await analyzeOne(id, analyzed_id);
-            } catch (err) {
-              if (!signal.aborted) {
-                updateImage(id, { status: "failed", error: String(err) });
-                incrementStat("server", "analysisError");
-              }
-            } finally {
-              release();
-            }
-          }),
-        );
+        const item = fileQueue.current.shift()!;
+        const release = await uploadSema.current.acquire();
+        if (abortRef.current.signal.aborted) { release(); break; }
+        void processFile(item.path, item.name, release);
       }
     } finally {
       workerRunning.current = false;
     }
-  }, [clientUUID, addImage, updateImage, incrementStat, analyzeOne]);
+  }, [processFile]);
 
   useEffect(() => {
     if (!running || !serverPath.trim()) return;
 
-    // Poll: 신규 파일 발견만 담당, 처리는 worker에 위임
+    // Poll: 신규 파일 발견만 담당
     const poll = async () => {
       try {
         const { files } = await listServerFiles(serverPath.trim());
@@ -165,7 +158,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         }
         if (hasNew) void drainQueue();
       } catch {
-        // 디렉토리가 아직 없거나 일시적 오류는 무시하고 다음 폴링에서 재시도
+        // 디렉토리가 아직 없거나 일시적 오류는 무시
       }
     };
 
@@ -175,9 +168,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   }, [running, serverPath, drainQueue]);
 
   useEffect(() => {
-    return () => {
-      abortRef.current.abort();
-    };
+    return () => { abortRef.current.abort(); };
   }, []);
 
   useEffect(() => {
@@ -198,7 +189,8 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const handleStart = () => {
     if (!serverPath.trim()) return;
     abortRef.current = new AbortController();
-    analyzeSema.current = new Semaphore(ANALYZE_CONCURRENCY);
+    uploadSema.current = new Semaphore(50);
+    analyzeSema.current = new Semaphore(8);
     processedPaths.current.clear();
     fileQueue.current = [];
     workerRunning.current = false;
