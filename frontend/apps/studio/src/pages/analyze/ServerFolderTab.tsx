@@ -40,20 +40,18 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const displayImages = serverImages.slice(-MAX_DISPLAY);
 
   const processFile = useCallback(
-    async (filePath: string, fileName: string) => {
+    async (filePath: string, fileName: string, releaseUpload: () => void) => {
       const signal = abortRef.current.signal;
       const id = crypto.randomUUID();
       const preview = `/api/server-files/image?path=${encodeURIComponent(filePath)}`;
       const placeholderFile = new File([], fileName, { type: "image/jpeg" });
 
-      addImage({ id, source: "server", file: placeholderFile, preview, status: "queued" });
+      addImage({ id, source: "server", file: placeholderFile, preview, status: "uploading" });
       incrementStat("server", "total");
 
       let analyzed_id: number | undefined;
-      const releaseUpload = await uploadSema.current.acquire();
       try {
         if (signal.aborted) { releaseUpload(); return; }
-        updateImage(id, { status: "uploading" });
         const result = await registerServerFile(filePath, clientUUID);
         analyzed_id = result.analyzed_id;
         updateImage(id, { analyzedId: analyzed_id, originalImagePath: result.original_image_path });
@@ -125,10 +123,13 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
       try {
         const { files } = await listServerFiles(serverPath.trim());
         for (const f of files) {
-          if (!processedPaths.current.has(f.path) && !abortRef.current.signal.aborted) {
-            processedPaths.current.add(f.path);
-            processFile(f.path, f.name);
-          }
+          if (abortRef.current.signal.aborted) break;
+          if (processedPaths.current.has(f.path)) continue;
+          processedPaths.current.add(f.path);
+          // useFolderWatch와 동일 패턴: 슬롯 확보 후 디스패치 → 한 번에 최대 50개만 태스크 생성
+          const release = await uploadSema.current.acquire();
+          if (abortRef.current.signal.aborted) { release(); break; }
+          void processFile(f.path, f.name, release);
         }
       } catch {
         // 디렉토리가 아직 없거나 일시적 오류는 무시하고 다음 폴링에서 재시도
