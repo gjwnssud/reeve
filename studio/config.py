@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # OpenAI API
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: Optional[str] = Field(default="gpt-5-mini", alias="OPENAI_MODEL")
+    # OpenAI RPM 한도 (Tier 1=500, Tier 2=5000, Tier 3+=5000~10000)
+    # https://platform.openai.com/docs/guides/rate-limits
+    openai_rpm: int = Field(default=500, alias="OPENAI_RPM")
 
     # Gemini API
     gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")

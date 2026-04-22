@@ -5,6 +5,7 @@ OpenAI Vision API 서비스
 import base64
 import json
 import asyncio
+import time
 from pathlib import Path
 from typing import Dict, Optional, List
 import logging
@@ -15,6 +16,46 @@ from studio.config import settings
 from studio.services.vision_constants import MANUFACTURER_FALLBACK, MODEL_FALLBACK
 
 logger = logging.getLogger(__name__)
+
+
+class _TokenBucket:
+    """Token bucket rate limiter — OpenAI 공식 권장 방식 (proactive client-side limiting).
+    RPM 기준으로 초당 rate를 계산해 선제적으로 요청 속도를 제어한다.
+    """
+
+    def __init__(self, rpm: int) -> None:
+        self._rate = rpm / 60.0          # tokens per second
+        self._capacity = float(rpm)
+        self._tokens = float(rpm)        # 시작 시 버킷 가득 채움
+        self._last = time.monotonic()
+        self._lock = asyncio.Lock()
+
+    def _refill(self) -> None:
+        now = time.monotonic()
+        self._tokens = min(self._capacity, self._tokens + (now - self._last) * self._rate)
+        self._last = now
+
+    async def acquire(self) -> None:
+        while True:
+            async with self._lock:
+                self._refill()
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return
+                wait = (1.0 - self._tokens) / self._rate
+            await asyncio.sleep(wait)
+
+
+# 프로세스 공유 싱글턴 — 모든 요청이 같은 버킷을 공유해야 RPM이 정확히 제어됨
+_rate_limiter: Optional[_TokenBucket] = None
+
+
+def _get_rate_limiter() -> _TokenBucket:
+    global _rate_limiter
+    if _rate_limiter is None:
+        _rate_limiter = _TokenBucket(settings.openai_rpm)
+        logger.info(f"OpenAI rate limiter initialized: {settings.openai_rpm} RPM")
+    return _rate_limiter
 
 
 class OpenAIVisionService:
@@ -147,9 +188,12 @@ class OpenAIVisionService:
             # 프롬프트 구성 (DB 데이터 기반)
             prompt = self._build_prompt(additional_context)
 
-            # Vision API 호출 (재시도 로직 포함)
+            # Vision API 호출 — Token Bucket으로 선제 속도 제어 후 호출
+            # (분당 OPENAI_RPM 이하로 유지, 429 슬립스루 시 Retry-After 백오프)
+            await _get_rate_limiter().acquire()
+
             max_retries = 6
-            base_delay = 15  # 초기 대기 시간 (초) — RPM 초과 시 최소 대기
+            base_delay = 15  # 초기 대기 시간 (초) — 429 슬립스루 대비
 
             for attempt in range(max_retries):
                 try:
