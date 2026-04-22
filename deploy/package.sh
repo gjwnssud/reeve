@@ -76,6 +76,7 @@ package_dev() {
     cp "$DOCKER_DIR/docker-compose.gpu.yml" "$dest/docker-compose.gpu.yml"
     cp "$DOCKER_DIR/docker-compose.ssl.yml" "$dest/docker-compose.ssl.yml"
     cp "$DOCKER_DIR/Dockerfile"            "$dest/"
+    cp "$DOCKER_DIR/Dockerfile.studio"     "$dest/"
     cp "$DOCKER_DIR/Dockerfile.identifier" "$dest/"
     cp "$DOCKER_DIR/Dockerfile.trainer"    "$dest/"
     cp "$DOCKER_DIR/.env.example"          "$dest/"

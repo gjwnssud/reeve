@@ -98,6 +98,7 @@ copy "%DOCKER_DIR%\docker-compose.gpu.yml" "%DEST%\docker-compose.gpu.yml" > nul
 copy "%DOCKER_DIR%\docker-compose.ssl.yml" "%DEST%\docker-compose.ssl.yml" > nul
 
 copy "%DOCKER_DIR%\Dockerfile"            "%DEST%\" > nul
+copy "%DOCKER_DIR%\Dockerfile.studio"     "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.identifier" "%DEST%\" > nul
 copy "%DOCKER_DIR%\Dockerfile.trainer"    "%DEST%\" > nul
 copy "%DOCKER_DIR%\.env.example"          "%DEST%\" > nul
