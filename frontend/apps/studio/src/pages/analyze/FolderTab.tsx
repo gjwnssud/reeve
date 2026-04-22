@@ -10,7 +10,7 @@ import { ImageGrid } from "./ImageGrid";
 import { BulkApproveButton } from "./BulkApproveButton";
 import type { ImageState } from "../../stores/analyze-store";
 
-const MAX_DISPLAY = 100;
+const MAX_DISPLAY = 50;
 
 interface Props {
   onSelectImage: (img: ImageState) => void;
@@ -134,13 +134,14 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   // 배치 처리: 업로드+탐지 전부 완료 → 분석+저장 전부 완료
   const processBatch = useCallback(
     async (batch: WatchedFile[]) => {
+      clearImages("folder");
       // Stage 2+3: 배치 내 전체 동시 업로드+탐지, 완료 대기
       const detectedIds = (await Promise.all(batch.map(uploadAndDetect))).filter(Boolean) as string[];
       if (detectedIds.length === 0) return;
       // Stage 4+5: 탐지된 것 전체 동시 분석+저장, 완료 대기
       await Promise.all(detectedIds.map(analyzeAndSave));
     },
-    [uploadAndDetect, analyzeAndSave],
+    [uploadAndDetect, analyzeAndSave, clearImages],
   );
 
   const { running, start, stop } = useFolderWatch({
@@ -249,11 +250,6 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         </div>
       )}
 
-      {folderImages.length > MAX_DISPLAY && (
-        <p className="text-xs text-muted-foreground text-right">
-          최신 {MAX_DISPLAY}개만 표시 중 (전체 {folderImages.length}개)
-        </p>
-      )}
       <ImageGrid images={displayImages} onSelect={onSelectImage} />
 
       {folderImages.length === 0 && (

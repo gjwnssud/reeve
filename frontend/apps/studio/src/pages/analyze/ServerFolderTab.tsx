@@ -14,7 +14,7 @@ import { saveToTraining, extractErrorMessage } from "../../lib/api";
 import { ImageGrid } from "./ImageGrid";
 import type { ImageState } from "../../stores/analyze-store";
 
-const MAX_DISPLAY = 100;
+const MAX_DISPLAY = 50;
 const POLL_INTERVAL_MS = 3000;
 const BATCH_SIZE = 50;
 const STORAGE_PREFIX = "reeve_offset_";
@@ -163,11 +163,12 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   // 배치 처리: 복사+탐지 전부 완료 → 분석+저장 전부 완료
   const processBatch = useCallback(
     async (batch: ServerFileInfo[]) => {
+      clearImages("server");
       const detectedIds = (await Promise.all(batch.map(registerAndDetect))).filter(Boolean) as string[];
       if (detectedIds.length === 0) return;
       await Promise.all(detectedIds.map(analyzeAndSave));
     },
-    [registerAndDetect, analyzeAndSave],
+    [registerAndDetect, analyzeAndSave, clearImages],
   );
 
   // 순차 루프: poll → 배치 처리 완료 → poll (처리 중 추가 poll 없음)
