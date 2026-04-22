@@ -7,6 +7,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import logging
+import torch
 from ultralytics import YOLO
 from studio.config import settings
 
@@ -44,7 +45,7 @@ class VehicleDetector:
         """YOLO26 모델 로드"""
         try:
             model_name = f"yolo26{self.model_size}.pt"
-            device = settings.embedding_device if settings.embedding_device != "cpu" else None
+            device = settings.embedding_device if settings.embedding_device != "cpu" and torch.cuda.is_available() else None
             logger.info(f"Loading YOLO26 model: {model_name} (device={device or 'cpu'})")
 
             self.model = YOLO(model_name)
