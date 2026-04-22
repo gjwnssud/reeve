@@ -17,28 +17,27 @@ import type { ImageState } from "../../stores/analyze-store";
 const MAX_DISPLAY = 100;
 const POLL_INTERVAL_MS = 3000;
 const BATCH_SIZE = 50;
-const STORAGE_PREFIX = "reeve_processed_";
+const STORAGE_PREFIX = "reeve_offset_";
 
 function storageKey(path: string) {
   return `${STORAGE_PREFIX}${path}`;
 }
 
-function loadProcessed(path: string): Set<string> {
+function loadOffset(path: string): number {
   try {
-    const raw = localStorage.getItem(storageKey(path));
-    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    return parseInt(localStorage.getItem(storageKey(path)) ?? "0", 10) || 0;
   } catch {
-    return new Set();
+    return 0;
   }
 }
 
-function saveProcessed(path: string, set: Set<string>) {
+function saveOffset(path: string, count: number) {
   try {
-    localStorage.setItem(storageKey(path), JSON.stringify([...set]));
+    localStorage.setItem(storageKey(path), String(count));
   } catch {}
 }
 
-function clearProcessed(path: string) {
+function clearOffset(path: string) {
   try {
     localStorage.removeItem(storageKey(path));
   } catch {}
@@ -58,7 +57,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const abortRef = useRef(new AbortController());
   const detectSema = useRef(new Semaphore(4));
   const analyzeSema = useRef(new Semaphore(3));
-  const processedPaths = useRef(new Set<string>());
+  const processedCount = useRef(0);
   const fileQueue = useRef<ServerFileInfo[]>([]);
   const processingRef = useRef(false);
 
@@ -119,7 +118,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     [clientUUID, addImage, updateImage, incrementStat],
   );
 
-  // Stage 4+5: 분석 + 저장 (최대 8개 동시)
+  // Stage 4+5: 분석 + 저장 (최대 3개 동시)
   const analyzeAndSave = useCallback(
     async (id: string) => {
       const signal = abortRef.current.signal;
@@ -194,16 +193,12 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     const poll = async () => {
       try {
         const { files } = await listServerFiles(serverPath.trim());
-        let hasNew = false;
-        for (const f of files) {
-          if (!processedPaths.current.has(f.path) && !abortRef.current.signal.aborted) {
-            processedPaths.current.add(f.path);
-            fileQueue.current.push(f);
-            hasNew = true;
-          }
-        }
-        if (hasNew) {
-          saveProcessed(serverPath.trim(), processedPaths.current);
+        // 백엔드가 sorted()로 항상 동일 순서 보장 → 인덱스 이후만 신규
+        const newFiles = files.slice(processedCount.current);
+        if (newFiles.length > 0 && !abortRef.current.signal.aborted) {
+          processedCount.current += newFiles.length;
+          saveOffset(serverPath.trim(), processedCount.current);
+          fileQueue.current.push(...newFiles);
           if (!processingRef.current) void drainQueue();
         }
       } catch {
@@ -237,14 +232,14 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
 
   const handleStart = () => {
     if (!serverPath.trim()) return;
-    const saved = loadProcessed(serverPath.trim());
+    const saved = loadOffset(serverPath.trim());
     abortRef.current = new AbortController();
     detectSema.current = new Semaphore(4);
     analyzeSema.current = new Semaphore(3);
-    processedPaths.current = saved;
+    processedCount.current = saved;
     fileQueue.current = [];
     processingRef.current = false;
-    setResumedFrom(saved.size);
+    setResumedFrom(saved);
     setRunning(true);
   };
 
@@ -284,7 +279,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
               onClick={() => {
                 clearImages("server");
                 resetStats("server");
-                clearProcessed(serverPath.trim());
+                clearOffset(serverPath.trim());
                 setResumedFrom(0);
               }}
             >
