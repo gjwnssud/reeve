@@ -33,13 +33,13 @@ async def cleanup_old_analyzed_vehicles():
     db = SessionLocal()
 
     try:
-        # 삭제 대상 조회: 탐지 실패 + 오래된 데이터
+        # 삭제 대상 조회: YOLO 탐지 실패(yolo_detected 단계이나 감지 결과 없음) + 오래된 데이터
         old_records = db.query(AnalyzedVehicle).filter(
             and_(
+                AnalyzedVehicle.processing_stage == 'yolo_detected',
                 or_(
                     AnalyzedVehicle.yolo_detections == None,
                     func.json_length(AnalyzedVehicle.yolo_detections) == 0,
-                    AnalyzedVehicle.processing_stage == 'uploaded',
                 ),
                 AnalyzedVehicle.created_at < cutoff_date
             )
@@ -87,11 +87,13 @@ async def get_cleanup_stats(db: Session) -> dict:
     """
     cutoff_date = datetime.now() - timedelta(days=settings.analyzed_vehicles_retention_days)
 
-    # 정리 대상 개수 (탐지 실패 + 오래된 데이터)
-    detection_failed_filter = or_(
-        AnalyzedVehicle.yolo_detections == None,
-        func.json_length(AnalyzedVehicle.yolo_detections) == 0,
-        AnalyzedVehicle.processing_stage == 'uploaded',
+    # 정리 대상 개수 (YOLO 탐지 실패 + 오래된 데이터)
+    detection_failed_filter = and_(
+        AnalyzedVehicle.processing_stage == 'yolo_detected',
+        or_(
+            AnalyzedVehicle.yolo_detections == None,
+            func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+        ),
     )
     cleanup_candidates = db.query(AnalyzedVehicle).filter(
         and_(
