@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y \
 
 # Python 의존성 (torch/torchvision은 베이스 이미지에 포함 — 재설치 시 버전 충돌 방지)
 COPY requirements.txt .
-RUN grep -v '^torch' requirements.txt > requirements-nogpu.txt && \
+RUN grep -v '^torch\|^pytest' requirements.txt > requirements-nogpu.txt && \
     pip install --no-cache-dir -r requirements-nogpu.txt
 
 # EfficientNetV2-M 모델 사전 다운로드 (빌드 시 캐싱)
