@@ -1,11 +1,11 @@
 """
 데이터 라이프사이클 관리 작업
-검수 완료된 analyzed_vehicles를 자동으로 정리
+객체 탐지 실패한 analyzed_vehicles를 자동으로 정리
 """
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_, func
 
 from studio.models.analyzed_vehicle import AnalyzedVehicle
 from studio.models.database import SessionLocal
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 async def cleanup_old_analyzed_vehicles():
     """
-    오래된 미검수 analyzed_vehicles 자동 삭제
+    오래된 탐지 실패 analyzed_vehicles 자동 삭제
 
-    - 삭제 대상: is_verified=false AND created_at < (현재 - RETENTION_DAYS)
+    - 삭제 대상: (yolo_detections IS NULL/[] OR processing_stage='uploaded') AND created_at < (현재 - RETENTION_DAYS)
     - 크롭 이미지 + 원본 이미지 + training_dataset + DB 레코드 모두 삭제
     """
     if not settings.cleanup_enabled:
@@ -33,10 +33,14 @@ async def cleanup_old_analyzed_vehicles():
     db = SessionLocal()
 
     try:
-        # 삭제 대상 조회: 미검수 + 오래된 데이터
+        # 삭제 대상 조회: 탐지 실패 + 오래된 데이터
         old_records = db.query(AnalyzedVehicle).filter(
             and_(
-                AnalyzedVehicle.is_verified == False,
+                or_(
+                    AnalyzedVehicle.yolo_detections == None,
+                    func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                    AnalyzedVehicle.processing_stage == 'uploaded',
+                ),
                 AnalyzedVehicle.created_at < cutoff_date
             )
         ).all()
@@ -83,17 +87,22 @@ async def get_cleanup_stats(db: Session) -> dict:
     """
     cutoff_date = datetime.now() - timedelta(days=settings.analyzed_vehicles_retention_days)
 
-    # 정리 대상 개수 (미검수 + 오래된 데이터)
+    # 정리 대상 개수 (탐지 실패 + 오래된 데이터)
+    detection_failed_filter = or_(
+        AnalyzedVehicle.yolo_detections == None,
+        func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+        AnalyzedVehicle.processing_stage == 'uploaded',
+    )
     cleanup_candidates = db.query(AnalyzedVehicle).filter(
         and_(
-            AnalyzedVehicle.is_verified == False,
+            detection_failed_filter,
             AnalyzedVehicle.created_at < cutoff_date
         )
     ).count()
 
-    # 가장 오래된 미검수 레코드
+    # 가장 오래된 탐지 실패 레코드
     oldest_unverified = db.query(AnalyzedVehicle).filter(
-        AnalyzedVehicle.is_verified == False
+        detection_failed_filter
     ).order_by(AnalyzedVehicle.created_at.asc()).first()
 
     return {
