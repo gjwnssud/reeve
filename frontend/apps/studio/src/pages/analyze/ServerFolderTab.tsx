@@ -17,6 +17,32 @@ import type { ImageState } from "../../stores/analyze-store";
 const MAX_DISPLAY = 100;
 const POLL_INTERVAL_MS = 3000;
 const BATCH_SIZE = 50;
+const STORAGE_PREFIX = "reeve_processed_";
+
+function storageKey(path: string) {
+  return `${STORAGE_PREFIX}${path}`;
+}
+
+function loadProcessed(path: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(storageKey(path));
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveProcessed(path: string, set: Set<string>) {
+  try {
+    localStorage.setItem(storageKey(path), JSON.stringify([...set]));
+  } catch {}
+}
+
+function clearProcessed(path: string) {
+  try {
+    localStorage.removeItem(storageKey(path));
+  } catch {}
+}
 
 interface Props {
   onSelectImage: (img: ImageState) => void;
@@ -27,6 +53,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const clientUUID = useClientUUID();
   const [serverPath, setServerPath] = useState("");
   const [running, setRunning] = useState(false);
+  const [resumedFrom, setResumedFrom] = useState(0);
   const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
   const detectSema = useRef(new Semaphore(4));
@@ -150,7 +177,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const drainQueue = useCallback(async () => {
     if (processingRef.current) return;
     processingRef.current = true;
-    const signal = abortRef.current.signal; // 중지 시 교체되기 전 signal 캡처
+    const signal = abortRef.current.signal;
     try {
       while (fileQueue.current.length > 0 && !signal.aborted) {
         const batch = fileQueue.current.splice(0, BATCH_SIZE);
@@ -175,7 +202,10 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
             hasNew = true;
           }
         }
-        if (hasNew && !processingRef.current) void drainQueue();
+        if (hasNew) {
+          saveProcessed(serverPath.trim(), processedPaths.current);
+          if (!processingRef.current) void drainQueue();
+        }
       } catch {
         // 디렉토리가 아직 없거나 일시적 오류는 무시
       }
@@ -207,12 +237,14 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
 
   const handleStart = () => {
     if (!serverPath.trim()) return;
+    const saved = loadProcessed(serverPath.trim());
     abortRef.current = new AbortController();
     detectSema.current = new Semaphore(4);
     analyzeSema.current = new Semaphore(8);
-    processedPaths.current.clear();
+    processedPaths.current = saved;
     fileQueue.current = [];
     processingRef.current = false;
+    setResumedFrom(saved.size);
     setRunning(true);
   };
 
@@ -252,6 +284,8 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
               onClick={() => {
                 clearImages("server");
                 resetStats("server");
+                clearProcessed(serverPath.trim());
+                setResumedFrom(0);
               }}
             >
               <Trash2 className="mr-1 h-4 w-4" /> 초기화
@@ -265,6 +299,9 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-500 mr-1.5" />
           서버 폴더 감시 중 —{" "}
           <span className="font-medium">{serverPath}</span>에 새 이미지가 추가되면 자동으로 처리됩니다.
+          {resumedFrom > 0 && (
+            <span className="ml-2 text-xs">({resumedFrom.toLocaleString()}개 건너뜀)</span>
+          )}
         </p>
       )}
 
