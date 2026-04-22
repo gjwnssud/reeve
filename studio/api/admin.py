@@ -147,16 +147,30 @@ async def get_all_analyzed_vehicles(
     """전체 분석 레코드 조회 (차량데이터 관리용)
     status 필터 (DB processing_stage 기준):
       uploaded         - stage='uploaded' (YOLO 미실행)
-      yolo_detected    - stage='yolo_detected' (탐지완료, 성공/실패 포함)
+      yolo_failed      - stage='yolo_detected', yolo_detections NULL/빈 배열 (탐지 실패)
+      yolo_detected    - stage='yolo_detected', yolo_detections 존재 (감지 성공)
       analysis_complete - stage='analysis_complete', is_verified=False (분석완료, 미검증)
       verified         - is_verified=True (검증완료)
     """
+    from sqlalchemy import func as _func, or_ as _or
+
     query = db.query(AnalyzedVehicle)
 
     if status == 'uploaded':
         query = query.filter(AnalyzedVehicle.processing_stage == 'uploaded')
+    elif status == 'yolo_failed':
+        query = query.filter(
+            AnalyzedVehicle.processing_stage == 'yolo_detected',
+            _or(
+                AnalyzedVehicle.yolo_detections == None,
+                _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+            )
+        )
     elif status == 'yolo_detected':
-        query = query.filter(AnalyzedVehicle.processing_stage == 'yolo_detected')
+        query = query.filter(
+            AnalyzedVehicle.processing_stage == 'yolo_detected',
+            _func.json_length(AnalyzedVehicle.yolo_detections) > 0,
+        )
     elif status == 'analysis_complete':
         query = query.filter(
             AnalyzedVehicle.processing_stage == 'analysis_complete',
@@ -188,7 +202,23 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
     row = db.query(
         sql_func.count().label("all"),
         sql_func.sum(case((AnalyzedVehicle.processing_stage == 'uploaded', 1), else_=0)).label("uploaded"),
-        sql_func.sum(case((AnalyzedVehicle.processing_stage == 'yolo_detected', 1), else_=0)).label("yolo_detected"),
+        sql_func.sum(case(
+            (
+                (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                (
+                    (AnalyzedVehicle.yolo_detections == None) |
+                    (sql_func.json_length(AnalyzedVehicle.yolo_detections) == 0)
+                ),
+                1
+            ), else_=0
+        )).label("yolo_failed"),
+        sql_func.sum(case(
+            (
+                (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                (sql_func.json_length(AnalyzedVehicle.yolo_detections) > 0),
+                1
+            ), else_=0
+        )).label("yolo_detected"),
         sql_func.sum(case(
             (
                 (AnalyzedVehicle.processing_stage == 'analysis_complete') &
@@ -202,6 +232,7 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
     return {
         "all": row.all or 0,
         "uploaded": row.uploaded or 0,
+        "yolo_failed": row.yolo_failed or 0,
         "yolo_detected": row.yolo_detected or 0,
         "analysis_complete": row.analysis_complete or 0,
         "verified": row.verified or 0,

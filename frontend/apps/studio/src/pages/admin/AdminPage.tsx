@@ -15,6 +15,7 @@ import { BatchSaveButton } from "./BatchSaveButton";
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "전체" },
   { value: "uploaded", label: "업로드" },
+  { value: "yolo_failed", label: "감지실패" },
   { value: "yolo_detected", label: "감지완료" },
   { value: "analysis_complete", label: "분석완료" },
   { value: "verified", label: "검증완료" },
@@ -181,6 +182,7 @@ export function AdminPage() {
         {STATUS_TABS.map(({ value, label }) => {
           const cnt = value === "all" ? (counts?.all ?? 0)
             : value === "uploaded" ? (counts?.uploaded ?? 0)
+            : value === "yolo_failed" ? (counts?.yolo_failed ?? 0)
             : value === "yolo_detected" ? (counts?.yolo_detected ?? 0)
             : value === "analysis_complete" ? (counts?.analysis_complete ?? 0)
             : (counts?.verified ?? 0);

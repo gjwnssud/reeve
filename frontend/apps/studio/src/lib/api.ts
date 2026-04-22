@@ -2,7 +2,7 @@ import { ApiError, apiRequest } from '@reeve/shared';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-export type StatusFilter = 'all' | 'uploaded' | 'yolo_detected' | 'analysis_complete' | 'verified';
+export type StatusFilter = 'all' | 'uploaded' | 'yolo_failed' | 'yolo_detected' | 'analysis_complete' | 'verified';
 
 export interface Manufacturer {
   id: number;
@@ -65,6 +65,7 @@ export interface AnalyzedVehicleListResponse {
 export interface VehicleCounts {
   all: number;
   uploaded: number;
+  yolo_failed: number;
   yolo_detected: number;
   analysis_complete: number;
   verified: number;
