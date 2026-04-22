@@ -148,8 +148,8 @@ class OpenAIVisionService:
             prompt = self._build_prompt(additional_context)
 
             # Vision API 호출 (재시도 로직 포함)
-            max_retries = 3
-            retry_delay = 2  # 초기 대기 시간 (초)
+            max_retries = 6
+            base_delay = 15  # 초기 대기 시간 (초) — RPM 초과 시 최소 대기
 
             for attempt in range(max_retries):
                 try:
@@ -189,8 +189,17 @@ class OpenAIVisionService:
 
                 except RateLimitError as e:
                     if attempt < max_retries - 1:
-                        wait_time = retry_delay * (2 ** attempt)  # 지수 백오프: 2s, 4s, 8s
-                        logger.warning(f"Rate limit hit, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                        # Retry-After 헤더 우선, 없으면 지수 백오프 (15s, 30s, 60s, 120s, 240s)
+                        retry_after = None
+                        if hasattr(e, "response") and e.response is not None:
+                            retry_after_hdr = e.response.headers.get("retry-after")
+                            if retry_after_hdr:
+                                try:
+                                    retry_after = float(retry_after_hdr)
+                                except ValueError:
+                                    pass
+                        wait_time = retry_after if retry_after else min(base_delay * (2 ** attempt), 300)
+                        logger.warning(f"Rate limit hit, retrying in {wait_time:.0f}s (attempt {attempt + 1}/{max_retries})")
                         await asyncio.sleep(wait_time)
                     else:
                         logger.error(f"Rate limit exceeded after {max_retries} attempts")

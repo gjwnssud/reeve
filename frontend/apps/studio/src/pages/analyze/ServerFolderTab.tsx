@@ -57,7 +57,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
   const detectSema = useRef(new Semaphore(4));
-  const analyzeSema = useRef(new Semaphore(8));
+  const analyzeSema = useRef(new Semaphore(3));
   const processedPaths = useRef(new Set<string>());
   const fileQueue = useRef<ServerFileInfo[]>([]);
   const processingRef = useRef(false);
@@ -240,7 +240,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     const saved = loadProcessed(serverPath.trim());
     abortRef.current = new AbortController();
     detectSema.current = new Semaphore(4);
-    analyzeSema.current = new Semaphore(8);
+    analyzeSema.current = new Semaphore(3);
     processedPaths.current = saved;
     fileQueue.current = [];
     processingRef.current = false;
