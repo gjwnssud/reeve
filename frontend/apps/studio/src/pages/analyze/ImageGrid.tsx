@@ -69,7 +69,7 @@ export function ImageGrid({ images, onSelect }: Props) {
               </Badge>
               {img.result && img.result.confidence_score > 0 && (
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {(img.result.confidence_score * 100).toFixed(0)}%
+                  {img.result.confidence_score.toFixed(0)}%
                 </p>
               )}
             </div>

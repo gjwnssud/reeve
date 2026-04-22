@@ -264,7 +264,7 @@ export function ImageDetailDialog({ image, onClose }: Props) {
               <p className="text-sm text-muted-foreground">
                 현재: {result.manufacturer ?? "N/A"} / {result.model ?? "N/A"}
                 {result.confidence_score > 0 && (
-                  <span className="ml-2">({(result.confidence_score * 100).toFixed(1)}%)</span>
+                  <span className="ml-2">({result.confidence_score.toFixed(1)}%)</span>
                 )}
               </p>
             ) : image.status === "failed" ? (
