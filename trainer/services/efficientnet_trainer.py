@@ -41,6 +41,19 @@ class EfficientNetTrainer:
     def _log_dir(self, output_dir: str) -> Path:
         return Path(settings.trainer_log_dir) / output_dir
 
+    def _save_current_output_dir(self, output_dir: str) -> None:
+        try:
+            (Path(settings.trainer_log_dir) / "current.txt").write_text(output_dir, encoding="utf-8")
+        except Exception:
+            pass
+
+    def _load_current_output_dir(self) -> str:
+        try:
+            p = Path(settings.trainer_log_dir) / "current.txt"
+            return p.read_text(encoding="utf-8").strip() if p.exists() else "efficientnet"
+        except Exception:
+            return "efficientnet"
+
     async def start_training(
         self,
         learning_rate: float = 1e-4,
@@ -57,6 +70,7 @@ class EfficientNetTrainer:
         early_stopping_patience: int = 3,
     ) -> dict:
         """EfficientNetV2-M 파인튜닝 시작 (백그라운드 프로세스)"""
+        self._save_current_output_dir(output_dir)
         log_dir = self._log_dir(output_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -674,7 +688,7 @@ class EfficientNetTrainer:
             pid = None
 
         # 로그 파싱
-        log_dir = self._log_dir("efficientnet")
+        log_dir = self._log_dir(self._load_current_output_dir())
         jsonl_path = log_dir / _JSONL_LOG_FILENAME
         raw_log_path = log_dir / _RAW_LOG_FILENAME
         last_entry = {}
@@ -739,7 +753,7 @@ class EfficientNetTrainer:
 
     async def get_logs(self, tail: int = 50) -> list:
         """trainer_log.jsonl 파싱 로그 반환"""
-        log_dir = self._log_dir("efficientnet")
+        log_dir = self._log_dir(self._load_current_output_dir())
         jsonl_path = log_dir / _JSONL_LOG_FILENAME
 
         if not jsonl_path.exists():
@@ -759,7 +773,7 @@ class EfficientNetTrainer:
 
     async def get_raw_log(self, tail: int = 100) -> str:
         """원시 학습 로그 반환"""
-        log_dir = self._log_dir("efficientnet")
+        log_dir = self._log_dir(self._load_current_output_dir())
         raw_log_path = log_dir / _RAW_LOG_FILENAME
 
         if not raw_log_path.exists():
