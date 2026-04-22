@@ -193,7 +193,7 @@ class OpenAIVisionService:
             await _get_rate_limiter().acquire()
 
             max_retries = 6
-            base_delay = 15  # 초기 대기 시간 (초) — 429 슬립스루 대비
+            base_delay = 60  # 초기 대기 시간 (초) — Tier 1 RPM 윈도우(1분) 기준
 
             for attempt in range(max_retries):
                 try:

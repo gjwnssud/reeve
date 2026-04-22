@@ -19,27 +19,27 @@ const POLL_INTERVAL_MS = 3000;
 const BATCH_SIZE = 50;
 const STORAGE_PREFIX = "reeve_offset_";
 
-function storageKey(path: string) {
-  return `${STORAGE_PREFIX}${path}`;
+function storageKey(path: string, uuid: string) {
+  return `${STORAGE_PREFIX}${uuid}_${path}`;
 }
 
-function loadOffset(path: string): number {
+function loadOffset(path: string, uuid: string): number {
   try {
-    return parseInt(localStorage.getItem(storageKey(path)) ?? "0", 10) || 0;
+    return parseInt(localStorage.getItem(storageKey(path, uuid)) ?? "0", 10) || 0;
   } catch {
     return 0;
   }
 }
 
-function saveOffset(path: string, count: number) {
+function saveOffset(path: string, uuid: string, count: number) {
   try {
-    localStorage.setItem(storageKey(path), String(count));
+    localStorage.setItem(storageKey(path, uuid), String(count));
   } catch {}
 }
 
-function clearOffset(path: string) {
+function clearOffset(path: string, uuid: string) {
   try {
-    localStorage.removeItem(storageKey(path));
+    localStorage.removeItem(storageKey(path, uuid));
   } catch {}
 }
 
@@ -58,8 +58,6 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const detectSema = useRef(new Semaphore(4));
   const analyzeSema = useRef(new Semaphore(3));
   const processedCount = useRef(0);
-  const fileQueue = useRef<ServerFileInfo[]>([]);
-  const processingRef = useRef(false);
 
   const stats = useAnalyzeStore((s) => s.serverStats);
   const serverImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
@@ -172,44 +170,44 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
     [registerAndDetect, analyzeAndSave],
   );
 
-  // 큐 워커: 배치 단위로 순차 소진
-  const drainQueue = useCallback(async () => {
-    if (processingRef.current) return;
-    processingRef.current = true;
-    const signal = abortRef.current.signal;
-    try {
-      while (fileQueue.current.length > 0 && !signal.aborted) {
-        const batch = fileQueue.current.splice(0, BATCH_SIZE);
-        await processBatch(batch);
-      }
-    } finally {
-      processingRef.current = false;
-    }
-  }, [processBatch]);
-
+  // 순차 루프: poll → 배치 처리 완료 → poll (처리 중 추가 poll 없음)
   useEffect(() => {
     if (!running || !serverPath.trim()) return;
 
-    const poll = async () => {
-      try {
-        const { files } = await listServerFiles(serverPath.trim());
-        // 백엔드가 sorted()로 항상 동일 순서 보장 → 인덱스 이후만 신규
-        const newFiles = files.slice(processedCount.current);
-        if (newFiles.length > 0 && !abortRef.current.signal.aborted) {
-          processedCount.current += newFiles.length;
-          saveOffset(serverPath.trim(), processedCount.current);
-          fileQueue.current.push(...newFiles);
-          if (!processingRef.current) void drainQueue();
+    const signal = abortRef.current.signal;
+    const path = serverPath.trim();
+
+    const runLoop = async () => {
+      while (!signal.aborted) {
+        try {
+          const { files } = await listServerFiles(path);
+          const newFiles = files.slice(processedCount.current);
+
+          if (newFiles.length === 0 || signal.aborted) {
+            await new Promise<void>((resolve) => {
+              const t = setTimeout(resolve, POLL_INTERVAL_MS);
+              signal.addEventListener("abort", () => { clearTimeout(t); resolve(); }, { once: true });
+            });
+            continue;
+          }
+
+          const batch = newFiles.slice(0, BATCH_SIZE);
+          processedCount.current += batch.length;
+          saveOffset(path, clientUUID, processedCount.current);
+          await processBatch(batch);
+        } catch {
+          if (!signal.aborted) {
+            await new Promise<void>((resolve) => {
+              const t = setTimeout(resolve, POLL_INTERVAL_MS);
+              signal.addEventListener("abort", () => { clearTimeout(t); resolve(); }, { once: true });
+            });
+          }
         }
-      } catch {
-        // 디렉토리가 아직 없거나 일시적 오류는 무시
       }
     };
 
-    poll();
-    const timerId = setInterval(poll, POLL_INTERVAL_MS);
-    return () => clearInterval(timerId);
-  }, [running, serverPath, drainQueue]);
+    void runLoop();
+  }, [running, serverPath, clientUUID, processBatch]);
 
   useEffect(() => {
     return () => { abortRef.current.abort(); };
@@ -232,13 +230,11 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
 
   const handleStart = () => {
     if (!serverPath.trim()) return;
-    const saved = loadOffset(serverPath.trim());
+    const saved = loadOffset(serverPath.trim(), clientUUID);
     abortRef.current = new AbortController();
     detectSema.current = new Semaphore(4);
     analyzeSema.current = new Semaphore(3);
     processedCount.current = saved;
-    fileQueue.current = [];
-    processingRef.current = false;
     setResumedFrom(saved);
     setRunning(true);
   };
@@ -279,7 +275,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
               onClick={() => {
                 clearImages("server");
                 resetStats("server");
-                clearOffset(serverPath.trim());
+                clearOffset(serverPath.trim(), clientUUID);
                 setResumedFrom(0);
               }}
             >
