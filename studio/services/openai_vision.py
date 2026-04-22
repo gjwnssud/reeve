@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 class _TokenBucket:
     """Token bucket rate limiter — OpenAI 공식 권장 방식 (proactive client-side limiting).
-    RPM 기준으로 초당 rate를 계산해 선제적으로 요청 속도를 제어한다.
+    capacity/rate를 범용으로 받아 RPM·TPM 둘 다 처리한다.
     """
 
-    def __init__(self, rpm: int) -> None:
-        self._rate = rpm / 60.0          # tokens per second
-        self._capacity = float(rpm)
-        self._tokens = float(rpm)        # 시작 시 버킷 가득 채움
+    def __init__(self, per_minute: int) -> None:
+        self._rate = per_minute / 60.0
+        self._capacity = float(per_minute)
+        self._tokens = float(per_minute)  # 시작 시 버킷 가득 채움
         self._last = time.monotonic()
         self._lock = asyncio.Lock()
 
@@ -35,27 +35,36 @@ class _TokenBucket:
         self._tokens = min(self._capacity, self._tokens + (now - self._last) * self._rate)
         self._last = now
 
-    async def acquire(self) -> None:
+    async def acquire(self, cost: float = 1.0) -> None:
         while True:
             async with self._lock:
                 self._refill()
-                if self._tokens >= 1.0:
-                    self._tokens -= 1.0
+                if self._tokens >= cost:
+                    self._tokens -= cost
                     return
-                wait = (1.0 - self._tokens) / self._rate
+                wait = (cost - self._tokens) / self._rate
             await asyncio.sleep(wait)
 
 
-# 프로세스 공유 싱글턴 — 모든 요청이 같은 버킷을 공유해야 RPM이 정확히 제어됨
-_rate_limiter: Optional[_TokenBucket] = None
+# gpt-5.4-mini detail:high 비전 요청당 예상 토큰 수
+# 이미지(~2125) + 시스템 프롬프트(~200) + 유저 프롬프트(~300) + 응답(~150) ≈ 2800
+# → TPM 500,000 / 2800 ≈ 178 req/min 이 실질적 처리 한계
+_ESTIMATED_TOKENS_PER_REQUEST = 2800
+
+# 프로세스 공유 싱글턴
+_rpm_limiter: Optional[_TokenBucket] = None
+_tpm_limiter: Optional[_TokenBucket] = None
 
 
-def _get_rate_limiter() -> _TokenBucket:
-    global _rate_limiter
-    if _rate_limiter is None:
-        _rate_limiter = _TokenBucket(settings.openai_rpm)
-        logger.info(f"OpenAI rate limiter initialized: {settings.openai_rpm} RPM")
-    return _rate_limiter
+def _get_limiters() -> tuple[_TokenBucket, _TokenBucket]:
+    global _rpm_limiter, _tpm_limiter
+    if _rpm_limiter is None:
+        _rpm_limiter = _TokenBucket(settings.openai_rpm)
+        logger.info(f"OpenAI RPM limiter: {settings.openai_rpm} RPM")
+    if _tpm_limiter is None:
+        _tpm_limiter = _TokenBucket(settings.openai_tpm)
+        logger.info(f"OpenAI TPM limiter: {settings.openai_tpm} TPM (~{settings.openai_tpm // _ESTIMATED_TOKENS_PER_REQUEST} req/min 실효)")
+    return _rpm_limiter, _tpm_limiter
 
 
 class OpenAIVisionService:
@@ -188,9 +197,12 @@ class OpenAIVisionService:
             # 프롬프트 구성 (DB 데이터 기반)
             prompt = self._build_prompt(additional_context)
 
-            # Vision API 호출 — Token Bucket으로 선제 속도 제어 후 호출
-            # (분당 OPENAI_RPM 이하로 유지, 429 슬립스루 시 Retry-After 백오프)
-            await _get_rate_limiter().acquire()
+            # RPM + TPM 두 버킷 동시 소비 — 먼저 소진되는 쪽이 실질적 병목
+            rpm_limiter, tpm_limiter = _get_limiters()
+            await asyncio.gather(
+                rpm_limiter.acquire(1.0),
+                tpm_limiter.acquire(_ESTIMATED_TOKENS_PER_REQUEST),
+            )
 
             max_retries = 6
             base_delay = 60  # 초기 대기 시간 (초) — Tier 1 RPM 윈도우(1분) 기준
