@@ -55,6 +55,7 @@ data/*
 !data/.gitkeep
 
 # Docker
+!docker/
 docker-compose.override.yml
 
 # Testing

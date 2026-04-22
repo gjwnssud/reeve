@@ -39,7 +39,7 @@ services:
   studio:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.studio
     container_name: reeve-studio
     env_file:
       - .env
