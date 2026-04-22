@@ -12,7 +12,6 @@ import {
 import type { ServerFileInfo } from "../../lib/analyzeApi";
 import { saveToTraining, extractErrorMessage } from "../../lib/api";
 import { ImageGrid } from "./ImageGrid";
-import { BulkApproveButton } from "./BulkApproveButton";
 import type { ImageState } from "../../stores/analyze-store";
 
 const MAX_DISPLAY = 100;
@@ -40,7 +39,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const serverImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
     (i) => i.source === "server",
   );
-  const displayImages = serverImages.slice(-MAX_DISPLAY);
+  const displayImages = serverImages.slice(-MAX_DISPLAY).reverse();
 
   // Stage 2+3: 복사·등록 + 탐지 (복사 동시 무제한, 탐지 최대 4개)
   const registerAndDetect = useCallback(
@@ -246,7 +245,6 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         )}
 
         <div className="ml-auto flex gap-2">
-          {serverImages.length > 0 && <BulkApproveButton source="server" />}
           {stats.total > 0 && !running && (
             <Button
               variant="outline"
@@ -289,11 +287,6 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         </div>
       )}
 
-      {serverImages.length > MAX_DISPLAY && (
-        <p className="text-xs text-muted-foreground text-right">
-          최신 {MAX_DISPLAY}개만 표시 중 (전체 {serverImages.length}개)
-        </p>
-      )}
       <ImageGrid images={displayImages} onSelect={onSelectImage} />
 
       {serverImages.length === 0 && (
