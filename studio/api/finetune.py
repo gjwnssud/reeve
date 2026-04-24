@@ -639,7 +639,14 @@ class TrainingConfig(BaseModel):
     flash_attn: Optional[str] = None
     use_mps: bool = False
     fp16: bool = False
+    # EfficientNet 전용 필드
+    freeze_epochs: int = 3
     max_per_class: Optional[int] = None
+    min_per_class: Optional[int] = None
+    use_ema: bool = False
+    use_mixup: bool = False
+    num_workers: Optional[int] = None
+    early_stopping_patience: int = 7
 
 
 class ExportModelRequest(BaseModel):

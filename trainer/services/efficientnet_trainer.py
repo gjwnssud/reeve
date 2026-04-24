@@ -57,17 +57,18 @@ class EfficientNetTrainer:
     async def start_training(
         self,
         learning_rate: float = 1e-4,
-        num_epochs: int = 10,
+        num_epochs: int = 20,
         batch_size: int = 16,
-        freeze_epochs: int = 1,
+        freeze_epochs: int = 3,
         output_dir: str = "efficientnet",
         studio_url: Optional[str] = None,
         max_per_class: Optional[int] = None,
+        min_per_class: Optional[int] = None,
         gradient_accumulation: int = 1,
         use_ema: bool = False,
         use_mixup: bool = False,
         num_workers: Optional[int] = None,
-        early_stopping_patience: int = 3,
+        early_stopping_patience: int = 7,
     ) -> dict:
         """EfficientNetV2-M 파인튜닝 시작 (백그라운드 프로세스)"""
         self._save_current_output_dir(output_dir)
@@ -99,6 +100,7 @@ class EfficientNetTrainer:
             jsonl_log=jsonl_log,
             raw_log=raw_log,
             max_per_class=max_per_class,
+            min_per_class=min_per_class,
             gradient_accumulation=gradient_accumulation,
             use_ema=use_ema,
             use_mixup=use_mixup,
@@ -138,14 +140,16 @@ class EfficientNetTrainer:
         jsonl_log: str,
         raw_log: str,
         max_per_class: Optional[int] = None,
+        min_per_class: Optional[int] = None,
         gradient_accumulation: int = 1,
         use_ema: bool = False,
         use_mixup: bool = False,
         num_workers: Optional[int] = None,
-        early_stopping_patience: int = 3,
+        early_stopping_patience: int = 7,
     ) -> str:
         """학습 스크립트를 파라미터와 함께 빌드."""
         max_per_class_val = max_per_class if max_per_class else "None"
+        min_per_class_val = min_per_class if min_per_class else "None"
         num_workers_val = num_workers if num_workers is not None else "None"
         return textwrap.dedent(f"""\
             import json, csv, sys, os, time, math, random, shutil, copy, contextlib
@@ -170,6 +174,7 @@ class EfficientNetTrainer:
             BATCH_SIZE = {batch_size}
             FREEZE_EPOCHS = {freeze_epochs}
             MAX_PER_CLASS = {max_per_class_val}
+            MIN_PER_CLASS = {min_per_class_val}
             GRAD_ACCUM = {gradient_accumulation}
             USE_EMA = {use_ema}
             USE_MIXUP = {use_mixup}
@@ -265,6 +270,8 @@ class EfficientNetTrainer:
             export_body = {{"split": 0.9}}
             if MAX_PER_CLASS is not None:
                 export_body["max_per_class"] = MAX_PER_CLASS
+            if MIN_PER_CLASS is not None:
+                export_body["min_per_class"] = MIN_PER_CLASS
             try:
                 resp = httpx.post(
                     f"{{STUDIO_URL}}/finetune/export-efficientnet",

@@ -140,6 +140,7 @@ export interface EfficientNetTrainConfig {
   batch_size: number;
   freeze_epochs: number;
   max_per_class?: number | null;
+  min_per_class?: number | null;
   gradient_accumulation: number;
   use_ema: boolean;
   use_mixup: boolean;

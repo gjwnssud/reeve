@@ -231,13 +231,14 @@ class TrainingConfig(BaseModel):
     use_mps: bool = False
     fp16: bool = False
     # EfficientNet 전용 필드
-    freeze_epochs: int = 1
+    freeze_epochs: int = 3
     studio_url: Optional[str] = None
     max_per_class: Optional[int] = None  # 클래스당 최대 샘플 수 (None = 제한 없음)
+    min_per_class: Optional[int] = None  # 클래스당 최소 샘플 수 (미만 클래스 제외)
     use_ema: bool = False
     use_mixup: bool = False
     num_workers: Optional[int] = None  # None = 플랫폼 자동 감지
-    early_stopping_patience: int = 3
+    early_stopping_patience: int = 7
 
 
 class ExportModelRequest(BaseModel):
@@ -262,6 +263,7 @@ async def start_training(config: TrainingConfig):
                 output_dir=config.output_dir,
                 studio_url=config.studio_url or settings.studio_url,
                 max_per_class=config.max_per_class,
+                min_per_class=config.min_per_class,
                 gradient_accumulation=config.gradient_accumulation,
                 use_ema=config.use_ema,
                 use_mixup=config.use_mixup,

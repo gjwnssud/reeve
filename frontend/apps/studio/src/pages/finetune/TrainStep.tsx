@@ -20,6 +20,8 @@ const schema = z.object({
   num_epochs: z.coerce.number().min(1).max(200).default(20),
   batch_size: z.coerce.number().min(1).max(256).default(16),
   freeze_epochs: z.coerce.number().min(0).max(20).default(3),
+  min_per_class: z.coerce.number().min(0).default(30),
+  max_per_class: z.coerce.number().min(0).default(1000),
   gradient_accumulation: z.coerce.number().min(1).max(32).default(4),
   use_ema: z.boolean().default(false),
   use_mixup: z.boolean().default(false),
@@ -33,6 +35,8 @@ const FIELDS: { name: keyof FormData; label: string; hint?: string }[] = [
   { name: "num_epochs",             label: "에폭 수",             hint: "권장: 20" },
   { name: "batch_size",             label: "배치 크기",           hint: "HW 프리셋 자동 적용" },
   { name: "freeze_epochs",          label: "Freeze 에폭",         hint: "head 재초기화 시 3 권장" },
+  { name: "min_per_class",          label: "최소 샘플/클래스",    hint: "미만 클래스 제외, 권장: 30" },
+  { name: "max_per_class",          label: "최대 샘플/클래스",    hint: "0 = 제한 없음, 권장: 1000" },
   { name: "gradient_accumulation",  label: "Gradient Accum.",     hint: "HW 프리셋 자동 적용" },
   { name: "num_workers",            label: "Workers",             hint: "HW 프리셋 자동 적용" },
   { name: "early_stopping_patience",label: "Early Stop Patience", hint: "권장: 7" },
@@ -87,6 +91,8 @@ export function TrainStep({ onBack, onNext }: Props) {
       num_epochs: 20,
       batch_size: 16,
       freeze_epochs: 3,
+      min_per_class: 30,
+      max_per_class: 1000,
       gradient_accumulation: 4,
       use_ema: false,
       use_mixup: false,
@@ -125,7 +131,11 @@ export function TrainStep({ onBack, onNext }: Props) {
   });
 
   const onSubmit = async (data: FormData) => {
-    const config: EfficientNetTrainConfig = { ...data, max_per_class: null };
+    const config: EfficientNetTrainConfig = {
+      ...data,
+      max_per_class: data.max_per_class > 0 ? data.max_per_class : null,
+      min_per_class: data.min_per_class > 0 ? data.min_per_class : null,
+    };
     await doStart(config);
   };
 
