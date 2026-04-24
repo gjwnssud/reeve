@@ -260,7 +260,7 @@ async def start_training(config: TrainingConfig):
                 num_epochs=int(config.num_epochs),
                 batch_size=config.batch_size,
                 freeze_epochs=config.freeze_epochs,
-                output_dir=config.output_dir,
+                output_dir="efficientnet",
                 studio_url=config.studio_url or settings.studio_url,
                 max_per_class=config.max_per_class,
                 min_per_class=config.min_per_class,
@@ -295,7 +295,7 @@ async def start_training(config: TrainingConfig):
                 batch_size=config.batch_size,
                 gradient_accumulation=config.gradient_accumulation,
                 lora_rank=config.lora_rank,
-                output_dir=config.output_dir,
+                output_dir="vehicle-vlm",
                 cutoff_len=config.cutoff_len,
             )
 

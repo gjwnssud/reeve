@@ -71,9 +71,9 @@ class EfficientNetTrainer:
         early_stopping_patience: int = 7,
     ) -> dict:
         """EfficientNetV2-M 파인튜닝 시작 (백그라운드 프로세스)"""
-        self._save_current_output_dir(output_dir)
         log_dir = self._log_dir(output_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
+        self._save_current_output_dir(output_dir)
 
         # 이미 실행 중 확인
         status = await self.get_status()
