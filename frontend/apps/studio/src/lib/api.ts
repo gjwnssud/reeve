@@ -82,11 +82,20 @@ export interface FinetuneStatsEntry {
   count: number;
 }
 
+export interface FinetuneModelStatsEntry {
+  model_id: number;
+  korean_name: string;
+  english_name: string;
+  manufacturer_korean: string;
+  count: number;
+}
+
 export interface FinetuneStats {
   total: number;
   num_classes: number;
   manufacturers_count: number;
   by_manufacturer: FinetuneStatsEntry[];
+  by_model: FinetuneModelStatsEntry[];
 }
 
 export interface HwProfile {

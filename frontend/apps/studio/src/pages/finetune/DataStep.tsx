@@ -6,7 +6,7 @@ import { Download, AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
 
 import {
   getFinetuneStats, getFinetuneMode, exportEfficientNet,
-  extractErrorMessage,
+  extractErrorMessage, type FinetuneModelStatsEntry,
 } from "../../lib/api";
 
 interface Props {
@@ -31,7 +31,8 @@ export function DataStep({ onNext }: Props) {
   const isEfficientNet = mode?.identifier_mode !== "vlm_only";
   const total = stats?.total ?? 0;
   const numClasses = stats?.num_classes ?? 0;
-  const maxCount = Math.max(...(stats?.by_manufacturer.map((m) => m.count) ?? [1]));
+  const maxMfCount = Math.max(...(stats?.by_manufacturer.map((m) => m.count) ?? [1]));
+  const maxModelCount = Math.max(...(stats?.by_model.map((m) => m.count) ?? [1]));
 
   return (
     <div className="space-y-4">
@@ -73,41 +74,88 @@ export function DataStep({ onNext }: Props) {
             </div>
           )}
 
-          {stats && stats.by_manufacturer.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">제조사별 분포</div>
-              <div className="max-h-64 overflow-y-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 border-b bg-muted">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">제조사</th>
-                      <th className="px-3 py-2 text-right font-medium text-muted-foreground">이미지</th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground w-36">비율</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.by_manufacturer.map((m) => (
-                      <tr key={m.manufacturer_id} className="border-b last:border-0">
-                        <td className="px-3 py-2">{m.korean_name}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{m.count.toLocaleString()}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary"
-                                style={{ width: `${(m.count / maxCount) * 100}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-muted-foreground w-8 text-right">
-                              {Math.round((m.count / total) * 100)}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {stats && (stats.by_manufacturer.length > 0 || stats.by_model.length > 0) && (
+            <div className="grid grid-cols-2 gap-4">
+              {stats.by_manufacturer.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">제조사별 분포</div>
+                  <div className="max-h-96 overflow-y-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 border-b bg-muted">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">제조사</th>
+                          <th className="px-3 py-2 text-right font-medium text-muted-foreground">이미지</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground w-28">비율</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.by_manufacturer.map((m) => (
+                          <tr key={m.manufacturer_id} className="border-b last:border-0">
+                            <td className="px-3 py-2">{m.korean_name}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{m.count.toLocaleString()}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                  <div
+                                    className="h-full rounded-full bg-primary"
+                                    style={{ width: `${(m.count / maxMfCount) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground w-8 text-right">
+                                  {Math.round((m.count / total) * 100)}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {stats.by_model.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    모델별 분포 <span className="text-muted-foreground/60">({stats.by_model.length}종)</span>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 border-b bg-muted">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">모델</th>
+                          <th className="px-3 py-2 text-right font-medium text-muted-foreground">이미지</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground w-28">비율</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.by_model.map((m: FinetuneModelStatsEntry) => (
+                          <tr key={m.model_id} className="border-b last:border-0">
+                            <td className="px-3 py-2">
+                              <div className="font-medium leading-tight">{m.korean_name}</div>
+                              <div className="text-xs text-muted-foreground">{m.manufacturer_korean}</div>
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">{m.count.toLocaleString()}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                  <div
+                                    className="h-full rounded-full bg-primary"
+                                    style={{ width: `${(m.count / maxModelCount) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground w-8 text-right">
+                                  {((m.count / total) * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

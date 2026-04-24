@@ -160,6 +160,21 @@ async def get_stats(db: Session = Depends(get_db)):
         .all()
     )
 
+    by_model = (
+        db.query(
+            VehicleModel.id,
+            VehicleModel.korean_name,
+            VehicleModel.english_name,
+            Manufacturer.korean_name.label("manufacturer_korean"),
+            sql_func.count(TrainingDataset.id).label("count"),
+        )
+        .join(TrainingDataset, VehicleModel.id == TrainingDataset.model_id)
+        .join(Manufacturer, VehicleModel.manufacturer_id == Manufacturer.id)
+        .group_by(VehicleModel.id, VehicleModel.korean_name, VehicleModel.english_name, Manufacturer.korean_name)
+        .order_by(sql_func.count(TrainingDataset.id).desc())
+        .all()
+    )
+
     return {
         "total": total,
         "num_classes": num_classes,
@@ -172,6 +187,16 @@ async def get_stats(db: Session = Depends(get_db)):
                 "count": row.count,
             }
             for row in by_manufacturer
+        ],
+        "by_model": [
+            {
+                "model_id": row.id,
+                "korean_name": row.korean_name,
+                "english_name": row.english_name,
+                "manufacturer_korean": row.manufacturer_korean,
+                "count": row.count,
+            }
+            for row in by_model
         ],
     }
 
