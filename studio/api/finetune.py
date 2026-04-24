@@ -100,17 +100,22 @@ async def get_hw_profile():
 
 
 @router.get("/freeze-epochs")
-async def get_freeze_epochs(db: Session = Depends(get_db)):
+async def get_freeze_epochs(
+    db: Session = Depends(get_db),
+    min_per_class: Optional[int] = Query(None, ge=0),
+):
     """현재 DB 클래스 수와 저장된 모델 클래스 수를 비교해 freeze_epochs 권장값 반환"""
-    db_classes = (
-        db.query(TrainingDataset.manufacturer_id, TrainingDataset.model_id)
-        .filter(
+    stmt = (
+        select(TrainingDataset.manufacturer_id, TrainingDataset.model_id)
+        .where(
             TrainingDataset.manufacturer_id.isnot(None),
             TrainingDataset.model_id.isnot(None),
         )
-        .distinct()
-        .count()
+        .group_by(TrainingDataset.manufacturer_id, TrainingDataset.model_id)
     )
+    if min_per_class and min_per_class > 0:
+        stmt = stmt.having(sql_func.count(TrainingDataset.id) >= min_per_class)
+    db_classes = len(db.execute(stmt).all())
 
     model_classes = None
     try:

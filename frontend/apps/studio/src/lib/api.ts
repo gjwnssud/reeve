@@ -307,8 +307,10 @@ export function getHwProfile(): Promise<HwProfile> {
   return apiRequest<HwProfile>('/finetune/hw-profile');
 }
 
-export function getFreezeEpochsInfo(): Promise<FreezeEpochsInfo> {
-  return apiRequest<FreezeEpochsInfo>('/finetune/freeze-epochs');
+export function getFreezeEpochsInfo(minPerClass?: number): Promise<FreezeEpochsInfo> {
+  return apiRequest<FreezeEpochsInfo>('/finetune/freeze-epochs', {
+    query: { min_per_class: minPerClass },
+  });
 }
 
 export interface EfficientNetExportArgs {

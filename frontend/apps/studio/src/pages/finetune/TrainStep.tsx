@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -51,7 +51,6 @@ export function TrainStep({ onBack, onNext }: Props) {
   const [pollingEnabled, setPollingEnabled] = useState(false);
 
   const { data: hw } = useQuery({ queryKey: ["hw-profile"], queryFn: getHwProfile });
-  const { data: freezeInfo } = useQuery({ queryKey: ["freeze-epochs"], queryFn: getFreezeEpochsInfo });
 
   const { data: status } = usePolling({
     queryKey: ["train-status"],
@@ -84,7 +83,7 @@ export function TrainStep({ onBack, onNext }: Props) {
     staleTime: 0,
   });
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors }, reset, control } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       learning_rate: 1e-4,
@@ -99,6 +98,12 @@ export function TrainStep({ onBack, onNext }: Props) {
       num_workers: 2,
       early_stopping_patience: 7,
     },
+  });
+
+  const minPerClass = useWatch({ control, name: "min_per_class" });
+  const { data: freezeInfo } = useQuery({
+    queryKey: ["freeze-epochs", minPerClass],
+    queryFn: () => getFreezeEpochsInfo(minPerClass > 0 ? minPerClass : undefined),
   });
 
   useEffect(() => {
