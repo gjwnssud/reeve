@@ -37,9 +37,12 @@ function saveOffset(path: string, uuid: string, count: number) {
   } catch {}
 }
 
-function clearOffset(path: string, uuid: string) {
+function clearAllOffsets(uuid: string) {
   try {
-    localStorage.removeItem(storageKey(path, uuid));
+    const prefix = `${STORAGE_PREFIX}${uuid}_`;
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(prefix))
+      .forEach((k) => localStorage.removeItem(k));
   } catch {}
 }
 
@@ -276,7 +279,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
               onClick={() => {
                 clearImages("server");
                 resetStats("server");
-                clearOffset(serverPath.trim(), clientUUID);
+                clearAllOffsets(clientUUID);
                 setResumedFrom(0);
               }}
             >
