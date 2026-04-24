@@ -91,6 +91,7 @@ services:
       - ../trainer:/app/trainer
       - ../data/finetune:/app/data/finetune
       - ../data/checkpoints/vlm:/app/output
+      - ../logs:/app/logs
     restart: no
 
   # ── Vite 개발 서버 (선택적, --profile vite 로 활성화) ──────────────────
