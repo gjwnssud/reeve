@@ -121,13 +121,13 @@ async def get_freeze_epochs(db: Session = Depends(get_db)):
 
     if model_classes is None:
         reason = "저장된 모델 없음 — 첫 학습"
-        freeze_epochs = 1
+        freeze_epochs = 3
     elif db_classes != model_classes:
-        reason = f"클래스 수 변경 ({model_classes} → {db_classes})"
-        freeze_epochs = 1
+        reason = f"클래스 수 변경 ({model_classes} → {db_classes}) — head 재초기화"
+        freeze_epochs = 3
     else:
         reason = f"클래스 수 동일 ({db_classes})"
-        freeze_epochs = 0
+        freeze_epochs = 1
 
     return {"freeze_epochs": freeze_epochs, "reason": reason, "db_classes": db_classes, "model_classes": model_classes}
 

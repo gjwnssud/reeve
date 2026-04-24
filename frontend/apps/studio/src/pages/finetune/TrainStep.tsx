@@ -17,17 +17,26 @@ import { LossChart } from "./LossChart";
 
 const schema = z.object({
   learning_rate: z.coerce.number().positive().default(1e-4),
-  num_epochs: z.coerce.number().min(1).max(100).default(10),
+  num_epochs: z.coerce.number().min(1).max(200).default(20),
   batch_size: z.coerce.number().min(1).max(256).default(16),
-  freeze_epochs: z.coerce.number().min(0).max(20).default(1),
-  max_per_class: z.coerce.number().min(0).optional().nullable(),
+  freeze_epochs: z.coerce.number().min(0).max(20).default(3),
   gradient_accumulation: z.coerce.number().min(1).max(32).default(4),
   use_ema: z.boolean().default(false),
   use_mixup: z.boolean().default(false),
   num_workers: z.coerce.number().min(0).max(32).default(2),
-  early_stopping_patience: z.coerce.number().min(0).max(20).default(3),
+  early_stopping_patience: z.coerce.number().min(0).max(30).default(7),
 });
 type FormData = z.infer<typeof schema>;
+
+const FIELDS: { name: keyof FormData; label: string; hint?: string }[] = [
+  { name: "learning_rate",          label: "학습률",              hint: "권장: 1e-4" },
+  { name: "num_epochs",             label: "에폭 수",             hint: "권장: 20" },
+  { name: "batch_size",             label: "배치 크기",           hint: "HW 프리셋 자동 적용" },
+  { name: "freeze_epochs",          label: "Freeze 에폭",         hint: "head 재초기화 시 3 권장" },
+  { name: "gradient_accumulation",  label: "Gradient Accum.",     hint: "HW 프리셋 자동 적용" },
+  { name: "num_workers",            label: "Workers",             hint: "HW 프리셋 자동 적용" },
+  { name: "early_stopping_patience",label: "Early Stop Patience", hint: "권장: 7" },
+];
 
 interface Props {
   onBack: () => void;
@@ -61,7 +70,6 @@ export function TrainStep({ onBack, onNext }: Props) {
 
   const isRunning = status?.status === "running" || status?.status === "stopping";
 
-  // Enable polling when running, also check once on mount
   useQuery({
     queryKey: ["train-status-init"],
     queryFn: async () => {
@@ -76,14 +84,14 @@ export function TrainStep({ onBack, onNext }: Props) {
     resolver: zodResolver(schema),
     defaultValues: {
       learning_rate: 1e-4,
-      num_epochs: 10,
+      num_epochs: 20,
       batch_size: 16,
-      freeze_epochs: 1,
+      freeze_epochs: 3,
       gradient_accumulation: 4,
       use_ema: false,
       use_mixup: false,
       num_workers: 2,
-      early_stopping_patience: 3,
+      early_stopping_patience: 7,
     },
   });
 
@@ -92,12 +100,12 @@ export function TrainStep({ onBack, onNext }: Props) {
     const p = hw?.preset;
     reset((prev) => ({
       ...prev,
-      batch_size: p?.batch_size ?? prev.batch_size,
-      freeze_epochs: freezeInfo?.freeze_epochs ?? prev.freeze_epochs,
-      gradient_accumulation: p?.gradient_accumulation ?? prev.gradient_accumulation,
-      use_ema: p?.use_ema != null ? Boolean(p.use_ema) : prev.use_ema,
-      use_mixup: p?.use_mixup != null ? Boolean(p.use_mixup) : prev.use_mixup,
-      num_workers: p?.num_workers ?? prev.num_workers,
+      batch_size:             p?.batch_size             ?? prev.batch_size,
+      freeze_epochs:          freezeInfo?.freeze_epochs ?? prev.freeze_epochs,
+      gradient_accumulation:  p?.gradient_accumulation  ?? prev.gradient_accumulation,
+      use_ema:                p?.use_ema  != null ? Boolean(p.use_ema)  : prev.use_ema,
+      use_mixup:              p?.use_mixup != null ? Boolean(p.use_mixup) : prev.use_mixup,
+      num_workers:            p?.num_workers            ?? prev.num_workers,
     }));
   }, [hw, freezeInfo, reset]);
 
@@ -112,17 +120,12 @@ export function TrainStep({ onBack, onNext }: Props) {
 
   const { mutateAsync: doStop, isPending: isStopping } = useMutation({
     mutationFn: stopTraining,
-    onSuccess: () => {
-      toast.info("학습 중지 요청이 전송되었습니다");
-    },
+    onSuccess: () => toast.info("학습 중지 요청이 전송되었습니다"),
     onError: (e) => toast.error(extractErrorMessage(e)),
   });
 
   const onSubmit = async (data: FormData) => {
-    const config: EfficientNetTrainConfig = {
-      ...data,
-      max_per_class: data.max_per_class || null,
-    };
+    const config: EfficientNetTrainConfig = { ...data, max_per_class: null };
     await doStart(config);
   };
 
@@ -132,12 +135,12 @@ export function TrainStep({ onBack, onNext }: Props) {
 
   const statusVariant: "default" | "secondary" | "destructive" | "outline" =
     status?.status === "running" ? "default"
-    : status?.status === "done" ? "default"
+    : status?.status === "done"  ? "default"
     : status?.status === "failed" ? "destructive"
     : "secondary";
 
-  const logs = logsData?.logs ?? [];
-  const rawLines = rawLogData?.lines ?? [];
+  const logs      = logsData?.logs     ?? [];
+  const rawLines  = rawLogData?.lines   ?? [];
 
   return (
     <div className="space-y-4">
@@ -146,22 +149,21 @@ export function TrainStep({ onBack, onNext }: Props) {
         <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-3">
           <h2 className="text-base font-semibold">2. 모델 학습</h2>
           <Badge variant={statusVariant} className="ml-auto">
-            {status?.status === "running" ? "학습중"
-              : status?.status === "done" ? "완료"
+            {status?.status === "running"  ? "학습중"
+              : status?.status === "done"  ? "완료"
               : status?.status === "failed" ? "실패"
               : status?.status === "stopping" ? "중지 중"
               : "대기중"}
           </Badge>
         </div>
         <div className="p-4 space-y-3">
-          {/* Progress metrics */}
           {status?.status === "running" && (
             <div className="space-y-2">
               <div className="grid grid-cols-4 gap-2">
                 {[
-                  { label: "Step", value: `${status.current_steps ?? "-"}/${status.total_steps ?? "-"}` },
-                  { label: "Epoch", value: String(status.epoch ?? "-") },
-                  { label: "Loss", value: status.loss != null ? status.loss.toFixed(4) : "-" },
+                  { label: "Step",    value: `${status.current_steps ?? "-"}/${status.total_steps ?? "-"}` },
+                  { label: "Epoch",   value: String(status.epoch ?? "-") },
+                  { label: "Loss",    value: status.loss    != null ? status.loss.toFixed(4)               : "-" },
                   { label: "Val Acc", value: status.val_acc != null ? `${(status.val_acc * 100).toFixed(1)}%` : "-" },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded border p-2 text-center">
@@ -177,14 +179,12 @@ export function TrainStep({ onBack, onNext }: Props) {
             </div>
           )}
 
-          {/* Loss chart */}
           {logs.length > 0 && (
             <div className="rounded-md border p-2">
               <LossChart logs={logs} />
             </div>
           )}
 
-          {/* Raw log */}
           {rawLines.length > 0 && (
             <div className="rounded-md border bg-black/90">
               <div className="border-b px-3 py-1.5 text-xs text-muted-foreground">Raw Log</div>
@@ -208,10 +208,7 @@ export function TrainStep({ onBack, onNext }: Props) {
                     variant="outline"
                     size="sm"
                     disabled={isStopping}
-                    onClick={async () => {
-                      await doStop();
-                      setPollingEnabled(false);
-                    }}
+                    onClick={async () => { await doStop(); setPollingEnabled(false); }}
                   >
                     강제 초기화
                   </Button>
@@ -231,13 +228,13 @@ export function TrainStep({ onBack, onNext }: Props) {
         </div>
       </div>
 
-      {/* Config form — always visible; inputs disabled while running */}
+      {/* Config form */}
       <div className="rounded-lg border">
         <div className="border-b bg-muted/30 px-4 py-3">
           <h3 className="text-sm font-semibold">학습 설정</h3>
           {freezeInfo && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              freeze_epochs 권장: {freezeInfo.freeze_epochs} ({freezeInfo.reason})
+              freeze_epochs 권장: <span className="font-medium">{freezeInfo.freeze_epochs}</span> ({freezeInfo.reason})
             </p>
           )}
           {isRunning && (
@@ -245,38 +242,46 @@ export function TrainStep({ onBack, onNext }: Props) {
           )}
         </div>
         <form className="p-4 space-y-4" onSubmit={handleSubmit(onSubmit)}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[
-              { name: "learning_rate" as const, label: "학습률" },
-              { name: "num_epochs" as const, label: "에폭 수" },
-              { name: "batch_size" as const, label: "배치 크기" },
-              { name: "freeze_epochs" as const, label: "Freeze 에폭" },
-              { name: "gradient_accumulation" as const, label: "Gradient Accum." },
-              { name: "num_workers" as const, label: "Workers" },
-              { name: "max_per_class" as const, label: "클래스당 최대" },
-              { name: "early_stopping_patience" as const, label: "Early Stop" },
-            ].map(({ name, label }) => (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {FIELDS.map(({ name, label, hint }) => (
               <div key={name} className="space-y-1">
-                <Label htmlFor={name} className="text-xs">{label}</Label>
-                <Input id={name} {...register(name)} disabled={isRunning} className="h-8 text-sm" />
-                {errors[name] && <p className="text-xs text-destructive">{errors[name]?.message}</p>}
+                <Label htmlFor={name} className="text-xs font-medium">{label}</Label>
+                <Input
+                  id={name}
+                  {...register(name)}
+                  disabled={isRunning}
+                  className="h-8 text-sm"
+                />
+                {errors[name]
+                  ? <p className="text-xs text-destructive">{errors[name]?.message}</p>
+                  : hint && <p className="text-xs text-muted-foreground">{hint}</p>
+                }
               </div>
             ))}
           </div>
+
           <div className="flex gap-4">
-            {[
-              { name: "use_ema" as const, label: "EMA 사용" },
-              { name: "use_mixup" as const, label: "MixUp 사용" },
-            ].map(({ name, label }) => (
-              <label key={name} className={cn("flex items-center gap-2 text-sm", isRunning ? "cursor-not-allowed opacity-50" : "cursor-pointer")}>
-                <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary" disabled={isRunning} {...register(name)} />
-                {label}
+            {(["use_ema", "use_mixup"] as const).map((name) => (
+              <label
+                key={name}
+                className={cn("flex items-center gap-2 text-sm", isRunning ? "cursor-not-allowed opacity-50" : "cursor-pointer")}
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-input accent-primary"
+                  disabled={isRunning}
+                  {...register(name)}
+                />
+                {name === "use_ema" ? "EMA 사용" : "MixUp 사용"}
               </label>
             ))}
           </div>
+
           {!isRunning && (
             <Button type="submit" disabled={isStarting} className="w-full">
-              {isStarting ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> 시작 중...</> : <><Play className="mr-1 h-4 w-4" /> 학습 시작</>}
+              {isStarting
+                ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> 시작 중...</>
+                : <><Play   className="mr-1 h-4 w-4" /> 학습 시작</>}
             </Button>
           )}
         </form>
