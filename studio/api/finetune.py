@@ -490,10 +490,11 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
         return q
 
     if params.max_per_class and params.max_per_class > 0:
-        # ROW_NUMBER() OVER (PARTITION BY class ORDER BY id) — DB 레벨 클램핑
+        # ROW_NUMBER() OVER (PARTITION BY class ORDER BY RAND()) — 클래스별 랜덤 샘플링
+        # 시간적 편향 제거 및 일반화 성능 향상 목적
         rn = sql_func.row_number().over(
             partition_by=[TrainingDataset.manufacturer_id, TrainingDataset.model_id],
-            order_by=TrainingDataset.id,
+            order_by=sql_func.rand(),
         ).label("rn")
         inner = _apply_common_filters(select(*base_cols, rn))
         subq = inner.subquery()
