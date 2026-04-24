@@ -15,7 +15,7 @@ interface Props {
 
 export function DataStep({ onNext }: Props) {
   const [exportResult, setExportResult] = useState<string | null>(null);
-  const [minPerClass, setMinPerClass] = useState<number>(30);
+  const [minPerClass, setMinPerClass] = useState<number>(20);
   const [maxPerClass, setMaxPerClass] = useState<number>(1000);
 
   const { data: mode } = useQuery({ queryKey: ["finetune-mode"], queryFn: getFinetuneMode });
