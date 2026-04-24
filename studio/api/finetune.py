@@ -7,7 +7,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func as sql_func, select
+from sqlalchemy import func as sql_func, select, tuple_
 from typing import Optional
 from pydantic import BaseModel
 import asyncio
@@ -372,6 +372,7 @@ class EfficientNetExportParams(BaseModel):
     date_to: Optional[str] = None
     split: float = 0.9
     max_per_class: Optional[int] = None  # 클래스당 최대 샘플 수 (None = 제한 없음)
+    min_per_class: Optional[int] = None  # 클래스당 최소 샘플 수 (미만 클래스 제외)
 
 
 def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -> dict:
@@ -381,7 +382,7 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
     if not (0.0 < params.split <= 1.0):
         raise HTTPException(status_code=400, detail="split은 0 초과 1 이하 값이어야 합니다.")
 
-    # ── 1. class mapping: 경량 DISTINCT 쿼리 ──────────────────────────────
+    # ── 1. class mapping: min_per_class 필터 포함 GROUP BY 쿼리 ──────────
     pairs_stmt = (
         select(
             TrainingDataset.manufacturer_id,
@@ -390,6 +391,7 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
             Manufacturer.english_name.label("mfr_english"),
             VehicleModel.korean_name.label("model_korean"),
             VehicleModel.english_name.label("model_english"),
+            sql_func.count(TrainingDataset.id).label("sample_count"),
         )
         .join(Manufacturer, TrainingDataset.manufacturer_id == Manufacturer.id)
         .join(VehicleModel, TrainingDataset.model_id == VehicleModel.id)
@@ -397,7 +399,14 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
             TrainingDataset.manufacturer_id.isnot(None),
             TrainingDataset.model_id.isnot(None),
         )
-        .distinct()
+        .group_by(
+            TrainingDataset.manufacturer_id,
+            TrainingDataset.model_id,
+            Manufacturer.korean_name,
+            Manufacturer.english_name,
+            VehicleModel.korean_name,
+            VehicleModel.english_name,
+        )
     )
     if params.manufacturer_id:
         pairs_stmt = pairs_stmt.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
@@ -414,6 +423,8 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
             pairs_stmt = pairs_stmt.where(TrainingDataset.created_at < dt)
         except ValueError:
             pass
+    if params.min_per_class and params.min_per_class > 0:
+        pairs_stmt = pairs_stmt.having(sql_func.count(TrainingDataset.id) >= params.min_per_class)
 
     pairs_rows = db.execute(pairs_stmt).all()
     if not pairs_rows:
@@ -443,21 +454,24 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
         TrainingDataset.model_id,
     ]
 
-    if params.max_per_class and params.max_per_class > 0:
-        # ROW_NUMBER() OVER (PARTITION BY class ORDER BY id) — DB 레벨 클램핑
-        rn = sql_func.row_number().over(
-            partition_by=[TrainingDataset.manufacturer_id, TrainingDataset.model_id],
-            order_by=TrainingDataset.id,
-        ).label("rn")
-        inner = select(*base_cols, rn).where(
+    # min_per_class 필터로 선택된 유효 클래스 (manufacturer_id, model_id) 목록
+    valid_pairs = pairs  # pairs는 이미 min_per_class HAVING 필터가 적용된 결과
+
+    def _apply_common_filters(q):
+        q = q.where(
             TrainingDataset.manufacturer_id.isnot(None),
             TrainingDataset.model_id.isnot(None),
         )
+        if valid_pairs:
+            # 유효 클래스만 포함: (manufacturer_id, model_id) IN (...)
+            q = q.where(
+                tuple_(TrainingDataset.manufacturer_id, TrainingDataset.model_id).in_(valid_pairs)
+            )
         if params.manufacturer_id:
-            inner = inner.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
+            q = q.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
         if params.date_from:
             try:
-                inner = inner.where(
+                q = q.where(
                     TrainingDataset.created_at >= datetime.strptime(params.date_from, "%Y-%m-%d")
                 )
             except ValueError:
@@ -465,9 +479,18 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
         if params.date_to:
             try:
                 dt = datetime.strptime(params.date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-                inner = inner.where(TrainingDataset.created_at < dt)
+                q = q.where(TrainingDataset.created_at < dt)
             except ValueError:
                 pass
+        return q
+
+    if params.max_per_class and params.max_per_class > 0:
+        # ROW_NUMBER() OVER (PARTITION BY class ORDER BY id) — DB 레벨 클램핑
+        rn = sql_func.row_number().over(
+            partition_by=[TrainingDataset.manufacturer_id, TrainingDataset.model_id],
+            order_by=TrainingDataset.id,
+        ).label("rn")
+        inner = _apply_common_filters(select(*base_cols, rn))
         subq = inner.subquery()
         stmt = select(
             subq.c.image_path,
@@ -475,25 +498,7 @@ def _export_efficientnet_sync(params: "EfficientNetExportParams", db: Session) -
             subq.c.model_id,
         ).where(subq.c.rn <= params.max_per_class)
     else:
-        stmt = select(*base_cols).where(
-            TrainingDataset.manufacturer_id.isnot(None),
-            TrainingDataset.model_id.isnot(None),
-        ).order_by(TrainingDataset.id)
-        if params.manufacturer_id:
-            stmt = stmt.where(TrainingDataset.manufacturer_id == params.manufacturer_id)
-        if params.date_from:
-            try:
-                stmt = stmt.where(
-                    TrainingDataset.created_at >= datetime.strptime(params.date_from, "%Y-%m-%d")
-                )
-            except ValueError:
-                pass
-        if params.date_to:
-            try:
-                dt = datetime.strptime(params.date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-                stmt = stmt.where(TrainingDataset.created_at < dt)
-            except ValueError:
-                pass
+        stmt = _apply_common_filters(select(*base_cols)).order_by(TrainingDataset.id)
 
     # ── 3. 디렉토리 초기화 ────────────────────────────────────────────────
     export_dir = Path("./data/finetune")

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button, Badge, Skeleton } from "@reeve/ui";
-import { Download, AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import { Download, AlertTriangle, ArrowRight, Loader2, Info } from "lucide-react";
 
 import {
   getFinetuneStats, getFinetuneMode, exportEfficientNet,
@@ -15,12 +15,18 @@ interface Props {
 
 export function DataStep({ onNext }: Props) {
   const [exportResult, setExportResult] = useState<string | null>(null);
+  const [minPerClass, setMinPerClass] = useState<number>(30);
+  const [maxPerClass, setMaxPerClass] = useState<number>(1000);
 
   const { data: mode } = useQuery({ queryKey: ["finetune-mode"], queryFn: getFinetuneMode });
   const { data: stats, isLoading } = useQuery({ queryKey: ["finetune-stats"], queryFn: getFinetuneStats });
 
   const { mutateAsync: doExport, isPending: isExporting } = useMutation({
-    mutationFn: () => exportEfficientNet({ split: 0.9 }),
+    mutationFn: () => exportEfficientNet({
+      split: 0.9,
+      min_per_class: minPerClass > 0 ? minPerClass : null,
+      max_per_class: maxPerClass > 0 ? maxPerClass : null,
+    }),
     onSuccess: (res) => {
       setExportResult(`완료: train ${res.counts.train_count}건 / val ${res.counts.val_count}건 / ${res.num_classes}종`);
       toast.success("데이터 내보내기 완료");
@@ -33,6 +39,14 @@ export function DataStep({ onNext }: Props) {
   const numClasses = stats?.num_classes ?? 0;
   const maxMfCount = Math.max(...(stats?.by_manufacturer.map((m) => m.count) ?? [1]));
   const maxModelCount = Math.max(...(stats?.by_model.map((m) => m.count) ?? [1]));
+
+  // min_per_class 적용 시 예상 클래스 수 미리보기
+  const previewClasses = useMemo(() => {
+    if (!stats?.by_model) return null;
+    const filtered = stats.by_model.filter((m) => m.count >= minPerClass);
+    const capped = filtered.reduce((sum, m) => sum + Math.min(m.count, maxPerClass), 0);
+    return { classes: filtered.length, images: capped };
+  }, [stats?.by_model, minPerClass, maxPerClass]);
 
   return (
     <div className="space-y-4">
@@ -130,7 +144,10 @@ export function DataStep({ onNext }: Props) {
                       </thead>
                       <tbody>
                         {stats.by_model.map((m: FinetuneModelStatsEntry) => (
-                          <tr key={m.model_id} className="border-b last:border-0">
+                          <tr
+                            key={m.model_id}
+                            className={`border-b last:border-0 ${m.count < minPerClass ? "opacity-35" : ""}`}
+                          >
                             <td className="px-3 py-2">
                               <div className="font-medium leading-tight">{m.korean_name}</div>
                               <div className="text-xs text-muted-foreground">{m.manufacturer_korean}</div>
@@ -160,10 +177,59 @@ export function DataStep({ onNext }: Props) {
           )}
 
           {isEfficientNet && (
-            <div className="space-y-2">
+            <div className="space-y-3 rounded-md border p-4">
+              <div className="text-xs font-medium text-muted-foreground">내보내기 옵션</div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">
+                    최소 샘플 수 (min_per_class)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                    value={minPerClass}
+                    onChange={(e) => setMinPerClass(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">이 값 미만인 클래스는 학습에서 제외</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">
+                    최대 샘플 수 (max_per_class)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                    value={maxPerClass}
+                    onChange={(e) => setMaxPerClass(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">0 = 제한 없음</p>
+                </div>
+              </div>
+
+              {previewClasses && (
+                <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs">
+                  <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span>
+                    현재 설정으로 내보내면{" "}
+                    <span className="font-semibold text-foreground">{previewClasses.classes}종</span> /{" "}
+                    약 <span className="font-semibold text-foreground">{previewClasses.images.toLocaleString()}장</span> 학습
+                    {stats && (
+                      <span className="text-muted-foreground">
+                        {" "}(전체 {stats.by_model.length}종 중{" "}
+                        {stats.by_model.length - previewClasses.classes}종 제외)
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+
               {exportResult && (
                 <p className="text-xs text-green-600 dark:text-green-400">{exportResult}</p>
               )}
+
               <Button
                 variant="outline"
                 size="sm"

@@ -316,6 +316,7 @@ export interface EfficientNetExportArgs {
   date_to?: string;
   split?: number;
   max_per_class?: number | null;
+  min_per_class?: number | null;
 }
 
 export function exportEfficientNet(args: EfficientNetExportArgs = {}): Promise<EfficientNetExportResult> {
