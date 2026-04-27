@@ -184,6 +184,122 @@ export interface EvaluateResult {
   incorrect_samples: unknown[];
 }
 
+// ─── Train Runs (대시보드) ───────────────────────────────────────────────
+
+export interface TrainRunParams {
+  learning_rate?: number;
+  num_epochs?: number;
+  batch_size?: number;
+  freeze_epochs?: number;
+  max_per_class?: number | null;
+  min_per_class?: number | null;
+  gradient_accumulation?: number;
+  use_ema?: boolean;
+  use_mixup?: boolean;
+  num_workers?: number | null;
+  early_stopping_patience?: number;
+}
+
+export interface TrainRunEnv {
+  device?: string;
+  device_name?: string | null;
+  vram_gb?: number | null;
+  sm?: string | null;
+  precision?: string;
+  torch_version?: string;
+}
+
+export interface TrainRunData {
+  num_classes?: number;
+  train_count?: number;
+  val_count?: number;
+  total_records?: number;
+  train_chunks?: number;
+  val_chunks?: number;
+  split_ratio?: number;
+}
+
+export interface TrainRunResult {
+  best_val_acc?: number;
+  best_epoch?: number;
+  last_epoch?: number;
+  total_epochs?: number;
+  early_stopped?: boolean;
+  elapsed_sec?: number;
+}
+
+export type TrainRunStatus =
+  | "starting"
+  | "running"
+  | "completed"
+  | "early_stopped"
+  | "stopped"
+  | "failed"
+  | string;
+
+export interface TrainRunSummary {
+  run_id: string;
+  started_at?: string;
+  ended_at?: string | null;
+  status?: TrainRunStatus;
+  params?: TrainRunParams;
+  env?: TrainRunEnv | null;
+  data?: TrainRunData | null;
+  result?: TrainRunResult | null;
+}
+
+export interface TrainRunsList {
+  runs: TrainRunSummary[];
+  count: number;
+}
+
+export interface TrainRunDetail {
+  run_id: string;
+  meta: TrainRunSummary;
+  logs: LogEntry[];
+  class_mapping: {
+    num_classes: number;
+    classes: Record<string, {
+      manufacturer_id?: number;
+      model_id?: number;
+      manufacturer_korean?: string;
+      manufacturer_english?: string;
+      model_korean?: string;
+      model_english?: string;
+    }>;
+  } | null;
+}
+
+export interface TrainRunClassHistory {
+  run_id: string;
+  num_classes: number | null;
+  epochs: number[];
+  class_acc: Record<string, (number | null)[]>;
+  class_meta: Record<string, {
+    manufacturer_korean?: string;
+    model_korean?: string;
+  } | null>;
+}
+
+export function listTrainRuns(): Promise<TrainRunsList> {
+  return apiRequest<TrainRunsList>("/finetune/train/runs");
+}
+
+export function getTrainRun(runId: string): Promise<TrainRunDetail> {
+  return apiRequest<TrainRunDetail>(`/finetune/train/runs/${encodeURIComponent(runId)}`);
+}
+
+export function getTrainRunClassHistory(runId: string): Promise<TrainRunClassHistory> {
+  return apiRequest<TrainRunClassHistory>(`/finetune/train/runs/${encodeURIComponent(runId)}/class-history`);
+}
+
+export function deleteTrainRun(runId: string): Promise<{ status: string; run_id: string }> {
+  return apiRequest<{ status: string; run_id: string }>(
+    `/finetune/train/runs/${encodeURIComponent(runId)}`,
+    { method: "DELETE" },
+  );
+}
+
 // ─── Manufacturers ─────────────────────────────────────────────────────────
 
 export function getManufacturers(isDomestic?: boolean): Promise<Manufacturer[]> {

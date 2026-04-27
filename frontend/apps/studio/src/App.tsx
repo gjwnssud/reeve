@@ -4,6 +4,7 @@ import { BasicDataPage } from "./pages/basic-data/BasicDataPage";
 import { AdminPage } from "./pages/admin/AdminPage";
 import { FinetunePage } from "./pages/finetune/FinetunePage";
 import { AnalyzePage } from "./pages/analyze/AnalyzePage";
+import { RunsPage } from "./pages/runs/RunsPage";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/basic-data" element={<BasicDataPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/finetune" element={<FinetunePage />} />
+        <Route path="/runs" element={<RunsPage />} />
         <Route path="/analyze" element={<AnalyzePage />} />
         <Route path="*" element={<Navigate to="/basic-data" replace />} />
       </Route>

@@ -357,6 +357,62 @@ async def get_deploy_config():
     }
 
 
+# =============================================================================
+# Run 이력 (대시보드)
+# =============================================================================
+
+def _require_efficientnet():
+    """run 이력 API는 efficientnet 백엔드 전용."""
+    from trainer.config import settings
+    if settings.trainer_backend != "efficientnet":
+        raise HTTPException(
+            status_code=400,
+            detail=f"run 이력 API는 efficientnet 백엔드 전용입니다 (current: {settings.trainer_backend})",
+        )
+    from trainer.services.efficientnet_trainer import EfficientNetTrainer
+    return EfficientNetTrainer()
+
+
+@router.get("/train/runs")
+async def list_train_runs():
+    """모든 학습 run 메타 요약 목록 (최신순)"""
+    trainer = _require_efficientnet()
+    runs = await trainer.list_runs()
+    return {"runs": runs, "count": len(runs)}
+
+
+@router.get("/train/runs/{run_id}")
+async def get_train_run(run_id: str):
+    """특정 run의 상세 (meta + 전체 jsonl 로그 + class_mapping)"""
+    trainer = _require_efficientnet()
+    detail = await trainer.get_run_detail(run_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"run을 찾을 수 없습니다: {run_id}")
+    return detail
+
+
+@router.get("/train/runs/{run_id}/class-history")
+async def get_train_run_class_history(run_id: str):
+    """특정 run의 클래스별 epoch별 정확도 추이"""
+    trainer = _require_efficientnet()
+    history = await trainer.get_run_class_history(run_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail=f"run을 찾을 수 없습니다: {run_id}")
+    return history
+
+
+@router.delete("/train/runs/{run_id}")
+async def delete_train_run(run_id: str):
+    """특정 run 디렉토리 삭제 (실행 중인 run은 삭제 불가)"""
+    trainer = _require_efficientnet()
+    result = await trainer.delete_run(run_id)
+    if result.get("status") == "error":
+        msg = result.get("message", "삭제 실패")
+        code = 409 if "실행 중" in msg else 404
+        raise HTTPException(status_code=code, detail=msg)
+    return result
+
+
 @router.post("/train/export")
 async def export_model(req: ExportModelRequest):
     """LoRA 어댑터 병합 (Export)"""

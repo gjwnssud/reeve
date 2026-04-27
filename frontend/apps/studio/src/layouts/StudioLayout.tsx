@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Camera, Database, ListChecks, Settings2, Car, Moon, Sun } from "lucide-react";
+import { Camera, Database, ListChecks, Settings2, History, Car, Moon, Sun } from "lucide-react";
 import { useThemeContext } from "@reeve/shared";
 import { Button, cn } from "@reeve/ui";
 import { useAnalyzeStore } from "../stores/analyze-store";
@@ -11,6 +11,7 @@ const navItems = [
   { to: "/admin", icon: Database, label: "차량데이터 관리" },
   { to: "/basic-data", icon: ListChecks, label: "기초데이터 관리" },
   { to: "/finetune", icon: Settings2, label: "파인튜닝" },
+  { to: "/runs", icon: History, label: "학습 이력" },
 ];
 
 function SidebarContent() {

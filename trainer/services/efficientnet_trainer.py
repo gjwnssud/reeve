@@ -8,13 +8,26 @@ PyTorch 표준 학습 루프 — 디바이스 자동 감지:
 
 학습 데이터는 Studio의 /finetune/export-efficientnet API로 내보낸 CSV를 사용.
 학습 완료 시 Identifier 서비스에 /admin/reload-efficientnet으로 핫리로드 알림.
+
+Run 단위 로그 보존 구조 (대시보드용):
+  logs/trainer/{output_dir}/
+    current.txt                         현재 active run_id
+    runs/
+      {YYYYMMDD_HHMMSS}/                run_id (학습 시작 시각)
+        run_meta.json                   파라미터 + 환경 + 데이터 + 결과 메타
+        trainer_log.jsonl               step/epoch 단위 학습 로그
+        train.log                       원시 stdout/stderr
+        class_mapping.json              학습 시점 클래스 매핑 스냅샷
+        efficientnet_train.py           생성된 학습 스크립트
 """
 import asyncio
 import json
 import logging
+import shutil
 import subprocess
 import sys
 import textwrap
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +40,8 @@ _RAW_LOG_FILENAME = "train.log"
 _SCRIPT_FILENAME = "efficientnet_train.py"
 _MODEL_FILENAME = "efficientnetv2_m_finetuned.pth"
 _CLASS_MAP_FILENAME = "class_mapping.json"
+_RUN_META_FILENAME = "run_meta.json"
+_DEFAULT_OUTPUT_DIR = "efficientnet"
 
 
 class EfficientNetTrainer:
@@ -38,21 +53,53 @@ class EfficientNetTrainer:
         self.efficientnet_model_dir = Path(settings.efficientnet_model_dir)
         logger.info(f"EfficientNetTrainer init: data={self.data_dir}, output={self.output_base}")
 
-    def _log_dir(self, output_dir: str) -> Path:
+    # ── 디렉토리/run id 헬퍼 ────────────────────────────────────────────
+    def _output_root(self, output_dir: str) -> Path:
         return Path(settings.trainer_log_dir) / output_dir
 
-    def _save_current_output_dir(self, output_dir: str) -> None:
+    def _runs_dir(self, output_dir: str) -> Path:
+        return self._output_root(output_dir) / "runs"
+
+    def _run_dir(self, output_dir: str, run_id: str) -> Path:
+        return self._runs_dir(output_dir) / run_id
+
+    def _save_current_run(self, output_dir: str, run_id: str) -> None:
         try:
-            (Path(settings.trainer_log_dir) / "current.txt").write_text(output_dir, encoding="utf-8")
+            marker = self._output_root(output_dir) / "current.txt"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(run_id, encoding="utf-8")
         except Exception:
             pass
 
-    def _load_current_output_dir(self) -> str:
+    def _load_current_run(self, output_dir: str = _DEFAULT_OUTPUT_DIR) -> Optional[str]:
         try:
-            p = Path(settings.trainer_log_dir) / "current.txt"
-            return p.read_text(encoding="utf-8").strip() if p.exists() else "efficientnet"
+            p = self._output_root(output_dir) / "current.txt"
+            if not p.exists():
+                return None
+            run_id = p.read_text(encoding="utf-8").strip()
+            return run_id or None
         except Exception:
-            return "efficientnet"
+            return None
+
+    def _resolve_active_run_dir(self, output_dir: str = _DEFAULT_OUTPUT_DIR) -> Optional[Path]:
+        """current.txt → run_dir, 없으면 가장 최근 run_dir 반환."""
+        run_id = self._load_current_run(output_dir)
+        if run_id:
+            cand = self._run_dir(output_dir, run_id)
+            if cand.exists():
+                return cand
+        runs = self._list_runs(output_dir)
+        return runs[0] if runs else None
+
+    def _list_runs(self, output_dir: str = _DEFAULT_OUTPUT_DIR) -> list[Path]:
+        runs_dir = self._runs_dir(output_dir)
+        if not runs_dir.exists():
+            return []
+        return sorted(
+            (p for p in runs_dir.iterdir() if p.is_dir()),
+            key=lambda p: p.name,
+            reverse=True,
+        )
 
     async def start_training(
         self,
@@ -60,7 +107,7 @@ class EfficientNetTrainer:
         num_epochs: int = 20,
         batch_size: int = 16,
         freeze_epochs: int = 3,
-        output_dir: str = "efficientnet",
+        output_dir: str = _DEFAULT_OUTPUT_DIR,
         studio_url: Optional[str] = None,
         max_per_class: Optional[int] = None,
         min_per_class: Optional[int] = None,
@@ -70,24 +117,56 @@ class EfficientNetTrainer:
         num_workers: Optional[int] = None,
         early_stopping_patience: int = 7,
     ) -> dict:
-        """EfficientNetV2-M 파인튜닝 시작 (백그라운드 프로세스)"""
-        log_dir = self._log_dir(output_dir)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        self._save_current_output_dir(output_dir)
+        """EfficientNetV2-M 파인튜닝 시작 (백그라운드 프로세스)
 
-        # 이미 실행 중 확인
+        run_id = 학습 시작 timestamp. run_dir 디렉토리에 스크립트/로그/메타가 모두 저장됨.
+        """
+        # 이미 실행 중 확인 (현재 active run 기준)
         status = await self.get_status()
         if status.get("is_running"):
             return {"error": "학습이 이미 실행 중입니다."}
 
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = self._run_dir(output_dir, run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        self._save_current_run(output_dir, run_id)
+
         _studio_url = studio_url or settings.studio_url
 
-        # 학습 파라미터를 스크립트에 주입
-        script_path = log_dir / _SCRIPT_FILENAME
+        script_path = run_dir / _SCRIPT_FILENAME
         model_out = str(self.efficientnet_model_dir / _MODEL_FILENAME)
         class_map_out = str(self.efficientnet_model_dir / _CLASS_MAP_FILENAME)
-        jsonl_log = str(log_dir / _JSONL_LOG_FILENAME)
-        raw_log = str(log_dir / _RAW_LOG_FILENAME)
+        jsonl_log = str(run_dir / _JSONL_LOG_FILENAME)
+        raw_log = str(run_dir / _RAW_LOG_FILENAME)
+        meta_path = run_dir / _RUN_META_FILENAME
+        run_class_map = str(run_dir / _CLASS_MAP_FILENAME)
+
+        # ── run_meta.json 초기 작성 (파라미터만 기록, env/data/result는 스크립트가 채움) ──
+        params = {
+            "learning_rate": learning_rate,
+            "num_epochs": num_epochs,
+            "batch_size": batch_size,
+            "freeze_epochs": freeze_epochs,
+            "max_per_class": max_per_class,
+            "min_per_class": min_per_class,
+            "gradient_accumulation": gradient_accumulation,
+            "use_ema": use_ema,
+            "use_mixup": use_mixup,
+            "num_workers": num_workers,
+            "early_stopping_patience": early_stopping_patience,
+        }
+        meta_initial = {
+            "run_id": run_id,
+            "output_dir": output_dir,
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "ended_at": None,
+            "status": "starting",
+            "params": params,
+            "env": None,
+            "data": None,
+            "result": None,
+        }
+        meta_path.write_text(json.dumps(meta_initial, ensure_ascii=False, indent=2), encoding="utf-8")
 
         script_content = self._build_script(
             studio_url=_studio_url,
@@ -99,6 +178,8 @@ class EfficientNetTrainer:
             class_map_out=class_map_out,
             jsonl_log=jsonl_log,
             raw_log=raw_log,
+            meta_path=str(meta_path),
+            run_class_map=run_class_map,
             max_per_class=max_per_class,
             min_per_class=min_per_class,
             gradient_accumulation=gradient_accumulation,
@@ -109,20 +190,16 @@ class EfficientNetTrainer:
         )
         script_path.write_text(script_content, encoding="utf-8")
 
-        # 기존 로그 초기화
-        (log_dir / _JSONL_LOG_FILENAME).unlink(missing_ok=True)
-        (log_dir / _RAW_LOG_FILENAME).unlink(missing_ok=True)
-
         cmd = f"nohup {sys.executable} {script_path} >> {raw_log} 2>&1 &"
         subprocess.Popen(cmd, shell=True)
         await asyncio.sleep(1)
 
-        from datetime import datetime
-        job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        logger.info(f"EfficientNet 학습 시작: {script_path}")
+        logger.info(f"EfficientNet 학습 시작: run_id={run_id}, script={script_path}")
         return {
             "status": "started",
-            "job_id": job_id,
+            "job_id": run_id,
+            "run_id": run_id,
+            "run_dir": str(run_dir),
             "script": str(script_path),
             "log": raw_log,
             "jsonl_log": jsonl_log,
@@ -139,6 +216,8 @@ class EfficientNetTrainer:
         class_map_out: str,
         jsonl_log: str,
         raw_log: str,
+        meta_path: str,
+        run_class_map: str,
         max_per_class: Optional[int] = None,
         min_per_class: Optional[int] = None,
         gradient_accumulation: int = 1,
@@ -152,7 +231,8 @@ class EfficientNetTrainer:
         min_per_class_val = min_per_class if min_per_class else "None"
         num_workers_val = num_workers if num_workers is not None else "None"
         return textwrap.dedent(f"""\
-            import json, csv, sys, os, time, math, random, shutil, copy, contextlib
+            import json, csv, sys, os, time, math, random, shutil, copy, contextlib, traceback
+            from datetime import datetime
             from pathlib import Path
             from collections import Counter, defaultdict
 
@@ -185,6 +265,8 @@ class EfficientNetTrainer:
             CLASS_MAP_OUT = "{class_map_out}"
             JSONL_LOG = "{jsonl_log}"
             RAW_LOG = "{raw_log}"
+            META_PATH = "{meta_path}"
+            RUN_CLASS_MAP = "{run_class_map}"
             IDENTIFIER_MODEL_PATH = "{settings.identifier_efficientnet_model_path}"
             IDENTIFIER_CLASS_MAP_PATH = "{settings.identifier_class_mapping_path}"
 
@@ -193,6 +275,21 @@ class EfficientNetTrainer:
                 Path(RAW_LOG).parent.mkdir(parents=True, exist_ok=True)
                 with open(RAW_LOG, "a", encoding="utf-8") as f:
                     f.write(msg + "\\n")
+
+            # ── run_meta.json 업데이트 헬퍼 ─────────────────────────
+            def update_meta(updates):
+                try:
+                    with open(META_PATH, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    for k, v in updates.items():
+                        meta[k] = v
+                    with open(META_PATH, "w", encoding="utf-8") as f:
+                        json.dump(meta, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    log_raw(f"meta update 실패: {{e}}")
+
+            START_TIME = time.time()
+            update_meta({{"status": "running"}})
 
             def log_jsonl(step, total_steps, epoch, loss, val_acc=None, worst_classes=None):
                 entry = {{
@@ -227,43 +324,63 @@ class EfficientNetTrainer:
 
             # ── 디바이스 감지 ────────────────────────────────────────
             cc_major = 0
+            cc_minor = 0
             vram_gb = 0
+            device_name = None
             if torch.backends.mps.is_available():
                 device = torch.device("mps")
+                device_name = "Apple Silicon MPS"
                 log_raw("디바이스: MPS (Apple Silicon)")
             elif torch.cuda.is_available():
                 device = torch.device("cuda")
-                cc_major, _ = torch.cuda.get_device_capability(0)
+                cc_major, cc_minor = torch.cuda.get_device_capability(0)
                 vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
-                log_raw(f"디바이스: CUDA {{torch.cuda.get_device_name(0)}} ({{vram_gb:.0f}} GB, sm_{{cc_major}})")
+                device_name = torch.cuda.get_device_name(0)
+                log_raw(f"디바이스: CUDA {{device_name}} ({{vram_gb:.0f}} GB, sm_{{cc_major}})")
             else:
                 device = torch.device("cpu")
+                device_name = "CPU"
                 log_raw("디바이스: CPU")
 
             # ── Mixed Precision 설정 ────────────────────────────────
+            precision = "fp32"
             if device.type == "cuda":
                 if cc_major >= 8 and torch.cuda.is_bf16_supported():
                     autocast_ctx = lambda: torch.autocast("cuda", dtype=torch.bfloat16)
                     scaler = None
+                    precision = "bf16"
                     log_raw("Mixed Precision: bf16 (GradScaler 불필요)")
                 else:
                     autocast_ctx = lambda: torch.autocast("cuda", dtype=torch.float16)
                     scaler = torch.amp.GradScaler()
+                    precision = "fp16"
                     log_raw("Mixed Precision: fp16 + GradScaler")
             elif device.type == "mps":
                 try:
                     _test_ctx = torch.autocast("mps", dtype=torch.float16)
                     autocast_ctx = lambda: torch.autocast("mps", dtype=torch.float16)
                     scaler = None
+                    precision = "mps_fp16"
                     log_raw("Mixed Precision: MPS fp16 autocast")
                 except Exception:
                     autocast_ctx = lambda: contextlib.nullcontext()
                     scaler = None
+                    precision = "fp32"
                     log_raw("Mixed Precision: 미지원, fp32 폴백")
             else:
                 autocast_ctx = lambda: contextlib.nullcontext()
                 scaler = None
+                precision = "fp32"
                 log_raw("Mixed Precision: 없음 (CPU fp32)")
+
+            update_meta({{"env": {{
+                "device": device.type,
+                "device_name": device_name,
+                "vram_gb": round(vram_gb, 1) if vram_gb else None,
+                "sm": f"{{cc_major}}_{{cc_minor}}" if cc_major else None,
+                "precision": precision,
+                "torch_version": torch.__version__,
+            }}}})
 
             # ── Studio에서 학습 데이터 내보내기 ─────────────────────
             log_raw("Studio에서 학습 데이터 내보내기 요청...")
@@ -297,7 +414,24 @@ class EfficientNetTrainer:
 
             if num_classes < 2:
                 log_raw("오류: 클래스가 2개 미만입니다.")
+                update_meta({{"status": "failed", "ended_at": datetime.now().isoformat(timespec="seconds")}})
                 sys.exit(1)
+
+            # ── class_mapping을 run_dir로 스냅샷 복사 (대시보드의 클래스 추적 뷰용) ──
+            try:
+                shutil.copy(class_mapping_path, RUN_CLASS_MAP)
+            except Exception as e:
+                log_raw(f"class_mapping 스냅샷 복사 실패 (무시): {{e}}")
+
+            update_meta({{"data": {{
+                "num_classes": num_classes,
+                "train_count": int(export_info["counts"].get("train_count", 0)),
+                "val_count": int(export_info["counts"].get("val_count", 0)),
+                "total_records": int(export_info["counts"].get("total_records", 0)),
+                "train_chunks": int(export_info["counts"].get("train_chunks", 0)),
+                "val_chunks": int(export_info["counts"].get("val_chunks", 0)),
+                "split_ratio": export_info["counts"].get("split_ratio"),
+            }}}})
 
             # ── Dataset ──────────────────────────────────────────────
             class VehicleDataset(Dataset):
@@ -489,9 +623,12 @@ class EfficientNetTrainer:
             global_step = 0
             optim_step = 0
             best_val_acc = 0.0
+            best_epoch = 0
             no_improve = 0
             opt = None
             scheduler = None
+            early_stopped = False
+            last_epoch_done = 0
 
             log_raw(f"Gradient Accumulation: {{GRAD_ACCUM}} (effective batch={{BATCH_SIZE * GRAD_ACCUM}})")
             log_raw(f"총 optim steps: {{total_optim_steps}} (steps/epoch={{steps_per_epoch}}, optim_steps/epoch={{optim_steps_per_epoch}})")
@@ -627,6 +764,7 @@ class EfficientNetTrainer:
                     # Best model 저장
                     if val_acc > best_val_acc:
                         best_val_acc = val_acc
+                        best_epoch = epoch + 1
                         no_improve = 0
                         Path(MODEL_BEST).parent.mkdir(parents=True, exist_ok=True)
                         save_state = ema.state_dict() if ema else model.state_dict()
@@ -637,7 +775,20 @@ class EfficientNetTrainer:
                         log_raw(f"개선 없음 ({{no_improve}}/{{PATIENCE}})")
                         if PATIENCE > 0 and no_improve >= PATIENCE:
                             log_raw(f"Early stopping: {{PATIENCE}} epoch 동안 개선 없음")
+                            early_stopped = True
+                            last_epoch_done = epoch + 1
                             break
+
+                last_epoch_done = epoch + 1
+                # 매 epoch 종료 시 부분 결과를 meta에 기록 (학습 중 대시보드 표시용)
+                update_meta({{"result": {{
+                    "best_val_acc": round(best_val_acc, 2),
+                    "best_epoch": best_epoch,
+                    "last_epoch": last_epoch_done,
+                    "total_epochs": NUM_EPOCHS,
+                    "early_stopped": early_stopped,
+                    "elapsed_sec": int(time.time() - START_TIME),
+                }}}})
 
             # ── 최종 모델 저장 ────────────────────────────────────────
             Path(MODEL_OUT).parent.mkdir(parents=True, exist_ok=True)
@@ -664,11 +815,26 @@ class EfficientNetTrainer:
             except Exception as e:
                 log_raw(f"Identifier 핫리로드 실패 (무시): {{e}}")
 
+            # ── 최종 메타 기록 ────────────────────────────────────────
+            final_status = "early_stopped" if early_stopped else "completed"
+            update_meta({{
+                "status": final_status,
+                "ended_at": datetime.now().isoformat(timespec="seconds"),
+                "result": {{
+                    "best_val_acc": round(best_val_acc, 2),
+                    "best_epoch": best_epoch,
+                    "last_epoch": last_epoch_done,
+                    "total_epochs": NUM_EPOCHS,
+                    "early_stopped": early_stopped,
+                    "elapsed_sec": int(time.time() - START_TIME),
+                }},
+            }})
+
             log_raw("EfficientNetV2-M 파인튜닝 완료!")
         """)
 
     async def get_status(self) -> dict:
-        """학습 진행 상태 조회"""
+        """현재 active run의 학습 진행 상태 조회"""
         import time
         pid = None
         is_running = False
@@ -681,7 +847,6 @@ class EfficientNetTrainer:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
             pid = stdout.decode().strip()
             if pid:
-                # 좀비 프로세스 제외 (ps stat 확인)
                 ps_proc = await asyncio.create_subprocess_shell(
                     f"ps -p {pid} -o stat= 2>/dev/null",
                     stdout=asyncio.subprocess.PIPE,
@@ -694,42 +859,57 @@ class EfficientNetTrainer:
             is_running = False
             pid = None
 
-        # 로그 파싱
-        log_dir = self._log_dir(self._load_current_output_dir())
-        jsonl_path = log_dir / _JSONL_LOG_FILENAME
-        raw_log_path = log_dir / _RAW_LOG_FILENAME
-        last_entry = {}
+        run_dir = self._resolve_active_run_dir()
+        run_id = run_dir.name if run_dir else None
+
+        last_entry: dict = {}
         last_val_acc = None
+        meta: dict = {}
 
-        if jsonl_path.exists():
-            try:
-                lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
-                if lines:
-                    last_entry = json.loads(lines[-1])
-                    for line in reversed(lines):
-                        try:
-                            entry = json.loads(line)
-                            if "val_acc" in entry:
-                                last_val_acc = entry["val_acc"]
-                                break
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+        if run_dir and run_dir.exists():
+            jsonl_path = run_dir / _JSONL_LOG_FILENAME
+            raw_log_path = run_dir / _RAW_LOG_FILENAME
+            meta_path = run_dir / _RUN_META_FILENAME
 
-        # 프로세스가 살아있지만 120초 이상 JSONL 로그가 없으면 → failed
-        if is_running and not last_entry and raw_log_path.exists():
-            try:
-                age = time.time() - raw_log_path.stat().st_mtime
-                if age > 120:
-                    is_running = False
-            except Exception:
-                pass
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    meta = {}
 
+            if jsonl_path.exists():
+                try:
+                    lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
+                    if lines:
+                        last_entry = json.loads(lines[-1])
+                        for line in reversed(lines):
+                            try:
+                                entry = json.loads(line)
+                                if "val_acc" in entry:
+                                    last_val_acc = entry["val_acc"]
+                                    break
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+            # 프로세스가 살아있지만 120초 이상 raw log mtime이 멈춰있으면 → failed로 간주
+            if is_running and not last_entry and raw_log_path.exists():
+                try:
+                    age = time.time() - raw_log_path.stat().st_mtime
+                    if age > 120:
+                        is_running = False
+                except Exception:
+                    pass
+
+        # 상태 판정: 프로세스 살아있으면 running. 죽었으면 meta.status로 판단.
         if is_running:
             status = "running"
+        elif meta.get("status") in ("completed", "early_stopped", "stopped", "failed"):
+            status = "done" if meta["status"] == "completed" else meta["status"]
         elif last_entry:
-            status = "done"
+            # 메타가 없거나 starting인 채로 프로세스가 죽음 → failed
+            status = "failed"
         else:
             status = "idle"
 
@@ -737,16 +917,18 @@ class EfficientNetTrainer:
             "is_running": is_running,
             "status": status,
             "pid": pid,
+            "run_id": run_id,
             "current_steps": last_entry.get("current_steps", 0),
             "total_steps": last_entry.get("total_steps", 0),
             "epoch": last_entry.get("epoch", 0),
             "loss": last_entry.get("loss"),
             "percentage": last_entry.get("percentage", 0),
             "val_acc": last_val_acc,
+            "meta_status": meta.get("status"),
         }
 
     async def stop_training(self) -> dict:
-        """학습 중지 (SIGTERM 후 SIGKILL)"""
+        """학습 중지 (SIGTERM 후 SIGKILL) + meta status="stopped" 기록"""
         try:
             proc = await asyncio.create_subprocess_shell(
                 f"pkill -f '{_SCRIPT_FILENAME}' ; sleep 2 ; pkill -9 -f '{_SCRIPT_FILENAME}' ; true",
@@ -754,18 +936,32 @@ class EfficientNetTrainer:
                 stderr=asyncio.subprocess.PIPE,
             )
             await asyncio.wait_for(proc.communicate(), timeout=15)
-            return {"status": "stopped"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    async def get_logs(self, tail: int = 50) -> list:
-        """trainer_log.jsonl 파싱 로그 반환"""
-        log_dir = self._log_dir(self._load_current_output_dir())
-        jsonl_path = log_dir / _JSONL_LOG_FILENAME
+        # active run의 meta를 stopped로 마킹
+        run_dir = self._resolve_active_run_dir()
+        if run_dir and run_dir.exists():
+            meta_path = run_dir / _RUN_META_FILENAME
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    if meta.get("status") not in ("completed", "early_stopped", "failed"):
+                        meta["status"] = "stopped"
+                        meta["ended_at"] = datetime.now().isoformat(timespec="seconds")
+                        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
+        return {"status": "stopped"}
 
+    async def get_logs(self, tail: int = 50) -> list:
+        """현재 active run의 trainer_log.jsonl 파싱 로그 반환"""
+        run_dir = self._resolve_active_run_dir()
+        if not run_dir:
+            return []
+        jsonl_path = run_dir / _JSONL_LOG_FILENAME
         if not jsonl_path.exists():
             return []
-
         try:
             lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
             entries = []
@@ -779,18 +975,173 @@ class EfficientNetTrainer:
             return []
 
     async def get_raw_log(self, tail: int = 100) -> str:
-        """원시 학습 로그 반환"""
-        log_dir = self._log_dir(self._load_current_output_dir())
-        raw_log_path = log_dir / _RAW_LOG_FILENAME
-
+        """현재 active run의 원시 학습 로그 반환"""
+        run_dir = self._resolve_active_run_dir()
+        if not run_dir:
+            return ""
+        raw_log_path = run_dir / _RAW_LOG_FILENAME
         if not raw_log_path.exists():
             return ""
-
         try:
             lines = raw_log_path.read_text(encoding="utf-8").splitlines()
             return "\n".join(lines[-tail:])
         except Exception:
             return ""
+
+    # ──────────────────────────────────────────────────────────────────
+    # Run 이력 조회 (대시보드용)
+    # ──────────────────────────────────────────────────────────────────
+
+    async def list_runs(self, output_dir: str = _DEFAULT_OUTPUT_DIR) -> list[dict]:
+        """모든 run 메타 요약 목록 반환 (최신순)"""
+        runs = []
+        for run_path in self._list_runs(output_dir):
+            meta_path = run_path / _RUN_META_FILENAME
+            if not meta_path.exists():
+                continue
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            runs.append({
+                "run_id": meta.get("run_id", run_path.name),
+                "started_at": meta.get("started_at"),
+                "ended_at": meta.get("ended_at"),
+                "status": meta.get("status"),
+                "params": meta.get("params"),
+                "env": meta.get("env"),
+                "data": meta.get("data"),
+                "result": meta.get("result"),
+            })
+        return runs
+
+    async def get_run_detail(self, run_id: str, output_dir: str = _DEFAULT_OUTPUT_DIR) -> Optional[dict]:
+        """특정 run의 메타 + jsonl 로그 + raw 로그 + class_mapping 반환"""
+        run_dir = self._run_dir(output_dir, run_id)
+        if not run_dir.exists():
+            return None
+
+        meta = {}
+        meta_path = run_dir / _RUN_META_FILENAME
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:
+                meta = {}
+
+        logs: list = []
+        jsonl_path = run_dir / _JSONL_LOG_FILENAME
+        if jsonl_path.exists():
+            try:
+                for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        logs.append(json.loads(line))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        class_mapping = None
+        cm_path = run_dir / _CLASS_MAP_FILENAME
+        if cm_path.exists():
+            try:
+                class_mapping = json.loads(cm_path.read_text(encoding="utf-8"))
+            except Exception:
+                class_mapping = None
+
+        return {
+            "run_id": run_id,
+            "meta": meta,
+            "logs": logs,
+            "class_mapping": class_mapping,
+        }
+
+    async def get_run_class_history(self, run_id: str, output_dir: str = _DEFAULT_OUTPUT_DIR) -> Optional[dict]:
+        """특정 run의 클래스별 정확도 추이 — jsonl의 worst_classes를 epoch축으로 정리.
+
+        반환:
+          {
+            "run_id": ...,
+            "num_classes": N,
+            "epochs": [1, 2, ..., E],
+            "class_acc": { "5": [None, 0.0, 0.0, ...], ... },  # epoch별 acc (없으면 None)
+            "class_meta": { "5": { "manufacturer_korean": ..., "model_korean": ... }, ... }
+          }
+
+        주의: jsonl에는 worst 5만 기록되므로 그 5개 클래스 외에는 데이터가 없음.
+        """
+        detail = await self.get_run_detail(run_id, output_dir)
+        if not detail:
+            return None
+
+        logs = detail.get("logs", [])
+        cm = detail.get("class_mapping") or {}
+        classes_meta = cm.get("classes", {}) or {}
+
+        epoch_logs = [e for e in logs if e.get("worst_classes") is not None]
+        epochs = []
+        class_acc: dict[str, list] = {}
+
+        for entry in epoch_logs:
+            ep = entry.get("epoch")
+            if ep is None:
+                continue
+            ep_int = int(round(ep))
+            if ep_int not in epochs:
+                epochs.append(ep_int)
+            for item in entry.get("worst_classes", []) or []:
+                cls = str(item.get("class"))
+                acc = item.get("acc")
+                if cls not in class_acc:
+                    class_acc[cls] = []
+                # 이전 epoch들에 대해 None 채우기
+                while len(class_acc[cls]) < len(epochs) - 1:
+                    class_acc[cls].append(None)
+                class_acc[cls].append(acc)
+
+        # 모든 클래스 시퀀스를 epoch 길이에 맞게 패딩
+        n = len(epochs)
+        for cls in class_acc:
+            while len(class_acc[cls]) < n:
+                class_acc[cls].append(None)
+
+        return {
+            "run_id": run_id,
+            "num_classes": cm.get("num_classes"),
+            "epochs": epochs,
+            "class_acc": class_acc,
+            "class_meta": {cls: classes_meta.get(cls) for cls in class_acc.keys()},
+        }
+
+    async def delete_run(self, run_id: str, output_dir: str = _DEFAULT_OUTPUT_DIR) -> dict:
+        """특정 run 디렉토리 전체 삭제. active run이면 거부."""
+        active = self._load_current_run(output_dir)
+        status = await self.get_status()
+        if active == run_id and status.get("is_running"):
+            return {"status": "error", "message": "실행 중인 run은 삭제할 수 없습니다."}
+
+        run_dir = self._run_dir(output_dir, run_id)
+        if not run_dir.exists():
+            return {"status": "error", "message": f"run을 찾을 수 없습니다: {run_id}"}
+
+        try:
+            shutil.rmtree(run_dir)
+        except Exception as e:
+            return {"status": "error", "message": f"삭제 실패: {e}"}
+
+        # current.txt가 이 run을 가리키고 있으면 비우기
+        if active == run_id:
+            try:
+                marker = self._output_root(output_dir) / "current.txt"
+                if marker.exists():
+                    marker.unlink()
+            except Exception:
+                pass
+
+        return {"status": "deleted", "run_id": run_id}
 
     def generate_train_yaml(self, **kwargs) -> str:
         """호환성을 위해 존재. EfficientNet 백엔드에서는 YAML 불필요."""

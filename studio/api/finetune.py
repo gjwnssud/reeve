@@ -50,6 +50,16 @@ async def _proxy_post(path: str, body: dict = None) -> dict:
         return resp.json()
 
 
+async def _proxy_delete(path: str) -> dict:
+    """Trainer 서비스 DELETE 프록시"""
+    from studio.config import settings
+    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+        resp = await client.delete(f"{settings.trainer_url}{path}")
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
+
+
 class ExportParams(BaseModel):
     # 필터
     manufacturer_id: Optional[int] = None
@@ -696,6 +706,34 @@ async def get_raw_training_log(tail: int = Query(default=100, ge=1, le=1000)):
 async def get_deploy_config():
     """핫리로드 경로 설정 반환 (Trainer 서비스 프록시)"""
     return await _proxy_get("/train/deploy-config")
+
+
+# =============================================================================
+# Run 이력 (대시보드)
+# =============================================================================
+
+@router.get("/train/runs")
+async def list_train_runs():
+    """학습 run 목록 (Trainer 프록시)"""
+    return await _proxy_get("/train/runs")
+
+
+@router.get("/train/runs/{run_id}")
+async def get_train_run(run_id: str):
+    """특정 run 상세 (Trainer 프록시)"""
+    return await _proxy_get(f"/train/runs/{run_id}")
+
+
+@router.get("/train/runs/{run_id}/class-history")
+async def get_train_run_class_history(run_id: str):
+    """특정 run 클래스별 정확도 추이 (Trainer 프록시)"""
+    return await _proxy_get(f"/train/runs/{run_id}/class-history")
+
+
+@router.delete("/train/runs/{run_id}")
+async def delete_train_run(run_id: str):
+    """특정 run 삭제 (Trainer 프록시)"""
+    return await _proxy_delete(f"/train/runs/{run_id}")
 
 
 @router.post("/train/export")
