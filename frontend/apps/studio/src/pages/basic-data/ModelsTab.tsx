@@ -37,7 +37,7 @@ export function ModelsTab() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["vehicle-models", filterMfId],
-    queryFn: () => getVehicleModels(filterMfId),
+    queryFn: () => getVehicleModels({ manufacturerId: filterMfId }),
   });
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<FormData>({

@@ -62,7 +62,7 @@ export function VehicleEditDialog({ vehicle, open, onClose, onPrev, onNext, posi
 
   const { data: models } = useQuery({
     queryKey: ["vehicle-models", mfId],
-    queryFn: () => getVehicleModels(mfId ?? undefined),
+    queryFn: () => getVehicleModels({ manufacturerId: mfId ?? undefined }),
     enabled: open && mfId != null,
   });
 

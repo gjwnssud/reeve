@@ -153,13 +153,13 @@ export function AdminPage() {
   });
 
   const { data: manufacturers } = useQuery({
-    queryKey: ["manufacturers"],
-    queryFn: () => getManufacturers(),
+    queryKey: ["manufacturers", tab.status, tab.reviewStatus],
+    queryFn: () => getManufacturers({ status: tab.status, review_status: tab.reviewStatus }),
   });
 
   const { data: vehicleModels } = useQuery({
-    queryKey: ["vehicle-models", mfFilter],
-    queryFn: () => getVehicleModels(mfFilter),
+    queryKey: ["vehicle-models", mfFilter, tab.status, tab.reviewStatus],
+    queryFn: () => getVehicleModels({ manufacturerId: mfFilter, status: tab.status, review_status: tab.reviewStatus }),
     enabled: mfFilter !== undefined,
   });
 

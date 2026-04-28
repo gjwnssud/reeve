@@ -30,7 +30,7 @@ export function ManufacturersTab() {
   const is_domestic = filter === "all" ? undefined : filter === "domestic";
   const { data, isLoading } = useQuery({
     queryKey: ["manufacturers", filter],
-    queryFn: () => getManufacturers(is_domestic),
+    queryFn: () => getManufacturers({ isDomestic: is_domestic }),
   });
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({

@@ -23,6 +23,28 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _av_tab_subquery(db: Session, status: Optional[str], review_status: Optional[str], id_col):
+    """탭 필터 조건에 맞는 AnalyzedVehicle 에서 id_col 값의 distinct 서브쿼리를 반환."""
+    from sqlalchemy import func as _func, or_ as _or
+    q = db.query(id_col).filter(id_col != None)
+    if status == 'uploaded':
+        q = q.filter(AnalyzedVehicle.processing_stage == 'uploaded')
+    elif status == 'yolo_failed':
+        q = q.filter(
+            AnalyzedVehicle.processing_stage == 'yolo_detected',
+            _or(AnalyzedVehicle.yolo_detections == None,
+                _func.json_length(AnalyzedVehicle.yolo_detections) == 0),
+        )
+    elif status == 'analysis_complete':
+        q = q.filter(
+            AnalyzedVehicle.processing_stage == 'analysis_complete',
+            AnalyzedVehicle.review_status == 'pending',
+        )
+    if review_status and review_status in {'pending', 'approved', 'on_hold', 'rejected'}:
+        q = q.filter(AnalyzedVehicle.review_status == review_status)
+    return q.distinct()
+
+
 # Pydantic 스키마 정의
 class ManufacturerCreate(BaseModel):
     """제조사 생성 요청"""
@@ -74,13 +96,21 @@ async def get_manufacturers(
     skip: int = 0,
     limit: int = 100,
     is_domestic: Optional[bool] = None,
+    status: Optional[str] = None,
+    review_status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """제조사 목록 조회"""
+    """제조사 목록 조회.
+    status / review_status 를 넘기면 해당 탭에 데이터가 있는 제조사만 반환.
+    """
     query = db.query(Manufacturer)
 
     if is_domestic is not None:
         query = query.filter(Manufacturer.is_domestic == is_domestic)
+
+    if status or review_status:
+        sub = _av_tab_subquery(db, status, review_status, AnalyzedVehicle.matched_manufacturer_id)
+        query = query.filter(Manufacturer.id.in_(sub))
 
     manufacturers = query.offset(skip).limit(limit).all()
     return manufacturers
@@ -107,13 +137,21 @@ async def get_vehicle_models(
     skip: int = 0,
     limit: int = 100,
     manufacturer_id: Optional[int] = None,
+    status: Optional[str] = None,
+    review_status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """차량 모델 목록 조회"""
+    """차량 모델 목록 조회.
+    status / review_status 를 넘기면 해당 탭에 데이터가 있는 모델만 반환.
+    """
     query = db.query(VehicleModel)
 
     if manufacturer_id is not None:
         query = query.filter(VehicleModel.manufacturer_id == manufacturer_id)
+
+    if status or review_status:
+        sub = _av_tab_subquery(db, status, review_status, AnalyzedVehicle.matched_model_id)
+        query = query.filter(VehicleModel.id.in_(sub))
 
     models = query.offset(skip).limit(limit).all()
     return models

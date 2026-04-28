@@ -72,7 +72,7 @@ export function ImageDetailDialog({ image, onClose }: Props) {
 
   const { data: models } = useQuery({
     queryKey: ["vehicle-models", mfId],
-    queryFn: () => getVehicleModels(mfId ?? undefined),
+    queryFn: () => getVehicleModels({ manufacturerId: mfId ?? undefined }),
     enabled: open && mfId != null,
   });
 

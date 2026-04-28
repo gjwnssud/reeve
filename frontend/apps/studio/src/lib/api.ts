@@ -329,9 +329,13 @@ export function deleteTrainRun(runId: string): Promise<{ status: string; run_id:
 
 // ─── Manufacturers ─────────────────────────────────────────────────────────
 
-export function getManufacturers(isDomestic?: boolean): Promise<Manufacturer[]> {
+export function getManufacturers(params?: {
+  isDomestic?: boolean;
+  status?: StatusFilter;
+  review_status?: ReviewStatus;
+}): Promise<Manufacturer[]> {
   return apiRequest<Manufacturer[]>('/admin/manufacturers', {
-    query: { is_domestic: isDomestic, limit: 1000 },
+    query: { is_domestic: params?.isDomestic, status: params?.status, review_status: params?.review_status, limit: 1000 },
   });
 }
 
@@ -348,9 +352,13 @@ export function createManufacturer(data: ManufacturerCreate): Promise<Manufactur
 
 // ─── Vehicle Models ────────────────────────────────────────────────────────
 
-export function getVehicleModels(manufacturerId?: number): Promise<VehicleModel[]> {
+export function getVehicleModels(params?: {
+  manufacturerId?: number;
+  status?: StatusFilter;
+  review_status?: ReviewStatus;
+}): Promise<VehicleModel[]> {
   return apiRequest<VehicleModel[]>('/admin/vehicle-models', {
-    query: { manufacturer_id: manufacturerId, limit: 1000 },
+    query: { manufacturer_id: params?.manufacturerId, status: params?.status, review_status: params?.review_status, limit: 1000 },
   });
 }
 
