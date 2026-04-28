@@ -52,9 +52,23 @@ Three microservices communicate over a shared Docker network. 두 개의 React S
 - `POST /api/analyze-vehicle-stream` — SSE 스트리밍 분석 (단계별 진행)
 - `GET/POST /admin/manufacturers` — 제조사 CRUD
 - `GET/POST /admin/vehicle-models` — 차량 모델 CRUD
-- `GET /admin/analyzed-vehicles` — 분석 결과 목록/검수 큐
-- `PATCH /admin/analyzed-vehicles/{id}/verify` — 검수 승인 → TrainingDataset 적재
+- `GET /admin/analyzed-vehicles` — 분석 결과 목록 (status/review_status/page/sort 필터)
+- `GET /admin/analyzed-vehicles-counts` — 탭별 카운트 (pending/on_hold/approved/rejected/uploaded/yolo_failed)
+- `GET /admin/review-queue` — 검수 큐 (pending 항목)
+- `PATCH /admin/review/{id}` — 분석 결과 수정 (approved 상태이면 TrainingDataset도 즉시 upsert)
+- `POST /admin/review/{id}` — 검수 승인 → TrainingDataset 적재 + `review_status='approved'`
+- `POST /admin/review/{id}/hold` — 검수 보류 → TrainingDataset 제거 + `review_status='on_hold'`
+- `POST /admin/review/{id}/reject` — 검수 반려 → TrainingDataset 제거 + `review_status='rejected'`
+- `POST /admin/review/{id}/reopen` — 검수 재개 → `review_status='pending'` (approved였으면 TrainingDataset도 제거)
+- `POST /admin/review/batch-action` — 일괄 검수 액션 (SSE 스트리밍, approve/hold/reject)
+- `POST /admin/review/batch-save-all` — pending 전체 일괄 승인 (SSE 스트리밍)
+- `DELETE /admin/review-delete-all` — 미검수(pending+on_hold+rejected) 전체 삭제
+- `DELETE /admin/review/{id}` — 단건 삭제
+- `POST /admin/analyze/{id}` — 단건 재분석 (Vision API 재호출 후 결과 갱신)
 - `POST /admin/analyze-batch` — 배치 분석
+- `GET /admin/reload-efficientnet` — Identifier EfficientNet 핫리로드 프록시
+- `GET /admin/db-stats` — DB 통계 (제조사·모델·학습 데이터 수)
+- `POST /admin/cleanup-now` — 오래된 분석 결과 즉시 정리
 - `POST /finetune/export-efficientnet` — EfficientNet 학습용 CSV export (스레드풀 실행)
 - `POST /finetune/export` — VLM 학습용 ShareGPT JSON export
 - `POST /finetune/train/start` — Trainer 학습 시작 프록시
@@ -82,8 +96,21 @@ Three microservices communicate over a shared Docker network. 두 개의 React S
 |------|------|
 | `Manufacturer` | 제조사 (id, code, korean_name, english_name, is_domestic) |
 | `VehicleModel` | 차량 모델 (id, code, manufacturer_id, korean_name, english_name) |
-| `AnalyzedVehicle` | 분석 결과 (image_path, raw_result, matched_manufacturer_id, is_verified, processing_stage, yolo_detections, selected_bbox) |
+| `AnalyzedVehicle` | 분석 결과 (image_path, raw_result, matched_manufacturer_id, is_verified, review_status, review_reason, verified_by, verified_at, notes, processing_stage, yolo_detections, selected_bbox, source, client_uuid) |
 | `TrainingDataset` | 검증된 학습 이미지 (image_path unique, manufacturer_id, model_id) |
+
+**`AnalyzedVehicle` 검수 상태 (`review_status`)**
+| 값 | 의미 | `is_verified` |
+|----|------|---------------|
+| `pending` | 검수 대기 (기본값) | false |
+| `approved` | 검수완료 — TrainingDataset 적재됨 | true |
+| `on_hold` | 보류 — 추가 검토 필요 | false |
+| `rejected` | 반려 — 부적합 판정 | false |
+
+`is_verified`는 `approved` 여부를 빠르게 판단하는 Boolean 인덱스 역할로 `review_status`와 병행 유지됨 (export/일괄삭제 쿼리에서 활용).
+
+**`processing_stage` 흐름**
+`uploaded` → `yolo_detected` → `analysis_complete`
 
 ### Studio 핵심 설정값
 | 환경변수 | 기본값 | 설명 |
@@ -216,6 +243,10 @@ CLASSIFIER_LOW_CONFIDENCE_THRESHOLD (기본 0.40): 로그 메시지 구분용
 - `POST /train/stop` — 학습 중지
 - `GET /train/logs` — JSONL 로그 (tail)
 - `GET /train/raw-log` — 원시 로그 (tail)
+- `GET /train/runs` — 학습 이력 목록 (run_id, start_time, val_acc, num_classes …)
+- `GET /train/runs/{run_id}` — 학습 이력 단건 상세 (epoch별 loss·val_acc)
+- `GET /train/runs/{run_id}/class-history` — 클래스별 정확도 추이
+- `DELETE /train/runs/{run_id}` — 학습 이력 삭제
 - `GET /train/deploy-config` — 배포 대상·경로 설정 조회
 - `POST /train/export` — 학습 결과(Checkpoint/ONNX 등) export
 - `GET /model-info` — 현재 모델/백엔드 정보
@@ -262,6 +293,7 @@ frontend/
 - **ServerFolderTab (서버 폴더 감시)**: 3초 폴링으로 서버 디렉토리(`/mnt/nas/yyMMdd` 형태)의 신규 이미지 감지. 발견된 파일은 `data/uploads/`로 복사 후 기존 detect → analyze stream → save 파이프라인 그대로 실행. 원본 NAS 파일 삭제 없음. 경로 접근은 `SERVER_WATCH_BASE_DIR` 하위로 제한. 처리 통계(전체·감지·감지 실패·분석 완료·분석 오류)는 Zustand store의 `serverStats`로 관리되며 localStorage(`reeve_server_stats_${uuid}`)에 지속 저장 — 새로고침 후에도 유지
 - **폴더 감시 이탈 경고**: 탭 전환(AnalyzePage) 및 사이드바 메뉴 클릭(StudioLayout) 시 confirm 다이얼로그, `folderWatchRunning` 상태는 Zustand store로 공유 (로컬 폴더·서버 폴더 모두 적용)
 - **Identifier BatchTab**: IntersectionObserver 기반 lazy 썸네일(32K 이미지 대응), 행 클릭 시 상세 다이얼로그
+- **학습 이력 대시보드** (`/static/runs`): 학습 run 목록·상세·클래스 정확도 추이 비교. RunListTable / RunDetailView / RunCompareView / ClassTrackingView 컴포넌트로 구성. Trainer `GET /train/runs` API 연동
 
 ---
 
@@ -289,6 +321,7 @@ frontend/
 | `trainer/main.py` | Trainer 진입점 |
 | `identifier/identifier.py` | 핵심 판별 로직 |
 | `identifier/efficientnet_classifier.py` | EfficientNet 래퍼 |
+| `trainer/api/train.py` | Trainer API 라우터 (학습·이력·배포·hw-profile) |
 | `trainer/services/efficientnet_trainer.py` | EfficientNet 학습 스크립트 빌더 |
 | `studio/api/finetune.py` | export/학습/평가 API (`_export_efficientnet_sync`는 스레드풀 실행, 별도 DB 세션 사용) |
 | `studio/models/` | SQLAlchemy 모델 |

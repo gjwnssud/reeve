@@ -37,12 +37,12 @@ interface TabDef {
 
 const STATUS_TABS: TabDef[] = [
   { key: "all", label: "전체" },
-  { key: "pending", label: "검수 대기", reviewStatus: "pending" },
-  { key: "on_hold", label: "보류", reviewStatus: "on_hold" },
-  { key: "approved", label: "검증완료", reviewStatus: "approved" },
-  { key: "rejected", label: "반려", reviewStatus: "rejected" },
   { key: "uploaded", label: "업로드", status: "uploaded" },
-  { key: "yolo_failed", label: "감지실패", status: "yolo_failed" },
+  { key: "yolo_failed", label: "YOLO 탐지실패", status: "yolo_failed" },
+  { key: "pending", label: "검수 대기", reviewStatus: "pending" },
+  { key: "approved", label: "검수완료", reviewStatus: "approved" },
+  { key: "on_hold", label: "보류", reviewStatus: "on_hold" },
+  { key: "rejected", label: "반려", reviewStatus: "rejected" },
 ];
 
 const PAGE_SIZE = 20;
@@ -57,7 +57,7 @@ interface RowStatus {
 function rowStatus(item: AnalyzedVehicle): RowStatus {
   switch (item.review_status) {
     case "approved":
-      return { variant: "default", label: "검증완료" };
+      return { variant: "default", label: "검수완료" };
     case "on_hold":
       return {
         variant: "outline",

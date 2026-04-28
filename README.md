@@ -228,17 +228,25 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 **UI (React SPA)** — 모든 페이지는 `/static/` 하위에 서빙됩니다.
 - `/` → `/static/` 리다이렉트
 - `/static/analyze` — 차량 분석 (파일/폴더 업로드, 서버 폴더 감시 + YOLO 탐지 + SSE 스트리밍). 로컬·서버 폴더 감시 처리 통계는 localStorage에 저장되어 새로고침 후에도 유지됨
-- `/static/admin` — 분석 결과 검수 큐 및 승인
+- `/static/admin` — 분석 결과 검수 큐 (승인/보류/반려/재개 + 일괄 처리). 탭: 전체 > 업로드 > YOLO 탐지실패 > 검수 대기 > 검수완료 > 보류 > 반려
 - `/static/basic-data` — 제조사·모델 기준 데이터 CRUD
 - `/static/finetune` — 파인튜닝 관리 (데이터 export → 학습 → 배포)
+- `/static/runs` — 학습 이력 대시보드 (run 목록·상세·클래스 정확도 추이 비교)
 
 **분석 / 관리 API**
 - `POST /api/analyze/vehicle` — Vision 분석
 - `POST /api/detect-vehicle` — YOLO 탐지만 수행
 - `POST /api/analyze-vehicle-stream` — SSE 스트리밍 분석
 - `GET/POST /admin/manufacturers` / `/admin/vehicle-models` — 기준 데이터 CRUD
-- `GET /admin/analyzed-vehicles` — 분석 결과 목록
-- `PATCH /admin/analyzed-vehicles/{id}/verify` — 검수 승인 → `TrainingDataset` 적재
+- `GET /admin/analyzed-vehicles` — 분석 결과 목록 (status/review_status/page/sort 필터)
+- `GET /admin/analyzed-vehicles-counts` — 탭별 카운트
+- `POST /admin/review/{id}` — 검수 승인 (`review_status='approved'`) → `TrainingDataset` 적재
+- `POST /admin/review/{id}/hold` — 검수 보류 (`review_status='on_hold'`)
+- `POST /admin/review/{id}/reject` — 검수 반려 (`review_status='rejected'`)
+- `POST /admin/review/{id}/reopen` — 검수 재개 (`review_status='pending'`)
+- `POST /admin/review/batch-action` — 일괄 검수 액션 (SSE 스트리밍)
+- `POST /admin/review/batch-save-all` — pending 전체 일괄 승인 (SSE 스트리밍)
+- `POST /admin/analyze/{id}` — 단건 재분석
 - `POST /admin/analyze-batch` — 배치 분석
 
 **서버 폴더 감시 API**
@@ -261,6 +269,10 @@ GET /async/result/{task_id} → { "status": "SUCCESS", "result": {...} }
 - `POST /train/stop` — 학습 중단
 - `GET /train/logs` — JSONL 로그 (tail)
 - `GET /train/raw-log` — 원시 로그 (tail)
+- `GET /train/runs` — 학습 이력 목록
+- `GET /train/runs/{run_id}` — 학습 이력 상세 (epoch별 loss·val_acc)
+- `GET /train/runs/{run_id}/class-history` — 클래스별 정확도 추이
+- `DELETE /train/runs/{run_id}` — 학습 이력 삭제
 - `GET /train/deploy-config` — 핫리로드 경로 정보
 - `POST /train/export` — LoRA 병합 (VLM 백엔드)
 - `GET /model-info` — 현재 EfficientNet 모델 클래스 수
