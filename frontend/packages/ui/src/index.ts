@@ -6,6 +6,7 @@ export * from './components/label';
 export * from './components/tabs';
 export * from './components/dialog';
 export * from './components/sonner';
+export * from './components/range-slider';
 export * from './components/select';
 export * from './components/separator';
 export * from './components/skeleton';

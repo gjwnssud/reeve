@@ -1,3 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .range-thumb {
+    /* dual-thumb 슬라이더 — 트랙은 시각적으로 RangeSlider가 그리고, 입력은 thumb만 노출 */
+  }
+  .range-thumb::-webkit-slider-runnable-track {
+    background: transparent;
+    height: 100%;
+  }
+  .range-thumb::-moz-range-track {
+    background: transparent;
+    height: 100%;
+  }
+  .range-thumb::-webkit-slider-thumb {
+    pointer-events: auto;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    border: 2px solid hsl(var(--background));
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    margin-top: 0;
+  }
+  .range-thumb::-moz-range-thumb {
+    pointer-events: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    border: 2px solid hsl(var(--background));
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+  }
+  .range-thumb:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  .range-thumb:focus-visible::-moz-range-thumb {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}

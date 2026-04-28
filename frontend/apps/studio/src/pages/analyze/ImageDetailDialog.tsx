@@ -1,18 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Button, Input, Label,
+  Button, Input, Label, Badge,
   Dialog, DialogContent, DialogHeader, DialogTitle,
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@reeve/ui";
 import { BboxCanvas } from "@reeve/ui/composites";
-import { Loader2, Plus, RefreshCw, Save, CheckCircle2 } from "lucide-react";
+import {
+  Loader2, Plus, RefreshCw, Save, CheckCircle2, PauseCircle, XCircle,
+  AlertTriangle, Eye,
+} from "lucide-react";
 
 import {
   getManufacturers, getVehicleModels,
   createManufacturer, createVehicleModel,
   updateAnalyzedVehicle, saveToTraining,
+  holdAnalyzedVehicle, rejectAnalyzedVehicle,
   extractErrorMessage,
 } from "../../lib/api";
 import { streamAnalyze } from "../../lib/analyzeApi";
@@ -24,6 +28,9 @@ interface Props {
 }
 
 type Bbox = [number, number, number, number];
+
+const HOLD_REASON_CHIPS = ["차량 일부 가림", "조명 부족", "각도 모호", "동일 차량 중복"];
+const REJECT_REASON_CHIPS = ["오탐 (차량 아님)", "잘못된 차종", "이미지 품질 불가", "라벨 모호"];
 
 export function ImageDetailDialog({ image, onClose }: Props) {
   const qc = useQueryClient();
@@ -46,9 +53,14 @@ export function ImageDetailDialog({ image, onClose }: Props) {
 
   const [isSaving, setSaving] = useState(false);
   const [isApproving, setApproving] = useState(false);
+  const [isHolding, setHolding] = useState(false);
+  const [isRejecting, setRejecting] = useState(false);
   const [isReanalyzing, setReanalyzing] = useState(false);
   const [reanalyzeMsg, setReanalyzeMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [progressText, setProgressText] = useState<string | null>(null);
+  const [reasonMode, setReasonMode] = useState<"hold" | "reject" | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const reasonInputRef = useRef<HTMLInputElement | null>(null);
 
   const open = image !== null;
 
@@ -77,12 +89,12 @@ export function ImageDetailDialog({ image, onClose }: Props) {
     setInlineAddModel(false);
     setReanalyzeMsg(null);
     setProgressText(null);
+    setReasonMode(null);
+    setReasonText("");
   }, [image]);
 
-  if (!image) return null;
-
-  const result = image.result;
-  const hasAnalyzedId = result?.id != null;
+  const hasAnalyzedId = image?.result?.id != null;
+  const result = image?.result;
 
   const refreshAdminQueries = () => {
     void qc.invalidateQueries({ queryKey: ["analyzed-vehicles"] });
@@ -90,13 +102,13 @@ export function ImageDetailDialog({ image, onClose }: Props) {
   };
 
   const handleSave = async () => {
-    if (!hasAnalyzedId) { toast.error("저장할 분석 결과가 없습니다"); return; }
+    if (!image || !hasAnalyzedId || !result) { toast.error("저장할 분석 결과가 없습니다"); return; }
     if (!mfId || !modelId) { toast.error("제조사와 모델을 선택하세요"); return; }
     const mf = manufacturers?.find((m) => m.id === mfId);
     const md = models?.find((m) => m.id === modelId);
     setSaving(true);
     try {
-      await updateAnalyzedVehicle(result!.id, {
+      const res = await updateAnalyzedVehicle(result.id, {
         matched_manufacturer_id: mfId,
         matched_model_id: modelId,
         manufacturer: mf?.korean_name,
@@ -104,7 +116,7 @@ export function ImageDetailDialog({ image, onClose }: Props) {
       });
       updateImage(image.id, {
         result: {
-          ...result!,
+          ...result,
           manufacturer: mf?.korean_name ?? null,
           model: md?.korean_name ?? null,
           matched_manufacturer_id: mfId,
@@ -112,7 +124,7 @@ export function ImageDetailDialog({ image, onClose }: Props) {
         },
       });
       refreshAdminQueries();
-      toast.success("저장되었습니다");
+      toast.success(res.training_synced ? "학습 데이터에 즉시 반영됨" : "저장되었습니다");
     } catch (e) {
       toast.error(extractErrorMessage(e));
     } finally {
@@ -121,22 +133,21 @@ export function ImageDetailDialog({ image, onClose }: Props) {
   };
 
   const handleApprove = async () => {
-    if (!hasAnalyzedId) { toast.error("저장할 분석 결과가 없습니다"); return; }
+    if (!image || !hasAnalyzedId || !result) { toast.error("저장할 분석 결과가 없습니다"); return; }
     if (!mfId || !modelId) { toast.error("제조사와 모델을 먼저 선택하세요"); return; }
-    if (!confirm("이 분석 결과를 검수 승인하시겠습니까? 카드가 목록에서 제거됩니다.")) return;
     setApproving(true);
     try {
       const mf = manufacturers?.find((m) => m.id === mfId);
       const md = models?.find((m) => m.id === modelId);
-      await updateAnalyzedVehicle(result!.id, {
+      await updateAnalyzedVehicle(result.id, {
         matched_manufacturer_id: mfId,
         matched_model_id: modelId,
         manufacturer: mf?.korean_name,
         model: md?.korean_name,
       });
-      await saveToTraining(result!.id);
+      await saveToTraining(result.id);
       refreshAdminQueries();
-      toast.success("검수 승인 완료");
+      toast.success("승인 완료");
       removeImage(image.id);
       onClose();
     } catch (e) {
@@ -146,14 +157,46 @@ export function ImageDetailDialog({ image, onClose }: Props) {
     }
   };
 
+  const submitHold = async () => {
+    if (!image || !hasAnalyzedId || !result) return;
+    setHolding(true);
+    try {
+      await holdAnalyzedVehicle(result.id, reasonText.trim() || undefined);
+      refreshAdminQueries();
+      toast.success("보류 처리됨");
+      removeImage(image.id);
+      onClose();
+    } catch (e) {
+      toast.error(extractErrorMessage(e));
+    } finally {
+      setHolding(false);
+    }
+  };
+
+  const submitReject = async () => {
+    if (!image || !hasAnalyzedId || !result) return;
+    setRejecting(true);
+    try {
+      await rejectAnalyzedVehicle(result.id, reasonText.trim() || undefined);
+      refreshAdminQueries();
+      toast.success("반려 처리됨");
+      removeImage(image.id);
+      onClose();
+    } catch (e) {
+      toast.error(extractErrorMessage(e));
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   const handleReanalyze = async () => {
-    if (!hasAnalyzedId) { toast.error("재분석할 분석 결과가 없습니다"); return; }
+    if (!image || !hasAnalyzedId || !result) { toast.error("재분석할 분석 결과가 없습니다"); return; }
     const useBbox: Bbox = bbox ?? [0, 0, 1, 1];
     setReanalyzing(true);
     setReanalyzeMsg(null);
     setProgressText("재분석 시작 중...");
     try {
-      for await (const ev of streamAnalyze(result!.id, useBbox)) {
+      for await (const ev of streamAnalyze(result.id, useBbox)) {
         if (ev.event === "progress") {
           setProgressText(ev.message);
         } else if (ev.event === "completed" && ev.result) {
@@ -222,14 +265,52 @@ export function ImageDetailDialog({ image, onClose }: Props) {
     }
   };
 
+  // Keyboard shortcuts: A approve / H hold / R reject
+  useEffect(() => {
+    if (!open || !image) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === "a" || e.key === "A") {
+        e.preventDefault();
+        if (hasAnalyzedId && mfId && modelId) void handleApprove();
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        if (hasAnalyzedId) {
+          setReasonMode("hold");
+          setTimeout(() => reasonInputRef.current?.focus(), 0);
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        if (hasAnalyzedId) {
+          setReasonMode("reject");
+          setTimeout(() => reasonInputRef.current?.focus(), 0);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, image, hasAnalyzedId, mfId, modelId]);
+
+  if (!image) return null;
+
   const yoloBboxes: Bbox[] = (image.detections ?? [])
     .map((d) => d.bbox as Bbox)
     .filter(Boolean);
 
+  const visualEvidence = result?.visual_evidence?.trim() ?? "";
+
+  const finalConf = result?.confidence_score ?? null;
+  const busy = isSaving || isApproving || isHolding || isRejecting;
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }} modal>
       <DialogContent
-        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+        className="max-h-[90vh] max-w-5xl overflow-y-auto"
         onPointerDownOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -238,7 +319,7 @@ export function ImageDetailDialog({ image, onClose }: Props) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
           {/* Canvas */}
           <div>
             <p className="mb-1 text-xs text-muted-foreground">
@@ -253,7 +334,7 @@ export function ImageDetailDialog({ image, onClose }: Props) {
             />
             {bbox && (
               <p className="mt-1 text-xs text-muted-foreground">
-                [{bbox[0]}, {bbox[1]}, {bbox[2]}, {bbox[3]}] ({bbox[2]-bbox[0]}×{bbox[3]-bbox[1]}px)
+                [{bbox[0]}, {bbox[1]}, {bbox[2]}, {bbox[3]}] ({bbox[2] - bbox[0]}×{bbox[3] - bbox[1]}px)
               </p>
             )}
           </div>
@@ -263,14 +344,40 @@ export function ImageDetailDialog({ image, onClose }: Props) {
             {result ? (
               <p className="text-sm text-muted-foreground">
                 현재: {result.manufacturer ?? "N/A"} / {result.model ?? "N/A"}
-                {result.confidence_score > 0 && (
-                  <span className="ml-2">({result.confidence_score.toFixed(1)}%)</span>
+                {finalConf != null && finalConf > 0 && (
+                  <span className="ml-2">({finalConf.toFixed(1)}%)</span>
                 )}
               </p>
             ) : image.status === "failed" ? (
               <p className="text-sm text-destructive">{image.error ?? "분석 오류"}</p>
             ) : (
               <p className="text-sm text-muted-foreground">분석 결과 없음</p>
+            )}
+
+            {/* 신뢰도 + 시각적 근거 */}
+            {result && (
+              <div className="space-y-1.5 rounded-md border bg-muted/30 p-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">VLM 분석</span>
+                  <span className="font-mono tabular-nums">
+                    {finalConf != null ? `${finalConf.toFixed(1)}%` : "-"}
+                  </span>
+                </div>
+                {visualEvidence ? (
+                  <div className="flex gap-1.5 text-muted-foreground">
+                    <Eye className="mt-0.5 h-3 w-3 shrink-0" />
+                    <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed">{visualEvidence}</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">시각적 근거 없음</p>
+                )}
+                {finalConf != null && finalConf < 60 && (
+                  <div className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>신뢰도가 낮습니다. 보류 또는 반려를 권장합니다.</span>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Manufacturer */}
@@ -369,35 +476,103 @@ export function ImageDetailDialog({ image, onClose }: Props) {
               </p>
             )}
 
-            <div className="flex flex-col gap-2 pt-2">
-              <Button
-                onClick={handleSave}
-                disabled={!hasAnalyzedId || isSaving || !mfId || !modelId}
-                className="w-full"
-              >
-                {isSaving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-                저장
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={handleApprove}
-                disabled={!hasAnalyzedId || isApproving || !mfId || !modelId}
-                className="w-full"
-              >
-                {isApproving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1 h-4 w-4" />}
-                검수 승인 (학습 데이터 적재)
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleReanalyze}
-                disabled={!hasAnalyzedId || isReanalyzing}
-                className="w-full"
-              >
-                {isReanalyzing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
-                재분석 (선택 영역 기준)
-              </Button>
-              <Button variant="ghost" onClick={onClose} className="w-full">닫기</Button>
-            </div>
+            {/* 사유 입력 영역 */}
+            {reasonMode && (
+              <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50/60 p-2.5 dark:border-amber-700 dark:bg-amber-950/30">
+                <Label className="text-xs">
+                  {reasonMode === "hold" ? "보류 사유 (선택)" : "반려 사유 (선택)"}
+                </Label>
+                <Input
+                  ref={reasonInputRef}
+                  placeholder="이유를 입력하거나 아래 칩을 클릭"
+                  value={reasonText}
+                  onChange={(e) => setReasonText(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-1">
+                  {(reasonMode === "hold" ? HOLD_REASON_CHIPS : REJECT_REASON_CHIPS).map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setReasonText(chip)}
+                      className="rounded-full border border-border bg-background px-2 py-0.5 text-xs hover:border-primary hover:bg-muted"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant={reasonMode === "hold" ? "outline" : "destructive"}
+                    onClick={() => (reasonMode === "hold" ? submitHold() : submitReject())}
+                    disabled={busy}
+                    className="flex-1"
+                  >
+                    {reasonMode === "hold" ? "보류 확정" : "반려 확정"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setReasonMode(null); setReasonText(""); }}>
+                    취소
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!reasonMode && (
+              <div className="flex flex-col gap-2 pt-1">
+                <Button
+                  onClick={handleApprove}
+                  disabled={!hasAnalyzedId || busy || !mfId || !modelId}
+                  className="w-full"
+                >
+                  {isApproving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1 h-4 w-4" />}
+                  승인 <Badge variant="outline" className="ml-2 px-1.5 py-0 text-[10px]">A</Badge>
+                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setReasonMode("hold")}
+                    disabled={!hasAnalyzedId || busy}
+                    className="flex-1"
+                  >
+                    {isHolding ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <PauseCircle className="mr-1 h-4 w-4" />}
+                    보류 <Badge variant="outline" className="ml-1 px-1.5 py-0 text-[10px]">H</Badge>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setReasonMode("reject")}
+                    disabled={!hasAnalyzedId || busy}
+                    className="flex-1"
+                  >
+                    {isRejecting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <XCircle className="mr-1 h-4 w-4" />}
+                    반려 <Badge variant="outline" className="ml-1 px-1.5 py-0 text-[10px]">R</Badge>
+                  </Button>
+                </div>
+
+                <div className="my-1 h-px bg-border" />
+
+                <Button
+                  onClick={handleSave}
+                  disabled={!hasAnalyzedId || isSaving || !mfId || !modelId}
+                  variant="secondary"
+                  className="w-full"
+                >
+                  {isSaving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+                  매칭만 저장 (상태 유지)
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleReanalyze}
+                  disabled={!hasAnalyzedId || isReanalyzing}
+                  className="w-full"
+                >
+                  {isReanalyzing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+                  재분석 (선택 영역 기준)
+                </Button>
+                <Button variant="ghost" onClick={onClose} className="w-full">
+                  닫기 <Badge variant="outline" className="ml-2 px-1.5 py-0 text-[10px]">Esc</Badge>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>

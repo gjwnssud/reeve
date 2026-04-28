@@ -264,6 +264,8 @@ async def stream_analysis_progress(
                     analyzed.matched_model_id = new_model_id
                     analyzed.confidence_score = new_confidence
                     analyzed.is_verified = False
+                    analyzed.review_status = 'pending'
+                    analyzed.review_reason = None
                     analyzed.processing_stage = 'analysis_complete'
                     analyzed.selected_bbox = bbox
                 else:
@@ -285,6 +287,9 @@ async def stream_analysis_progress(
 
                 db.commit()
                 db.refresh(analyzed)
+                visual_evidence = None
+                if isinstance(analyzed.raw_result, dict):
+                    visual_evidence = analyzed.raw_result.get("visual_evidence")
                 return {
                     "id": analyzed.id,
                     "manufacturer": analyzed.manufacturer,
@@ -293,6 +298,7 @@ async def stream_analysis_progress(
                     "confidence_score": float(analyzed.confidence_score) if analyzed.confidence_score else 0.0,
                     "matched_manufacturer_id": analyzed.matched_manufacturer_id,
                     "matched_model_id": analyzed.matched_model_id,
+                    "visual_evidence": visual_evidence,
                 }
 
         result_data = await loop.run_in_executor(None, _match_and_save)
@@ -527,6 +533,7 @@ async def get_pending_records(
 
     if failure_only:
         query = db.query(AnalyzedVehicle).filter(
+            AnalyzedVehicle.review_status == 'pending',
             or_(
                 and_(
                     AnalyzedVehicle.processing_stage == 'analysis_complete',
@@ -545,8 +552,10 @@ async def get_pending_records(
             )
         )
     else:
+        # 보류/반려/승인된 항목은 분석 페이지의 in-flight 뷰에서 제외
         query = db.query(AnalyzedVehicle).filter(
-            AnalyzedVehicle.processing_stage.in_(['uploaded', 'yolo_detected', 'analysis_complete', 'verified'])
+            AnalyzedVehicle.review_status == 'pending',
+            AnalyzedVehicle.processing_stage.in_(['uploaded', 'yolo_detected', 'analysis_complete']),
         )
 
     if source:
@@ -589,7 +598,7 @@ async def analyze_feed(client_uuid: Optional[str] = None, source: Optional[str] 
             try:
                 query = db.query(AnalyzedVehicle).filter(
                     AnalyzedVehicle.updated_at >= last_check,
-                    AnalyzedVehicle.is_verified == False
+                    AnalyzedVehicle.review_status == 'pending',
                 )
                 if client_uuid:
                     query = query.filter(AnalyzedVehicle.client_uuid == client_uuid)

@@ -14,6 +14,7 @@ export interface AnalysisResult {
   confidence_score: number;
   matched_manufacturer_id: number | null;
   matched_model_id: number | null;
+  visual_evidence?: string | null;
 }
 
 export interface ImageState {

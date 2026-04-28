@@ -140,17 +140,24 @@ async def get_all_analyzed_vehicles(
     skip: int = 0,
     limit: int = 20,
     status: Optional[str] = None,
+    review_status: Optional[str] = None,
     manufacturer_id: Optional[int] = None,
     model_id: Optional[int] = None,
+    min_confidence: Optional[float] = None,
+    max_confidence: Optional[float] = None,
+    sort: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """전체 분석 레코드 조회 (차량데이터 관리용)
-    status 필터 (DB processing_stage 기준):
-      uploaded         - stage='uploaded' (YOLO 미실행)
-      yolo_failed      - stage='yolo_detected', yolo_detections NULL/빈 배열 (탐지 실패)
-      yolo_detected    - stage='yolo_detected', yolo_detections 존재 (감지 성공)
-      analysis_complete - stage='analysis_complete', is_verified=False (분석완료, 미검증)
-      verified         - is_verified=True (검증완료)
+
+    status 필터 (호환용, processing_stage/is_verified 기준):
+      uploaded / yolo_failed / yolo_detected / analysis_complete / verified
+
+    review_status 필터 (신규):
+      pending / approved / on_hold / rejected
+
+    min_confidence / max_confidence: confidence_score 0~100 범위 필터
+    sort: created_desc(default) / created_asc / confidence_desc / confidence_asc
     """
     from sqlalchemy import func as _func, or_ as _or
 
@@ -174,28 +181,44 @@ async def get_all_analyzed_vehicles(
     elif status == 'analysis_complete':
         query = query.filter(
             AnalyzedVehicle.processing_stage == 'analysis_complete',
-            AnalyzedVehicle.is_verified == False
+            AnalyzedVehicle.review_status == 'pending'
         )
     elif status == 'verified':
-        query = query.filter(AnalyzedVehicle.is_verified == True)
+        query = query.filter(AnalyzedVehicle.review_status == 'approved')
+
+    if review_status and review_status in VALID_REVIEW_STATUSES:
+        query = query.filter(AnalyzedVehicle.review_status == review_status)
 
     if manufacturer_id is not None:
         query = query.filter(AnalyzedVehicle.matched_manufacturer_id == manufacturer_id)
     if model_id is not None:
         query = query.filter(AnalyzedVehicle.matched_model_id == model_id)
 
+    if min_confidence is not None:
+        query = query.filter(AnalyzedVehicle.confidence_score >= min_confidence)
+    if max_confidence is not None:
+        query = query.filter(AnalyzedVehicle.confidence_score <= max_confidence)
+
+    sort_map = {
+        'created_desc': AnalyzedVehicle.created_at.desc(),
+        'created_asc': AnalyzedVehicle.created_at.asc(),
+        'confidence_desc': AnalyzedVehicle.confidence_score.desc(),
+        'confidence_asc': AnalyzedVehicle.confidence_score.asc(),
+    }
+    order_by = sort_map.get(sort or 'created_desc', AnalyzedVehicle.created_at.desc())
+
     total = query.count()
-    items = query.order_by(AnalyzedVehicle.created_at.desc()).offset(skip).limit(limit).all()
+    items = query.order_by(order_by).offset(skip).limit(limit).all()
 
     return {
         "total": total,
-        "items": [item.to_dict(include_raw=False) for item in items]
+        "items": [item.to_dict(include_raw=True) for item in items]
     }
 
 
 @router.get("/analyzed-vehicles-counts")
 def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
-    """탭별 건수를 단일 쿼리로 반환 (뱃지 업데이트용)"""
+    """탭별 건수 + 신뢰도 통계를 단일 쿼리로 반환 (뱃지/대시보드용)"""
     from sqlalchemy import case
     from sqlalchemy.sql import func as sql_func
 
@@ -222,12 +245,27 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
         sql_func.sum(case(
             (
                 (AnalyzedVehicle.processing_stage == 'analysis_complete') &
-                (AnalyzedVehicle.is_verified == False),
+                (AnalyzedVehicle.review_status == 'pending'),
                 1
             ), else_=0
         )).label("analysis_complete"),
-        sql_func.sum(case((AnalyzedVehicle.is_verified == True, 1), else_=0)).label("verified"),
+        sql_func.sum(case((AnalyzedVehicle.review_status == 'pending', 1), else_=0)).label("pending"),
+        sql_func.sum(case((AnalyzedVehicle.review_status == 'on_hold', 1), else_=0)).label("on_hold"),
+        sql_func.sum(case((AnalyzedVehicle.review_status == 'approved', 1), else_=0)).label("approved"),
+        sql_func.sum(case((AnalyzedVehicle.review_status == 'rejected', 1), else_=0)).label("rejected"),
+        sql_func.avg(AnalyzedVehicle.confidence_score).label("avg_confidence"),
+        sql_func.sum(case(
+            ((AnalyzedVehicle.confidence_score >= 85), 1), else_=0
+        )).label("high_confidence"),
+        sql_func.sum(case(
+            ((AnalyzedVehicle.confidence_score >= 60) & (AnalyzedVehicle.confidence_score < 85), 1), else_=0
+        )).label("mid_confidence"),
+        sql_func.sum(case(
+            ((AnalyzedVehicle.confidence_score < 60), 1), else_=0
+        )).label("low_confidence"),
     ).one()
+
+    avg_conf = float(row.avg_confidence) if row.avg_confidence is not None else None
 
     return {
         "all": row.all or 0,
@@ -235,7 +273,16 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
         "yolo_failed": row.yolo_failed or 0,
         "yolo_detected": row.yolo_detected or 0,
         "analysis_complete": row.analysis_complete or 0,
-        "verified": row.verified or 0,
+        "pending": row.pending or 0,
+        "on_hold": row.on_hold or 0,
+        "approved": row.approved or 0,
+        "rejected": row.rejected or 0,
+        # 호환: 기존 클라이언트가 'verified' 키를 기대할 수 있음
+        "verified": row.approved or 0,
+        "avg_confidence": round(avg_conf, 2) if avg_conf is not None else None,
+        "high_confidence": row.high_confidence or 0,
+        "mid_confidence": row.mid_confidence or 0,
+        "low_confidence": row.low_confidence or 0,
     }
 
 
@@ -273,25 +320,82 @@ class AnalyzedVehicleUpdate(BaseModel):
     model: Optional[str] = None
 
 
+class ReviewActionRequest(BaseModel):
+    """보류/반려/재열기 등 검수 액션 요청"""
+    reason: Optional[str] = None
+
+
+class BatchActionRequest(BaseModel):
+    """일괄 액션 요청"""
+    action: str  # 'approve' | 'hold' | 'reject'
+    ids: List[int]
+    reason: Optional[str] = None
+
+
+VALID_REVIEW_STATUSES = {'pending', 'approved', 'on_hold', 'rejected'}
+
+
+def _remove_from_training(analyzed: AnalyzedVehicle, db: Session) -> bool:
+    """TrainingDataset에서 해당 image_path 항목 제거. 제거되었으면 True."""
+    from studio.models.training_dataset import TrainingDataset
+    if not analyzed.image_path:
+        return False
+    existing = db.query(TrainingDataset).filter(
+        TrainingDataset.image_path == analyzed.image_path
+    ).first()
+    if existing:
+        db.delete(existing)
+        db.flush()
+        return True
+    return False
+
+
+def _upsert_training(analyzed: AnalyzedVehicle, db: Session) -> bool:
+    """TrainingDataset upsert. 추가 또는 매칭 변경되었으면 True."""
+    from studio.models.training_dataset import TrainingDataset
+    if not (analyzed.matched_manufacturer_id and analyzed.matched_model_id):
+        return False
+    existing = db.query(TrainingDataset).filter(
+        TrainingDataset.image_path == analyzed.image_path
+    ).first()
+    if existing:
+        if (existing.manufacturer_id != analyzed.matched_manufacturer_id
+                or existing.model_id != analyzed.matched_model_id):
+            existing.manufacturer_id = analyzed.matched_manufacturer_id
+            existing.model_id = analyzed.matched_model_id
+            db.flush()
+            return True
+        return False
+    db.add(TrainingDataset(
+        image_path=analyzed.image_path,
+        manufacturer_id=analyzed.matched_manufacturer_id,
+        model_id=analyzed.matched_model_id,
+    ))
+    db.flush()
+    return True
+
+
 @router.patch("/review/{analyzed_id}")
 async def update_analyzed_vehicle(
     analyzed_id: int,
     update_data: AnalyzedVehicleUpdate,
     db: Session = Depends(get_db)
 ):
-    """분석 결과 수정 (제조사/모델 변경)"""
+    """분석 결과 수정 (제조사/모델 변경).
+
+    review_status='approved' 인 항목을 수정하면 TrainingDataset도 즉시 upsert해
+    학습셋과 일관성을 유지한다 (재검수 흐름).
+    """
     analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
     if not analyzed:
         raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
 
-    # 제조사 확인
     manufacturer = db.query(Manufacturer).filter(
         Manufacturer.id == update_data.matched_manufacturer_id
     ).first()
     if not manufacturer:
         raise HTTPException(status_code=404, detail="Manufacturer not found")
 
-    # 모델 확인
     model = db.query(VehicleModel).filter(
         VehicleModel.id == update_data.matched_model_id
     ).first()
@@ -303,13 +407,26 @@ async def update_analyzed_vehicle(
     analyzed.manufacturer = update_data.manufacturer or manufacturer.korean_name
     analyzed.model = update_data.model or model.korean_name
 
-    # 학습 데이터로 적재될 가능성이 있으므로 image_path가 원본이면 크롭 생성
     ensure_cropped_image(analyzed)
+
+    training_synced = False
+    if analyzed.review_status == 'approved':
+        try:
+            training_synced = _upsert_training(analyzed, db)
+            analyzed.verified_at = datetime.now()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"PATCH /review/{analyzed_id}: TrainingDataset 동기화 실패 - {e}")
+            raise HTTPException(status_code=500, detail=f"학습 데이터 동기화 실패: {e}")
 
     db.commit()
     db.refresh(analyzed)
 
-    return {"message": "Updated successfully", "data": analyzed.to_dict()}
+    return {
+        "message": "Updated successfully",
+        "data": analyzed.to_dict(),
+        "training_synced": training_synced,
+    }
 
 
 @router.post("/review/batch-save-all")
@@ -320,13 +437,13 @@ async def batch_save_all_to_training():
 
     BATCH_SIZE = 100
 
-    # 초기 카운트 조회 후 즉시 세션 반환
+    # 초기 카운트 조회 후 즉시 세션 반환 (보류/반려는 제외 → pending만 대상)
     with SessionLocal() as db:
         total_unverified = db.query(sql_func.count(AnalyzedVehicle.id)).filter(
-            AnalyzedVehicle.is_verified == False
+            AnalyzedVehicle.review_status == 'pending'
         ).scalar()
         total = db.query(sql_func.count(AnalyzedVehicle.id)).filter(
-            AnalyzedVehicle.is_verified == False,
+            AnalyzedVehicle.review_status == 'pending',
             AnalyzedVehicle.matched_manufacturer_id.isnot(None),
             AnalyzedVehicle.matched_model_id.isnot(None)
         ).scalar()
@@ -350,7 +467,7 @@ async def batch_save_all_to_training():
                     joinedload(AnalyzedVehicle.matched_manufacturer),
                     joinedload(AnalyzedVehicle.matched_model)
                 ).filter(
-                    AnalyzedVehicle.is_verified == False,
+                    AnalyzedVehicle.review_status == 'pending',
                     AnalyzedVehicle.matched_manufacturer_id.isnot(None),
                     AnalyzedVehicle.matched_model_id.isnot(None)
                 ).order_by(AnalyzedVehicle.id.desc())
@@ -420,14 +537,16 @@ async def batch_save_all_to_training():
                 except Exception as e:
                     logger.error(f"Batch save: {item['id']} training_data failed - {e}")
 
-                # is_verified 업데이트
+                # 검수 상태 업데이트
                 try:
                     with SessionLocal() as db:
                         analyzed_fresh = db.query(AnalyzedVehicle).filter(
                             AnalyzedVehicle.id == item["id"]
                         ).first()
-                        if analyzed_fresh and not analyzed_fresh.is_verified:
+                        if analyzed_fresh and analyzed_fresh.review_status != 'approved':
                             analyzed_fresh.is_verified = True
+                            analyzed_fresh.review_status = 'approved'
+                            analyzed_fresh.review_reason = None
                             analyzed_fresh.verified_by = "admin"
                             analyzed_fresh.verified_at = datetime.now()
                             db.commit()
@@ -520,9 +639,11 @@ async def save_to_training(
             detail=f"학습 데이터 저장 실패: {str(e)}"
         )
 
-    # 2) is_verified 업데이트
+    # 2) 검수 상태 업데이트
     try:
         analyzed.is_verified = True
+        analyzed.review_status = 'approved'
+        analyzed.review_reason = None
         analyzed.verified_by = "admin"
         analyzed.verified_at = datetime.now()
         db.commit()
@@ -532,11 +653,187 @@ async def save_to_training(
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to update is_verified: {e}")
+        logger.error(f"Failed to update review_status: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"is_verified 업데이트 실패: {str(e)}"
+            detail=f"검수 상태 업데이트 실패: {str(e)}"
         )
+
+
+@router.post("/review/{analyzed_id}/hold")
+async def hold_analyzed_vehicle(
+    analyzed_id: int,
+    payload: ReviewActionRequest = ReviewActionRequest(),
+    db: Session = Depends(get_db)
+):
+    """검수 보류: TrainingDataset에서 제거 + review_status='on_hold'."""
+    analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+    if not analyzed:
+        raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
+
+    removed = _remove_from_training(analyzed, db)
+    analyzed.review_status = 'on_hold'
+    analyzed.review_reason = payload.reason
+    analyzed.is_verified = False
+    db.commit()
+    db.refresh(analyzed)
+    return {
+        "message": "검수 보류 처리 완료",
+        "data": analyzed.to_dict(),
+        "training_removed": removed,
+    }
+
+
+@router.post("/review/{analyzed_id}/reject")
+async def reject_analyzed_vehicle(
+    analyzed_id: int,
+    payload: ReviewActionRequest = ReviewActionRequest(),
+    db: Session = Depends(get_db)
+):
+    """검수 반려: TrainingDataset에서 제거 + review_status='rejected'.
+
+    DELETE와 달리 이미지 파일과 분석 레코드는 보존(통계/감사용).
+    """
+    analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+    if not analyzed:
+        raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
+
+    removed = _remove_from_training(analyzed, db)
+    analyzed.review_status = 'rejected'
+    analyzed.review_reason = payload.reason
+    analyzed.is_verified = False
+    db.commit()
+    db.refresh(analyzed)
+    return {
+        "message": "검수 반려 처리 완료",
+        "data": analyzed.to_dict(),
+        "training_removed": removed,
+    }
+
+
+@router.post("/review/{analyzed_id}/reopen")
+async def reopen_analyzed_vehicle(
+    analyzed_id: int,
+    db: Session = Depends(get_db)
+):
+    """검수 상태를 pending으로 되돌림.
+
+    approved 상태였다면 TrainingDataset에서도 제거(학습셋과 분리).
+    """
+    analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+    if not analyzed:
+        raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
+
+    removed = False
+    if analyzed.review_status == 'approved':
+        removed = _remove_from_training(analyzed, db)
+
+    analyzed.review_status = 'pending'
+    analyzed.review_reason = None
+    analyzed.is_verified = False
+    analyzed.verified_at = None
+    db.commit()
+    db.refresh(analyzed)
+    return {
+        "message": "검수 상태가 대기로 변경됨",
+        "data": analyzed.to_dict(),
+        "training_removed": removed,
+    }
+
+
+@router.post("/review/batch-action")
+async def batch_review_action(payload: BatchActionRequest):
+    """선택된 ID 목록에 대해 일괄 검수 액션 (SSE 스트리밍).
+
+    action: approve | hold | reject
+    """
+    from studio.models.training_dataset import TrainingDataset
+
+    if payload.action not in ('approve', 'hold', 'reject'):
+        raise HTTPException(status_code=400, detail="action은 approve|hold|reject 중 하나여야 합니다")
+
+    ids = list(dict.fromkeys(payload.ids))  # 중복 제거, 순서 유지
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids가 비어 있습니다")
+
+    action = payload.action
+    reason = payload.reason
+    total = len(ids)
+
+    async def generate():
+        succeeded = 0
+        failed = 0
+        failed_ids: list[int] = []
+        current = 0
+
+        yield f"data: {json.dumps({'type': 'start', 'total': total, 'action': action})}\n\n"
+
+        for vid in ids:
+            current += 1
+            try:
+                with SessionLocal() as db:
+                    analyzed = db.query(AnalyzedVehicle).filter(
+                        AnalyzedVehicle.id == vid
+                    ).first()
+                    if not analyzed:
+                        failed += 1
+                        failed_ids.append(vid)
+                        yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': vid, 'reason': 'not_found'})}\n\n"
+                        continue
+
+                    if action == 'approve':
+                        if not (analyzed.matched_manufacturer_id and analyzed.matched_model_id):
+                            failed += 1
+                            failed_ids.append(vid)
+                            yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': vid, 'reason': 'no_match'})}\n\n"
+                            continue
+                        if not ensure_cropped_image(analyzed):
+                            if analyzed.image_path == analyzed.original_image_path:
+                                failed += 1
+                                failed_ids.append(vid)
+                                yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': vid, 'reason': 'no_crop'})}\n\n"
+                                continue
+                        db.flush()
+                        _upsert_training(analyzed, db)
+                        analyzed.is_verified = True
+                        analyzed.review_status = 'approved'
+                        analyzed.review_reason = None
+                        analyzed.verified_by = "admin"
+                        analyzed.verified_at = datetime.now()
+                    elif action == 'hold':
+                        _remove_from_training(analyzed, db)
+                        analyzed.review_status = 'on_hold'
+                        analyzed.review_reason = reason
+                        analyzed.is_verified = False
+                    elif action == 'reject':
+                        _remove_from_training(analyzed, db)
+                        analyzed.review_status = 'rejected'
+                        analyzed.review_reason = reason
+                        analyzed.is_verified = False
+
+                    db.commit()
+                    succeeded += 1
+
+                yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': vid})}\n\n"
+            except Exception as e:
+                logger.error(f"batch-action {action} id={vid} failed: {e}")
+                failed += 1
+                failed_ids.append(vid)
+                yield f"data: {json.dumps({'type': 'progress', 'current': current, 'total': total, 'succeeded': succeeded, 'failed': failed, 'item_id': vid, 'reason': 'error'})}\n\n"
+
+            await asyncio.sleep(0.02)
+
+        yield f"data: {json.dumps({'type': 'done', 'total': total, 'succeeded': succeeded, 'failed': failed, 'failed_ids': failed_ids})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _delete_analyzed_vehicle(analyzed: AnalyzedVehicle, db: Session) -> dict:
@@ -729,6 +1026,8 @@ async def analyze_single_image(
             analyzed_fresh.confidence_score = match_result["overall_confidence"]
             analyzed_fresh.processing_stage = 'analysis_complete'
             analyzed_fresh.is_verified = False
+            analyzed_fresh.review_status = 'pending'
+            analyzed_fresh.review_reason = None
 
             write_db.commit()
             write_db.refresh(analyzed_fresh)

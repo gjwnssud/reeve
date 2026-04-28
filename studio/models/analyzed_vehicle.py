@@ -34,7 +34,15 @@ class AnalyzedVehicle(Base):
         comment="매칭된 모델 ID"
     )
     confidence_score = Column(Numeric(5, 2), nullable=True, comment="신뢰도 점수 (0-100)")
-    is_verified = Column(Boolean, default=False, nullable=False, index=True, comment="검수 완료 여부")
+    is_verified = Column(Boolean, default=False, nullable=False, index=True, comment="검수 완료 여부 (review_status 호환용)")
+    review_status = Column(
+        String(20),
+        default='pending',
+        nullable=False,
+        index=True,
+        comment="검수 상태: pending/approved/on_hold/rejected"
+    )
+    review_reason = Column(String(255), nullable=True, comment="보류/반려 사유")
     verified_by = Column(String(100), nullable=True, comment="검수자")
     verified_at = Column(DateTime, nullable=True, comment="검수 일시")
     notes = Column(Text, nullable=True, comment="검수 메모")
@@ -76,6 +84,8 @@ class AnalyzedVehicle(Base):
             "matched_model_id": self.matched_model_id,
             "confidence_score": float(self.confidence_score) if self.confidence_score else None,
             "is_verified": self.is_verified,
+            "review_status": self.review_status,
+            "review_reason": self.review_reason,
             "verified_by": self.verified_by,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
             "notes": self.notes,

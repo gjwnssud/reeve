@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS `analyzed_vehicles`
     `matched_manufacturer_id` bigint                                           DEFAULT NULL COMMENT '매칭된 제조사 ID',
     `matched_model_id`        bigint                                           DEFAULT NULL COMMENT '매칭된 모델 ID',
     `confidence_score`        decimal(5, 2)                                    DEFAULT NULL COMMENT '신뢰도 점수 (0-100)',
-    `is_verified`             tinyint(1)                              NOT NULL DEFAULT '0' COMMENT '검수 완료 여부',
+    `is_verified`             tinyint(1)                              NOT NULL DEFAULT '0' COMMENT '검수 완료 여부 (review_status 호환용)',
+    `review_status`           enum('pending','approved','on_hold','rejected') NOT NULL DEFAULT 'pending' COMMENT '검수 상태',
+    `review_reason`           varchar(255) COLLATE utf8mb4_general_ci          DEFAULT NULL COMMENT '보류/반려 사유',
     `verified_by`             varchar(100) COLLATE utf8mb4_general_ci          DEFAULT NULL COMMENT '검수자',
     `verified_at`             timestamp                               NULL     DEFAULT NULL COMMENT '검수 일시',
     `notes`                   text COLLATE utf8mb4_general_ci                  DEFAULT NULL COMMENT '검수 메모',
@@ -71,6 +73,8 @@ CREATE TABLE IF NOT EXISTS `analyzed_vehicles`
     KEY `idx_processing_stage` (`processing_stage`),
     KEY `idx_processing_stage_verified_created` (`processing_stage`, `is_verified`, `created_at`),
     KEY `idx_client_source_verified` (`client_uuid`, `source`, `is_verified`),
+    KEY `idx_review_status` (`review_status`),
+    KEY `idx_status_confidence` (`review_status`, `confidence_score`),
     CONSTRAINT `fk_analyzed_manufacturer` FOREIGN KEY (`matched_manufacturer_id`) REFERENCES `manufacturers` (`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_analyzed_model` FOREIGN KEY (`matched_model_id`) REFERENCES `vehicle_models` (`id`) ON DELETE SET NULL
 ) ENGINE = InnoDB

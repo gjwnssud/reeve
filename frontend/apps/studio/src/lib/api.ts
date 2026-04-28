@@ -4,6 +4,12 @@ import { ApiError, apiRequest } from '@reeve/shared';
 
 export type StatusFilter = 'all' | 'uploaded' | 'yolo_failed' | 'yolo_detected' | 'analysis_complete' | 'verified';
 
+export type ReviewStatus = 'pending' | 'approved' | 'on_hold' | 'rejected';
+
+export type ReviewSort = 'created_desc' | 'created_asc' | 'confidence_desc' | 'confidence_asc';
+
+export type BatchActionType = 'approve' | 'hold' | 'reject';
+
 export interface Manufacturer {
   id: number;
   code: string;
@@ -33,11 +39,22 @@ export interface YoloDetection {
   [k: string]: unknown;
 }
 
+export interface RawVisionResult {
+  manufacturer_code?: string | null;
+  model_code?: string | null;
+  visual_evidence?: string | null;
+  confidence?: number | null;
+  raw_response?: string | null;
+  original_image?: string | null;
+  bbox?: YoloBbox | null;
+  [k: string]: unknown;
+}
+
 export interface AnalyzedVehicle {
   id: number;
   image_path: string | null;
   original_image_path: string | null;
-  raw_result: unknown;
+  raw_result: RawVisionResult | null;
   manufacturer: string | null;
   model: string | null;
   year: string | null;
@@ -45,6 +62,8 @@ export interface AnalyzedVehicle {
   matched_model_id: number | null;
   confidence_score: number | null;
   is_verified: boolean;
+  review_status: ReviewStatus;
+  review_reason: string | null;
   verified_by: string | null;
   verified_at: string | null;
   notes: string | null;
@@ -69,6 +88,14 @@ export interface VehicleCounts {
   yolo_detected: number;
   analysis_complete: number;
   verified: number;
+  pending: number;
+  on_hold: number;
+  approved: number;
+  rejected: number;
+  avg_confidence: number | null;
+  high_confidence: number;
+  mid_confidence: number;
+  low_confidence: number;
 }
 
 export interface FinetuneMode {
@@ -345,8 +372,12 @@ export interface GetAnalyzedVehiclesArgs {
   skip?: number;
   limit?: number;
   status?: StatusFilter;
+  review_status?: ReviewStatus;
   manufacturer_id?: number;
   model_id?: number;
+  min_confidence?: number;
+  max_confidence?: number;
+  sort?: ReviewSort;
 }
 
 export function getAnalyzedVehicles(args: GetAnalyzedVehiclesArgs = {}): Promise<AnalyzedVehicleListResponse> {
@@ -355,8 +386,12 @@ export function getAnalyzedVehicles(args: GetAnalyzedVehiclesArgs = {}): Promise
       skip: args.skip,
       limit: args.limit,
       status: args.status === 'all' ? undefined : args.status,
+      review_status: args.review_status,
       manufacturer_id: args.manufacturer_id,
       model_id: args.model_id,
+      min_confidence: args.min_confidence,
+      max_confidence: args.max_confidence,
+      sort: args.sort,
     },
   });
 }
@@ -390,15 +425,42 @@ export interface UpdateAnalyzedVehicleBody {
 export function updateAnalyzedVehicle(
   id: number,
   body: UpdateAnalyzedVehicleBody,
-): Promise<{ message: string; data: AnalyzedVehicle }> {
-  return apiRequest<{ message: string; data: AnalyzedVehicle }>(`/admin/review/${id}`, {
+): Promise<ReviewActionResponse> {
+  return apiRequest<ReviewActionResponse>(`/admin/review/${id}`, {
     method: 'PATCH',
     body,
   });
 }
 
-export function saveToTraining(id: number): Promise<{ message: string; data: AnalyzedVehicle }> {
-  return apiRequest<{ message: string; data: AnalyzedVehicle }>(`/admin/review/${id}`, {
+export interface ReviewActionResponse {
+  message: string;
+  data: AnalyzedVehicle;
+  training_synced?: boolean;
+  training_removed?: boolean;
+}
+
+export function saveToTraining(id: number): Promise<ReviewActionResponse> {
+  return apiRequest<ReviewActionResponse>(`/admin/review/${id}`, {
+    method: 'POST',
+  });
+}
+
+export function holdAnalyzedVehicle(id: number, reason?: string): Promise<ReviewActionResponse> {
+  return apiRequest<ReviewActionResponse>(`/admin/review/${id}/hold`, {
+    method: 'POST',
+    body: { reason: reason ?? null },
+  });
+}
+
+export function rejectAnalyzedVehicle(id: number, reason?: string): Promise<ReviewActionResponse> {
+  return apiRequest<ReviewActionResponse>(`/admin/review/${id}/reject`, {
+    method: 'POST',
+    body: { reason: reason ?? null },
+  });
+}
+
+export function reopenAnalyzedVehicle(id: number): Promise<ReviewActionResponse> {
+  return apiRequest<ReviewActionResponse>(`/admin/review/${id}/reopen`, {
     method: 'POST',
   });
 }
@@ -407,6 +469,75 @@ export function reanalyzeVehicle(id: number): Promise<{ message: string; data: A
   return apiRequest<{ message: string; data: AnalyzedVehicle }>(`/admin/analyze/${id}`, {
     method: 'POST',
   });
+}
+
+export interface BatchActionStartEvent {
+  type: 'start';
+  total: number;
+  action: BatchActionType;
+}
+
+export interface BatchActionProgressEvent {
+  type: 'progress';
+  current: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+  item_id: number;
+  reason?: string;
+}
+
+export interface BatchActionDoneEvent {
+  type: 'done';
+  total: number;
+  succeeded: number;
+  failed: number;
+  failed_ids: number[];
+}
+
+export type BatchActionEvent = BatchActionStartEvent | BatchActionProgressEvent | BatchActionDoneEvent;
+
+export async function streamBatchAction(
+  payload: { action: BatchActionType; ids: number[]; reason?: string },
+  onEvent: (event: BatchActionEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch('/admin/review/batch-action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: payload.action,
+      ids: payload.ids,
+      reason: payload.reason ?? null,
+    }),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`batch-action 요청 실패: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data) continue;
+      try {
+        onEvent(JSON.parse(data) as BatchActionEvent);
+      } catch (err) {
+        console.error('batch-action SSE parse error', err, data);
+      }
+    }
+  }
 }
 
 // ─── Finetune ──────────────────────────────────────────────────────────────

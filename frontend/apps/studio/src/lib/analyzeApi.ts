@@ -29,6 +29,7 @@ export interface AnalyzeResult {
   confidence_score: number;
   matched_manufacturer_id: number | null;
   matched_model_id: number | null;
+  visual_evidence?: string | null;
 }
 
 export type AnalyzeSSEEvent =
