@@ -30,7 +30,7 @@ services:
       resources:
         limits:
           cpus: '2.0'
-          memory: 2G
+          memory: ${MYSQL_MEMORY_LIMIT:-2G}
         reservations:
           cpus: '0.5'
           memory: 512M
@@ -65,7 +65,7 @@ services:
       resources:
         limits:
           cpus: '3.0'
-          memory: 4G
+          memory: ${STUDIO_MEMORY_LIMIT:-4G}
         reservations:
           cpus: '0.5'
           memory: 512M

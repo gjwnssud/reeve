@@ -17,7 +17,7 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 512M
+          memory: ${REDIS_MEMORY_LIMIT:-512M}
 
   # Identifier Vehicle Identification Service (FastAPI)
   identifier:
@@ -50,7 +50,7 @@ services:
       resources:
         limits:
           cpus: '4.0'
-          memory: 4G
+          memory: ${IDENTIFIER_MEMORY_LIMIT:-4G}
         reservations:
           cpus: '1.0'
           memory: 2G
@@ -78,7 +78,7 @@ services:
       resources:
         limits:
           cpus: '4.0'
-          memory: 8G
+          memory: ${OLLAMA_MEMORY_LIMIT:-8G}
 
   # Ollama 모델 자동 pull (VLM_MODEL_NAME 없을 경우 qwen3-vl:8b)
   ollama-init:
@@ -127,7 +127,7 @@ services:
       resources:
         limits:
           cpus: '4.0'
-          memory: 12G
+          memory: ${TRAINER_MEMORY_LIMIT:-12G}
 
   # Celery Worker (배치 처리)
   celery-worker:
@@ -159,7 +159,7 @@ services:
       resources:
         limits:
           cpus: '6.0'
-          memory: 4G
+          memory: ${CELERY_MEMORY_LIMIT:-4G}
         reservations:
           cpus: '2.0'
           memory: 2G
