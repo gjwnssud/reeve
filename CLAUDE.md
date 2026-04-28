@@ -15,7 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f docker/docker-compose.mac.yml up -d
 
 # Linux/Windows (NVIDIA GPU) — 전체 Docker
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml -f docker/docker-compose.gpu.yml up -d
+
+# SSL overlay (자체 서명 인증서) — 위 명령어에 추가
+# 인증서 생성: ./docker/gen-cert.sh <SERVER_IP>
+# -f docker/docker-compose.ssl.yml 를 끝에 추가
 ```
 
 ### Deployment Packaging
@@ -116,7 +120,7 @@ Three microservices communicate over a shared Docker network. 두 개의 React S
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
 | `VISION_BACKEND` | openai | `openai` \| `ollama` |
-| `OPENAI_MODEL` | gpt-5-mini | OpenAI Vision 모델 |
+| `OPENAI_MODEL` | gpt-5.4-mini | OpenAI Vision 모델 |
 | `GEMINI_MODEL` | gemini-2.5-flash | Gemini 모델 (교차 검증용) |
 | `STUDIO_VLM_MODEL` | qwen3-vl:8b | ollama 백엔드 VLM |
 | `FUZZY_MATCH_THRESHOLD` | 80 | 모델명 퍼지 매칭 임계값 (0~100) |
@@ -306,6 +310,22 @@ frontend/
 - `IDENTIFIER_MODE` — 판별 모드 (`efficientnet` / `vlm_only`)
 - `VISION_BACKEND` — `openai` / `ollama`
 - `ANALYZED_VEHICLES_RETENTION_DAYS` — 분석 결과 보관 기간
+- `MAX_UPLOAD_SIZE` — 단일 이미지 최대 크기 (바이트, 기본 5MB)
+- `ALLOWED_EXTENSIONS` — 허용 확장자 (기본 `jpg,jpeg,png,webp`)
+
+**컨테이너 메모리 한도** (기본값, `.env`에서 재정의 가능):
+
+| 변수 | 기본값 |
+|------|--------|
+| `STUDIO_MEMORY_LIMIT` | `4G` |
+| `IDENTIFIER_MEMORY_LIMIT` | `4G` |
+| `TRAINER_MEMORY_LIMIT` | `12G` |
+| `MYSQL_MEMORY_LIMIT` | `2G` |
+| `OLLAMA_MEMORY_LIMIT` | `8G` |
+| `CELERY_MEMORY_LIMIT` | `4G` |
+| `REDIS_MEMORY_LIMIT` | `512M` |
+
+> DGX Spark 등 고성능 GPU 환경에서는 `TRAINER_MEMORY_LIMIT=50G` 이상 설정 필요 (기본 12G로는 unfreeze 후 OOM Kill 발생 가능).
 
 **제거된 설정 (Qdrant 제거로 불필요):**
 `QDRANT_HOST`, `QDRANT_PORT`, `IDENTIFIER_TOP_K`, `IDENTIFIER_MIN_SIMILARITY`, `IDENTIFIER_VOTE_THRESHOLD`, `IDENTIFIER_VOTE_CONCENTRATION_THRESHOLD`, `VLM_FALLBACK_TO_EMBEDDING`
@@ -328,7 +348,9 @@ frontend/
 | `studio/services/openai_vision.py` | OpenAI Vision 래퍼 |
 | `sql/` | DB 스키마 및 시드 데이터 |
 | `docker/Dockerfile` | Studio 이미지 (`--reload-dir /app/studio`) |
-| `docker/docker-compose.dev.yml` | 개발 오버라이드 (Studio 메모리 4G) |
+| `docker/docker-compose.dev.yml` | 개발 오버라이드 (소스 바인드 마운트, hot reload) |
+| `docker/docker-compose.gpu.yml` | NVIDIA GPU 리소스 예약 overlay (Linux/Windows에서 추가) |
+| `docker/docker-compose.ssl.yml` | SSL 자체 서명 인증서 overlay (`gen-cert.sh`로 인증서 생성 후 적용) |
 | `docs/ASYNC_USAGE.md` | 비동기 API 사용 가이드 |
 | `frontend/apps/studio/` | Studio React SPA (Vite `base=/static/`, 빌드 → `/static/` → Docker `/app/static/`) |
 | `frontend/apps/identifier/` | Identifier React SPA (Vite `base=/static/`, 빌드 → `/static/` → Docker `/app/static/`) |
