@@ -6,13 +6,13 @@ import {
   RangeSlider,
 } from "@reeve/ui";
 import {
-  Pencil, Trash2, ChevronLeft, ChevronRight, CheckCircle2, Loader2,
-  PauseCircle, XCircle, ArrowUpDown, ArrowUp, ArrowDown,
+  Pencil, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  CheckCircle2, Loader2, PauseCircle, XCircle, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 
 import {
   getAnalyzedVehicles, getVehicleCounts, deleteAnalyzedVehicle, deleteAllUnverified,
-  saveToTraining, getManufacturers, extractErrorMessage, streamBatchAction,
+  saveToTraining, getManufacturers, getVehicleModels, extractErrorMessage, streamBatchAction,
   type AnalyzedVehicle, type StatusFilter, type ReviewStatus, type ReviewSort,
   type BatchActionType, type BatchActionEvent,
 } from "../../lib/api";
@@ -45,7 +45,7 @@ const STATUS_TABS: TabDef[] = [
   { key: "rejected", label: "반려", reviewStatus: "rejected" },
 ];
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 interface RowStatus {
   variant: "default" | "secondary" | "destructive" | "outline";
@@ -129,8 +129,10 @@ export function AdminPage() {
   const qc = useQueryClient();
   const [tabKey, setTabKey] = useState<TabKey>("all");
   const [mfFilter, setMfFilter] = useState<number | undefined>(undefined);
+  const [modelFilter, setModelFilter] = useState<number | undefined>(undefined);
   const [confidenceRange, setConfidenceRange] = useState<[number, number]>([0, 100]);
   const [sort, setSort] = useState<ReviewSort>("created_desc");
+  const [pageSize, setPageSize] = useState<number>(20);
   const [page, setPage] = useState(0);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [activeRow, setActiveRow] = useState<number | null>(null);
@@ -155,14 +157,21 @@ export function AdminPage() {
     queryFn: () => getManufacturers(),
   });
 
+  const { data: vehicleModels } = useQuery({
+    queryKey: ["vehicle-models", mfFilter],
+    queryFn: () => getVehicleModels(mfFilter),
+    enabled: mfFilter !== undefined,
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ["analyzed-vehicles", tabKey, mfFilter, minConf, maxConf, sort, page],
+    queryKey: ["analyzed-vehicles", tabKey, mfFilter, modelFilter, minConf, maxConf, sort, page, pageSize],
     queryFn: () => getAnalyzedVehicles({
-      skip: page * PAGE_SIZE,
-      limit: PAGE_SIZE,
+      skip: page * pageSize,
+      limit: pageSize,
       status: tab.status,
       review_status: tab.reviewStatus,
       manufacturer_id: mfFilter,
+      model_id: modelFilter,
       min_confidence: minConf,
       max_confidence: maxConf,
       sort,
@@ -174,7 +183,7 @@ export function AdminPage() {
   useEffect(() => {
     setSelected(new Set());
     setActiveRow(null);
-  }, [page, tabKey, mfFilter, minConf, maxConf, sort, data?.items]);
+  }, [page, tabKey, mfFilter, modelFilter, minConf, maxConf, sort, pageSize, data?.items]);
 
   const { mutateAsync: doDelete } = useMutation({
     mutationFn: deleteAnalyzedVehicle,
@@ -285,10 +294,15 @@ export function AdminPage() {
   };
 
   const total = data?.total ?? 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / pageSize);
 
   const changeTab = (k: TabKey) => { setTabKey(k); setPage(0); };
-  const changeMf = (v: string) => { setMfFilter(v === "all" ? undefined : Number(v)); setPage(0); };
+  const changeMf = (v: string) => {
+    setMfFilter(v === "all" ? undefined : Number(v));
+    setModelFilter(undefined);
+    setPage(0);
+  };
+  const changeModel = (v: string) => { setModelFilter(v === "all" ? undefined : Number(v)); setPage(0); };
 
   const applyPreset = (preset: ConfidencePreset) => {
     setConfidenceRange(preset.range);
@@ -436,67 +450,92 @@ export function AdminPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-3 flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">제조사</span>
-          <Select value={mfFilter !== undefined ? String(mfFilter) : "all"} onValueChange={changeMf}>
-            <SelectTrigger className="w-52">
-              <SelectValue placeholder="전체 제조사" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">전체 제조사</SelectItem>
-              {manufacturers?.map((m) => (
-                <SelectItem key={m.id} value={String(m.id)}>{m.korean_name} ({m.code})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex min-w-[260px] flex-1 flex-col gap-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">신뢰도 (%)</span>
-            <span className="font-mono text-xs tabular-nums text-muted-foreground">
-              {confidenceRange[0]} ~ {confidenceRange[1]}
-            </span>
+      <div className="mb-3 space-y-2">
+        <div className="flex flex-wrap items-end gap-2">
+          {/* 제조사 */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">제조사</span>
+            <Select value={mfFilter !== undefined ? String(mfFilter) : "all"} onValueChange={changeMf}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="전체 제조사" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 제조사</SelectItem>
+                {manufacturers?.map((m) => (
+                  <SelectItem key={m.id} value={String(m.id)}>{m.korean_name} ({m.code})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <RangeSlider
-            min={0}
-            max={100}
-            values={confidenceRange}
-            onChange={(v) => { setConfidenceRange(v); setPage(0); }}
-            ariaLabelMin="최소 신뢰도"
-            ariaLabelMax="최대 신뢰도"
-          />
-        </div>
 
-        <div className="flex flex-wrap gap-1">
-          {CONFIDENCE_PRESETS.map((p) => {
-            const active = confidenceRange[0] === p.range[0] && confidenceRange[1] === p.range[1];
-            return (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => applyPreset(p)}
-                className={`rounded-full border px-3 py-1 text-xs transition ${
-                  active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted"
-                }`}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-          {(confidenceRange[0] !== 0 || confidenceRange[1] !== 100) && (
-            <button
-              type="button"
-              onClick={() => { setConfidenceRange([0, 100]); setPage(0); }}
-              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+          {/* 모델 — 제조사 선택 시 활성화 */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">모델</span>
+            <Select
+              value={modelFilter !== undefined ? String(modelFilter) : "all"}
+              onValueChange={changeModel}
+              disabled={mfFilter === undefined}
             >
-              초기화
-            </button>
-          )}
-        </div>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder={mfFilter === undefined ? "제조사 먼저 선택" : "전체 모델"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 모델</SelectItem>
+                {vehicleModels?.map((m) => (
+                  <SelectItem key={m.id} value={String(m.id)}>{m.korean_name} ({m.code})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <span className="ml-auto text-sm text-muted-foreground">총 {total}개</span>
+          {/* 신뢰도 슬라이더 */}
+          <div className="flex min-w-[220px] flex-1 flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">신뢰도 (%)</span>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {confidenceRange[0]} ~ {confidenceRange[1]}
+              </span>
+            </div>
+            <RangeSlider
+              min={0}
+              max={100}
+              values={confidenceRange}
+              onChange={(v) => { setConfidenceRange(v); setPage(0); }}
+              ariaLabelMin="최소 신뢰도"
+              ariaLabelMax="최대 신뢰도"
+            />
+          </div>
+
+          {/* 프리셋 + 초기화 */}
+          <div className="flex flex-wrap items-center gap-1">
+            {CONFIDENCE_PRESETS.map((p) => {
+              const active = confidenceRange[0] === p.range[0] && confidenceRange[1] === p.range[1];
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+            {(confidenceRange[0] !== 0 || confidenceRange[1] !== 100 || mfFilter !== undefined) && (
+              <button
+                type="button"
+                onClick={() => { setConfidenceRange([0, 100]); setMfFilter(undefined); setModelFilter(undefined); setPage(0); }}
+                className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+              >
+                초기화
+              </button>
+            )}
+          </div>
+
+          <span className="ml-auto self-end text-sm text-muted-foreground">총 {total}개</span>
+        </div>
       </div>
 
       {/* Bulk actions */}
@@ -687,36 +726,61 @@ export function AdminPage() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <Button size="icon" variant="outline" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(page - 1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex gap-1">
-            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-              const start = Math.max(0, Math.min(page - 3, totalPages - 7));
-              const p = start + i;
-              if (p >= totalPages) return null;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPage(p)}
-                  className={`h-8 min-w-[2rem] rounded-md border px-2 text-sm transition ${
-                    p === page ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-                  }`}
-                >
-                  {p + 1}
-                </button>
-              );
-            })}
-          </div>
-          <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">{page + 1}/{totalPages} · 총 {total}개</span>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {/* 페이지당 표시 */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">페이지당</span>
+          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
+            <SelectTrigger className="h-8 w-20 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>{n}개</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      )}
+
+        {/* 페이지 버튼 */}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="outline" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(0)}>
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="outline" className="h-8 w-8" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                const start = Math.max(0, Math.min(page - 3, totalPages - 7));
+                const p = start + i;
+                if (p >= totalPages) return null;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPage(p)}
+                    className={`h-8 min-w-[2rem] rounded-md border px-2 text-sm transition ${
+                      p === page ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    {p + 1}
+                  </button>
+                );
+              })}
+            </div>
+            <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}>
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        <span className="text-sm text-muted-foreground">{page + 1}/{Math.max(1, totalPages)} · 총 {total}개</span>
+      </div>
 
       <VehicleEditDialog
         vehicle={currentVehicle}

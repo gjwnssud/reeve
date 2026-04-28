@@ -5,6 +5,7 @@
 @layer components {
   .range-thumb {
     /* dual-thumb 슬라이더 — 트랙은 시각적으로 RangeSlider가 그리고, 입력은 thumb만 노출 */
+    pointer-events: none;
   }
   .range-thumb::-webkit-slider-runnable-track {
     background: transparent;

@@ -59,7 +59,7 @@ export function RangeSlider({
         value={low}
         onChange={handleLow}
         aria-label={ariaLabelMin ?? '최소'}
-        className="range-thumb pointer-events-none absolute inset-0 h-full w-full appearance-none bg-transparent"
+        className="range-thumb absolute inset-0 h-full w-full appearance-none bg-transparent"
         style={{ zIndex: low > max - step ? 5 : 4 }}
       />
       <input
@@ -70,7 +70,7 @@ export function RangeSlider({
         value={high}
         onChange={handleHigh}
         aria-label={ariaLabelMax ?? '최대'}
-        className="range-thumb pointer-events-none absolute inset-0 h-full w-full appearance-none bg-transparent"
+        className="range-thumb absolute inset-0 h-full w-full appearance-none bg-transparent"
         style={{ zIndex: 5 }}
       />
     </div>
