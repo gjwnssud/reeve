@@ -132,7 +132,11 @@ export function AdminPage() {
   const [modelFilter, setModelFilter] = useState<number | undefined>(undefined);
   const [confidenceRange, setConfidenceRange] = useState<[number, number]>([0, 100]);
   const [sort, setSort] = useState<ReviewSort>("created_desc");
-  const [pageSize, setPageSize] = useState<number>(20);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = localStorage.getItem("reeve_admin_page_size");
+    const n = saved ? Number(saved) : NaN;
+    return PAGE_SIZE_OPTIONS.includes(n as typeof PAGE_SIZE_OPTIONS[number]) ? n : 20;
+  });
   const [page, setPage] = useState(0);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [activeRow, setActiveRow] = useState<number | null>(null);
@@ -736,7 +740,7 @@ export function AdminPage() {
         {/* 페이지당 표시 */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">페이지당</span>
-          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
+          <Select value={String(pageSize)} onValueChange={(v) => { const n = Number(v); setPageSize(n); localStorage.setItem("reeve_admin_page_size", String(n)); setPage(0); }}>
             <SelectTrigger className="h-8 w-20 text-xs">
               <SelectValue />
             </SelectTrigger>
