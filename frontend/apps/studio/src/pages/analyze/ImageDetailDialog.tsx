@@ -550,15 +550,17 @@ export function ImageDetailDialog({ image, onClose }: Props) {
 
                 <div className="my-1 h-px bg-border" />
 
-                <Button
-                  onClick={handleSave}
-                  disabled={!hasAnalyzedId || isSaving || !mfId || !modelId}
-                  variant="secondary"
-                  className="w-full"
-                >
-                  {isSaving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-                  매칭만 저장 (상태 유지)
-                </Button>
+                {result?.review_status !== "approved" && (
+                  <Button
+                    onClick={handleSave}
+                    disabled={!hasAnalyzedId || isSaving || !mfId || !modelId}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    {isSaving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+                    매칭만 저장 (상태 유지)
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleReanalyze}
