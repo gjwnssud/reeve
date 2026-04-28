@@ -296,7 +296,13 @@ export function AdminPage() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
-  const changeTab = (k: TabKey) => { setTabKey(k); setPage(0); };
+  const changeTab = (k: TabKey) => {
+    setTabKey(k);
+    setMfFilter(undefined);
+    setModelFilter(undefined);
+    setConfidenceRange([0, 100]);
+    setPage(0);
+  };
   const changeMf = (v: string) => {
     setMfFilter(v === "all" ? undefined : Number(v));
     setModelFilter(undefined);
