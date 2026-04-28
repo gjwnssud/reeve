@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 
 import { cn } from '../lib/utils';
 
@@ -28,6 +28,8 @@ export function RangeSlider({
   const lowPct = span > 0 ? ((low - min) / span) * 100 : 0;
   const highPct = span > 0 ? ((high - min) / span) * 100 : 100;
 
+  const [lowOnTop, setLowOnTop] = useState(false);
+
   const handleLow = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const v = Math.min(Number(e.target.value), high);
@@ -44,8 +46,20 @@ export function RangeSlider({
     [low, onChange],
   );
 
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      setLowOnTop(Math.abs(pct - lowPct) <= Math.abs(pct - highPct));
+    },
+    [lowPct, highPct],
+  );
+
   return (
-    <div className={cn('relative h-6 w-full select-none', className)}>
+    <div
+      className={cn('relative h-6 w-full select-none', className)}
+      onMouseMove={handleMouseMove}
+    >
       <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-muted" />
       <div
         className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-primary"
@@ -60,7 +74,7 @@ export function RangeSlider({
         onChange={handleLow}
         aria-label={ariaLabelMin ?? '최소'}
         className="range-thumb absolute inset-0 h-full w-full appearance-none bg-transparent"
-        style={{ zIndex: low > max - step ? 5 : 4 }}
+        style={{ zIndex: lowOnTop ? 5 : 4 }}
       />
       <input
         type="range"
@@ -71,7 +85,7 @@ export function RangeSlider({
         onChange={handleHigh}
         aria-label={ariaLabelMax ?? '최대'}
         className="range-thumb absolute inset-0 h-full w-full appearance-none bg-transparent"
-        style={{ zIndex: 5 }}
+        style={{ zIndex: lowOnTop ? 4 : 5 }}
       />
     </div>
   );
