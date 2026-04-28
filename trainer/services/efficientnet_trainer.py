@@ -994,6 +994,21 @@ class EfficientNetTrainer:
 
     async def list_runs(self, output_dir: str = _DEFAULT_OUTPUT_DIR) -> list[dict]:
         """모든 run 메타 요약 목록 반환 (최신순)"""
+        # 실제로 프로세스가 살아있는지, 어떤 run이 활성인지 먼저 파악
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                f"pgrep -f '{_SCRIPT_FILENAME}' | head -1",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            pid = stdout.decode().strip()
+            process_alive = bool(pid)
+        except Exception:
+            process_alive = False
+
+        active_run_id = self._load_current_run(output_dir)
+
         runs = []
         for run_path in self._list_runs(output_dir):
             meta_path = run_path / _RUN_META_FILENAME
@@ -1003,11 +1018,28 @@ class EfficientNetTrainer:
                 meta = json.loads(meta_path.read_text(encoding="utf-8"))
             except Exception:
                 continue
+
+            status = meta.get("status")
+            # "running"/"starting"/"started" 상태이지만 실제 프로세스가 없거나
+            # 다른 run이 활성화된 경우 → "failed"로 정정 후 메타 업데이트
+            if status in ("running", "starting", "started"):
+                run_id = meta.get("run_id", run_path.name)
+                actually_running = process_alive and (active_run_id == run_id)
+                if not actually_running:
+                    status = "failed"
+                    try:
+                        meta["status"] = "failed"
+                        if not meta.get("ended_at"):
+                            meta["ended_at"] = datetime.now().isoformat(timespec="seconds")
+                        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                    except Exception:
+                        pass
+
             runs.append({
                 "run_id": meta.get("run_id", run_path.name),
                 "started_at": meta.get("started_at"),
                 "ended_at": meta.get("ended_at"),
-                "status": meta.get("status"),
+                "status": status,
                 "params": meta.get("params"),
                 "env": meta.get("env"),
                 "data": meta.get("data"),
