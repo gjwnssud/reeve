@@ -39,7 +39,7 @@ const STATUS_TABS: TabDef[] = [
   { key: "all", label: "전체" },
   { key: "uploaded", label: "업로드", status: "uploaded" },
   { key: "yolo_failed", label: "YOLO 탐지실패", status: "yolo_failed" },
-  { key: "pending", label: "검수 대기", reviewStatus: "pending" },
+  { key: "pending", label: "검수 대기", status: "analysis_complete" },
   { key: "approved", label: "검수완료", reviewStatus: "approved" },
   { key: "on_hold", label: "보류", reviewStatus: "on_hold" },
   { key: "rejected", label: "반려", reviewStatus: "rejected" },
@@ -404,7 +404,7 @@ export function AdminPage() {
           const cnt = (() => {
             switch (t.key) {
               case "all": return counts?.all ?? 0;
-              case "pending": return counts?.pending ?? 0;
+              case "pending": return counts?.analysis_complete ?? 0;
               case "on_hold": return counts?.on_hold ?? 0;
               case "approved": return counts?.approved ?? 0;
               case "rejected": return counts?.rejected ?? 0;
