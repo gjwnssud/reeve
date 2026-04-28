@@ -30,13 +30,13 @@ class VehicleMatcher:
 
     @staticmethod
     def _sanitize_code(code: str) -> str:
-        """앞뒤 공백·특수문자 제거 후 소문자 반환"""
-        return re.sub(r'[^a-z0-9_]', '', code.strip().lower())
+        """앞뒤 공백·특수문자 제거 후 소문자 반환 (한글 보존)"""
+        return re.sub(r'[^a-z0-9_가-힣]', '', code.strip().lower())
 
     @staticmethod
     def _normalize_code(code: str) -> str:
-        """비교용 정규화: 영문자·숫자만 남기고 소문자화 (구분자 무시)"""
-        return re.sub(r'[^a-z0-9]', '', code.lower())
+        """비교용 정규화: 영문자·숫자·한글만 남기고 소문자화 (구분자 무시)"""
+        return re.sub(r'[^a-z0-9가-힣]', '', code.lower())
 
     def match_manufacturer_by_code(
         self,
@@ -464,13 +464,16 @@ class VehicleMatcher:
                 logger.warning(f"Manufacturer code already exists (normalized): {manufacturer_code}")
                 return None
 
-            # 한글명/영문명은 code를 capitalize한 형태로 사용
-            # 예: "hyundai" → korean_name: "Hyundai", english_name: "Hyundai"
-            korean_name = clean_code.capitalize()
-            english_name = clean_code.capitalize()
-
-            # 국내/해외 판단 (기본값: 해외)
-            is_domestic = False
+            # 한글이 포함된 코드면 한글을 그대로 이름으로 사용 (예: "현대")
+            # 영문 코드는 capitalize한 형태로 사용 (예: "hyundai" → "Hyundai")
+            if re.search(r'[가-힣]', clean_code):
+                korean_name = clean_code
+                english_name = clean_code
+                is_domestic = True
+            else:
+                korean_name = clean_code.capitalize()
+                english_name = clean_code.capitalize()
+                is_domestic = False
 
             # DB에 삽입
             new_manufacturer = Manufacturer(
@@ -592,10 +595,14 @@ class VehicleMatcher:
                 logger.warning(f"Model code already exists (normalized): {model_code}")
                 return None
 
-            # 한글명/영문명은 code를 capitalize한 형태로 사용
-            # 예: "casper" → korean_name: "Casper", english_name: "Casper"
-            korean_name = clean_code.capitalize()
-            english_name = clean_code.capitalize()
+            # 한글이 포함된 코드면 한글을 그대로 이름으로 사용 (예: "엑센트")
+            # 영문 코드는 capitalize한 형태로 사용 (예: "casper" → "Casper")
+            if re.search(r'[가-힣]', clean_code):
+                korean_name = clean_code
+                english_name = clean_code
+            else:
+                korean_name = clean_code.capitalize()
+                english_name = clean_code.capitalize()
 
             # DB에 삽입
             new_model = VehicleModel(

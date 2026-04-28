@@ -119,14 +119,21 @@ Three microservices communicate over a shared Docker network. 두 개의 React S
 ### Studio 핵심 설정값
 | 환경변수 | 기본값 | 설명 |
 |----------|--------|------|
-| `VISION_BACKEND` | openai | `openai` \| `ollama` |
+| `VISION_BACKEND` | openai | `openai` \| `ollama` \| `local_inference` |
 | `OPENAI_MODEL` | gpt-5.4-mini | OpenAI Vision 모델 |
 | `GEMINI_MODEL` | gemini-2.5-flash | Gemini 모델 (교차 검증용) |
 | `STUDIO_VLM_MODEL` | qwen3-vl:8b | ollama 백엔드 VLM |
+| `LOCAL_INFERENCE_URL` | http://1.214.219.58:8100 | 자체 추론 API base URL (`local_inference` 모드) |
+| `LOCAL_INFERENCE_TIMEOUT` | 30 | 자체 추론 API 요청 타임아웃 (초) |
 | `FUZZY_MATCH_THRESHOLD` | 80 | 모델명 퍼지 매칭 임계값 (0~100) |
 | `ANALYZED_VEHICLES_RETENTION_DAYS` | 30 | 분석 결과 보관 기간 (일) |
 | `CLEANUP_HOUR` | 3 | 자동 정리 실행 시각 |
 | `SERVER_WATCH_BASE_DIR` | /mnt/ | 서버 폴더 감시 허용 기본 경로 (이 경로 하위만 접근 가능) |
+
+> `VISION_BACKEND=local_inference`: 자체 API가 YOLO+분류를 모두 수행하므로 Studio는 별도
+> YOLO crop을 돌리지 않고 원본 이미지를 그대로 전달한다. 응답의 bbox를 `selected_bbox`로 사용.
+> 제조사·모델은 한글명만 반환되며, matcher 자동 삽입을 통해 한글명이 그대로 `manufacturers.code`
+> · `vehicle_models.code`에 저장된다 (영문 시드와 분기되므로 단일 백엔드 운영을 권장).
 
 ---
 
