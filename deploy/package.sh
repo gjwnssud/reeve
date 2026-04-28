@@ -938,7 +938,7 @@ package_dev_mac() {
     # docker 파일 복사 (base + dev + mac 오버라이드, 경로 패치 적용)
     patch_compose "$DOCKER_DIR/docker-compose.yml"     > "$dest/docker-compose.yml"
     patch_compose "$DOCKER_DIR/docker-compose.dev.yml" > "$dest/docker-compose.dev.yml"
-    cp "$DOCKER_DIR/docker-compose.mac.yml"  "$dest/docker-compose.mac.yml"
+    patch_compose "$DOCKER_DIR/docker-compose.mac.yml" > "$dest/docker-compose.mac.yml"
     cp "$DOCKER_DIR/docker-compose.ssl.yml" "$dest/docker-compose.ssl.yml"
     cp "$DOCKER_DIR/Dockerfile"                  "$dest/"
     cp "$DOCKER_DIR/Dockerfile.identifier.mac"   "$dest/Dockerfile.identifier.mac"
