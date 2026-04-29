@@ -80,6 +80,11 @@ class LocalInferenceVisionService:
 
         manufacturer = best.get("manufacturer")
         model = best.get("model")
+        # 자체 API가 탐지 불가 시 "unknown" 문자열을 반환하는 경우 None으로 처리
+        if isinstance(manufacturer, str) and manufacturer.lower() == "unknown":
+            manufacturer = None
+        if isinstance(model, str) and model.lower() == "unknown":
+            model = None
         cls_conf = float(best.get("classification_confidence") or 0.0)
         det_conf = float(best.get("detection_confidence") or 0.0)
 

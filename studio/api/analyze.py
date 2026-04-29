@@ -253,6 +253,19 @@ async def stream_analysis_progress(
             local_bbox = vision_result.get("selected_bbox")
             if local_bbox:
                 bbox_for_save = local_bbox
+            else:
+                # vehicles=[] 또는 "unknown" 필터링으로 탐지 결과 없음 → 탐지 실패 처리
+                def _mark_no_vehicle():
+                    if not analyzed_id:
+                        return
+                    with SessionLocal() as db:
+                        row = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+                        if row:
+                            row.processing_stage = 'no_vehicle'
+                            db.commit()
+                await loop.run_in_executor(None, _mark_no_vehicle)
+                yield f"data: {json.dumps({'event': 'error', 'message': '차량을 탐지하지 못했습니다'})}\n\n"
+                return
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)
