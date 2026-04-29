@@ -5,6 +5,7 @@ import { useFileSystemAccess, useFolderWatch, useClientUUID, Semaphore } from "@
 import type { WatchedFile } from "@reeve/shared";
 import { useAnalyzeStore } from "../../stores/analyze-store";
 import { uploadFile, detectVehicle, streamAnalyze } from "../../lib/analyzeApi";
+import type { Bbox } from "../../lib/analyzeApi";
 import { saveToTraining, extractErrorMessage } from "../../lib/api";
 import { ImageGrid } from "./ImageGrid";
 import { BulkApproveButton } from "./BulkApproveButton";
@@ -21,11 +22,19 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   const clientUUID = useClientUUID();
   const { supported, pickDirectory } = useFileSystemAccess();
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [skipYolo, setSkipYolo] = useState(false);
   const { addImage, updateImage, clearImages, incrementStat, setFolderWatchRunning } = useAnalyzeStore();
   const abortRef = useRef<AbortController>(new AbortController());
   const detectSema = useRef(new Semaphore(4));
   const analyzeSema = useRef(new Semaphore(8));
   const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((d) => setSkipYolo(d.vision_backend === "local_inference"))
+      .catch(() => {});
+  }, []);
 
   const folderImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
     (i) => i.source === "folder",
@@ -35,6 +44,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   useEffect(() => { dirHandleRef.current = dirHandle; }, [dirHandle]);
 
   // Stage 2+3: 업로드 + 탐지 (업로드 동시 무제한, 탐지 최대 4개)
+  // skipYolo=true(local_inference 모드)이면 YOLO 탐지 건너뛰고 바로 분석 단계로 진행
   const uploadAndDetect = useCallback(
     async (wf: WatchedFile): Promise<string | null> => {
       const { name, file } = wf;
@@ -54,6 +64,14 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         try { await dirHandleRef.current?.removeEntry(name); } catch { /* ignore */ }
 
         if (signal.aborted) return null;
+
+        if (skipYolo) {
+          // local_inference 모드: 자체 API가 YOLO를 수행하므로 Studio YOLO 건너뜀
+          // bbox는 분석 후 백엔드가 채워주므로 dummy 값 사용
+          incrementStat("folder", "detected");
+          updateImage(id, { selectedBbox: [0, 0, 0, 0] as Bbox, status: "queued" });
+          return id;
+        }
 
         // 탐지 세마포어(4) 획득 후 즉시 탐지
         const releaseDetect = await detectSema.current.acquire();
@@ -84,7 +102,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         return null;
       }
     },
-    [clientUUID, addImage, updateImage, incrementStat],
+    [clientUUID, addImage, updateImage, incrementStat, skipYolo],
   );
 
   // Stage 4+5: 분석 + 저장 (최대 8개 동시)
