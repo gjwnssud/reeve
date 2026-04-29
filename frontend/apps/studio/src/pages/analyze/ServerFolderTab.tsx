@@ -56,7 +56,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const [serverPath, setServerPath] = useState("");
   const [running, setRunning] = useState(false);
   const [resumedFrom, setResumedFrom] = useState(0);
-  const [skipYolo, setSkipYolo] = useState(false);
+  const skipYoloRef = useRef(false);
   const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
   const detectSema = useRef(new Semaphore(4));
@@ -66,7 +66,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
-      .then((d) => setSkipYolo(d.vision_backend === "local_inference"))
+      .then((d) => { skipYoloRef.current = d.vision_backend === "local_inference"; })
       .catch(() => {});
   }, []);
 
@@ -96,7 +96,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
 
         if (signal.aborted) return null;
 
-        if (skipYolo) {
+        if (skipYoloRef.current) {
           // local_inference 모드: 자체 API가 YOLO를 수행하므로 Studio YOLO 건너뜀
           incrementStat("server", "detected");
           updateImage(id, { selectedBbox: [0, 0, 0, 0] as Bbox, status: "queued" });
@@ -132,7 +132,7 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         return null;
       }
     },
-    [clientUUID, addImage, updateImage, incrementStat, skipYolo],
+    [clientUUID, addImage, updateImage, incrementStat],
   );
 
   // Stage 4+5: 분석 + 저장 (최대 3개 동시)

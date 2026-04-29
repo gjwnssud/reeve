@@ -22,7 +22,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   const clientUUID = useClientUUID();
   const { supported, pickDirectory } = useFileSystemAccess();
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const [skipYolo, setSkipYolo] = useState(false);
+  const skipYoloRef = useRef(false);
   const { addImage, updateImage, clearImages, incrementStat, setFolderWatchRunning } = useAnalyzeStore();
   const abortRef = useRef<AbortController>(new AbortController());
   const detectSema = useRef(new Semaphore(4));
@@ -32,7 +32,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
-      .then((d) => setSkipYolo(d.vision_backend === "local_inference"))
+      .then((d) => { skipYoloRef.current = d.vision_backend === "local_inference"; })
       .catch(() => {});
   }, []);
 
@@ -65,7 +65,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
 
         if (signal.aborted) return null;
 
-        if (skipYolo) {
+        if (skipYoloRef.current) {
           // local_inference 모드: 자체 API가 YOLO를 수행하므로 Studio YOLO 건너뜀
           // bbox는 분석 후 백엔드가 채워주므로 dummy 값 사용
           incrementStat("folder", "detected");
@@ -102,7 +102,7 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         return null;
       }
     },
-    [clientUUID, addImage, updateImage, incrementStat, skipYolo],
+    [clientUUID, addImage, updateImage, incrementStat],
   );
 
   // Stage 4+5: 분석 + 저장 (최대 8개 동시)
