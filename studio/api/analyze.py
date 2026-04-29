@@ -330,6 +330,7 @@ async def stream_analysis_progress(
                     "matched_manufacturer_id": analyzed.matched_manufacturer_id,
                     "matched_model_id": analyzed.matched_model_id,
                     "visual_evidence": visual_evidence,
+                    "selected_bbox": analyzed.selected_bbox,
                 }
 
         result_data = await loop.run_in_executor(None, _match_and_save)

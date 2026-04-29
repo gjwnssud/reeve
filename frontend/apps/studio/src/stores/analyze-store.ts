@@ -134,7 +134,8 @@ export const useAnalyzeStore = create<AnalyzeStore>()(
           return { images: { ...s.images, [id]: { ...img, status: "analyzing", progress: ev.progress, progressMsg: ev.message } } };
         }
         if (ev.event === "completed" && ev.result) {
-          return { images: { ...s.images, [id]: { ...img, status: "done", result: ev.result, progress: 100, progressMsg: undefined } } };
+          const bbox = ev.result.selected_bbox ?? undefined;
+          return { images: { ...s.images, [id]: { ...img, status: "done", result: ev.result, progress: 100, progressMsg: undefined, ...(bbox ? { selectedBbox: bbox } : {}) } } };
         }
         if (ev.event === "error") {
           return { images: { ...s.images, [id]: { ...img, status: "failed", error: ev.message } } };
