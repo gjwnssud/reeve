@@ -31,9 +31,16 @@ def _av_tab_subquery(db: Session, status: Optional[str], review_status: Optional
         q = q.filter(AnalyzedVehicle.processing_stage == 'uploaded')
     elif status == 'yolo_failed':
         q = q.filter(
-            AnalyzedVehicle.processing_stage == 'yolo_detected',
-            _or(AnalyzedVehicle.yolo_detections == None,
-                _func.json_length(AnalyzedVehicle.yolo_detections) == 0),
+            _or(
+                AnalyzedVehicle.processing_stage == 'no_vehicle',
+                (
+                    (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                    _or(
+                        AnalyzedVehicle.yolo_detections == None,
+                        _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                    )
+                ),
+            )
         )
     elif status == 'analysis_complete':
         q = q.filter(
@@ -205,10 +212,15 @@ async def get_all_analyzed_vehicles(
         query = query.filter(AnalyzedVehicle.processing_stage == 'uploaded')
     elif status == 'yolo_failed':
         query = query.filter(
-            AnalyzedVehicle.processing_stage == 'yolo_detected',
             _or(
-                AnalyzedVehicle.yolo_detections == None,
-                _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                AnalyzedVehicle.processing_stage == 'no_vehicle',
+                (
+                    (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                    _or(
+                        AnalyzedVehicle.yolo_detections == None,
+                        _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                    )
+                ),
             )
         )
     elif status == 'yolo_detected':
@@ -265,10 +277,13 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
         sql_func.sum(case((AnalyzedVehicle.processing_stage == 'uploaded', 1), else_=0)).label("uploaded"),
         sql_func.sum(case(
             (
-                (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                (AnalyzedVehicle.processing_stage == 'no_vehicle') |
                 (
-                    (AnalyzedVehicle.yolo_detections == None) |
-                    (sql_func.json_length(AnalyzedVehicle.yolo_detections) == 0)
+                    (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                    (
+                        (AnalyzedVehicle.yolo_detections == None) |
+                        (sql_func.json_length(AnalyzedVehicle.yolo_detections) == 0)
+                    )
                 ),
                 1
             ), else_=0
