@@ -6,7 +6,6 @@ import type { WatchedFile } from "@reeve/shared";
 import { useAnalyzeStore } from "../../stores/analyze-store";
 import { uploadFile, detectVehicle, streamAnalyze } from "../../lib/analyzeApi";
 import type { Bbox } from "../../lib/analyzeApi";
-import { saveToTraining, extractErrorMessage } from "../../lib/api";
 import { ImageGrid } from "./ImageGrid";
 import { BulkApproveButton } from "./BulkApproveButton";
 import type { ImageState } from "../../stores/analyze-store";
@@ -125,15 +124,6 @@ export function FolderTab({ onSelectImage, onRunningChange }: Props) {
         const finalImg = useAnalyzeStore.getState().images[id];
         if (finalImg?.status === "done") {
           incrementStat("folder", "analyzed");
-          const res = finalImg.result;
-          if (res?.matched_manufacturer_id != null && res?.matched_model_id != null) {
-            try {
-              await saveToTraining(res.id);
-              useAnalyzeStore.getState().removeImage(id);
-            } catch (e) {
-              console.error("auto-approve failed", id, extractErrorMessage(e));
-            }
-          }
         } else {
           incrementStat("folder", "analysisError");
         }

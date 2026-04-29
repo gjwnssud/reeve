@@ -10,7 +10,6 @@ import {
   streamAnalyze,
 } from "../../lib/analyzeApi";
 import type { ServerFileInfo, Bbox } from "../../lib/analyzeApi";
-import { saveToTraining, extractErrorMessage } from "../../lib/api";
 import { ImageGrid } from "./ImageGrid";
 import type { ImageState } from "../../stores/analyze-store";
 
@@ -155,15 +154,6 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         const finalImg = useAnalyzeStore.getState().images[id];
         if (finalImg?.status === "done") {
           incrementStat("server", "analyzed");
-          const res = finalImg.result;
-          if (res?.matched_manufacturer_id != null && res?.matched_model_id != null) {
-            try {
-              await saveToTraining(res.id);
-              useAnalyzeStore.getState().removeImage(id);
-            } catch (e) {
-              console.error("auto-approve failed", id, extractErrorMessage(e));
-            }
-          }
         } else {
           incrementStat("server", "analysisError");
         }
