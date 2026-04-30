@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     vision_backend: str = Field(
         default="openai",
         alias="VISION_BACKEND",
-        description="Vision 분석 백엔드 (openai 또는 ollama)"
+        description="Vision 분석 백엔드 (openai | ollama | local_inference)"
     )
     ollama_base_url: str = Field(
         default="http://localhost:11434",
@@ -105,6 +105,18 @@ class Settings(BaseSettings):
         default=60,
         alias="STUDIO_VLM_TIMEOUT",
         description="VLM 요청 타임아웃 (초)"
+    )
+
+    # 자체 추론 API 설정 (VISION_BACKEND=local_inference 일 때 사용)
+    local_inference_url: str = Field(
+        default="http://1.214.219.58:8100",
+        alias="LOCAL_INFERENCE_URL",
+        description="자체 추론 API base URL (POST /infer)"
+    )
+    local_inference_timeout: int = Field(
+        default=30,
+        alias="LOCAL_INFERENCE_TIMEOUT",
+        description="자체 추론 API 요청 타임아웃 (초)"
     )
 
     class Config:

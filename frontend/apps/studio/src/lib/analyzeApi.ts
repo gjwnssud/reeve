@@ -30,6 +30,7 @@ export interface AnalyzeResult {
   matched_manufacturer_id: number | null;
   matched_model_id: number | null;
   visual_evidence?: string | null;
+  selected_bbox?: [number, number, number, number] | null;
 }
 
 export type AnalyzeSSEEvent =

@@ -110,6 +110,9 @@ def get_vision_backend() -> VisionBackend:
     if settings.vision_backend == "ollama":
         from studio.services.ollama_vision import ollama_vision_service
         return ollama_vision_service
+    elif settings.vision_backend == "local_inference":
+        from studio.services.local_inference_vision import local_inference_vision_service
+        return local_inference_vision_service
     elif settings.openai_api_key and settings.gemini_api_key:
         # 두 API 키가 모두 설정된 경우 교차 검증 모드 (싱글턴)
         if _dual_vision_service is None:

@@ -31,9 +31,16 @@ def _av_tab_subquery(db: Session, status: Optional[str], review_status: Optional
         q = q.filter(AnalyzedVehicle.processing_stage == 'uploaded')
     elif status == 'yolo_failed':
         q = q.filter(
-            AnalyzedVehicle.processing_stage == 'yolo_detected',
-            _or(AnalyzedVehicle.yolo_detections == None,
-                _func.json_length(AnalyzedVehicle.yolo_detections) == 0),
+            _or(
+                AnalyzedVehicle.processing_stage == 'no_vehicle',
+                (
+                    (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                    _or(
+                        AnalyzedVehicle.yolo_detections == None,
+                        _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                    )
+                ),
+            )
         )
     elif status == 'analysis_complete':
         q = q.filter(
@@ -205,10 +212,15 @@ async def get_all_analyzed_vehicles(
         query = query.filter(AnalyzedVehicle.processing_stage == 'uploaded')
     elif status == 'yolo_failed':
         query = query.filter(
-            AnalyzedVehicle.processing_stage == 'yolo_detected',
             _or(
-                AnalyzedVehicle.yolo_detections == None,
-                _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                AnalyzedVehicle.processing_stage == 'no_vehicle',
+                (
+                    (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                    _or(
+                        AnalyzedVehicle.yolo_detections == None,
+                        _func.json_length(AnalyzedVehicle.yolo_detections) == 0,
+                    )
+                ),
             )
         )
     elif status == 'yolo_detected':
@@ -265,10 +277,13 @@ def get_analyzed_vehicles_counts(db: Session = Depends(get_db)):
         sql_func.sum(case((AnalyzedVehicle.processing_stage == 'uploaded', 1), else_=0)).label("uploaded"),
         sql_func.sum(case(
             (
-                (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                (AnalyzedVehicle.processing_stage == 'no_vehicle') |
                 (
-                    (AnalyzedVehicle.yolo_detections == None) |
-                    (sql_func.json_length(AnalyzedVehicle.yolo_detections) == 0)
+                    (AnalyzedVehicle.processing_stage == 'yolo_detected') &
+                    (
+                        (AnalyzedVehicle.yolo_detections == None) |
+                        (sql_func.json_length(AnalyzedVehicle.yolo_detections) == 0)
+                    )
                 ),
                 1
             ), else_=0
@@ -996,16 +1011,23 @@ async def analyze_single_image(
     from pathlib import Path
     from studio.services.vision_backend import get_vision_backend
     from studio.services.matcher import VehicleMatcher
+    from studio.config import settings as _settings
 
     analyzed = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
     if not analyzed:
         raise HTTPException(status_code=404, detail="Analyzed vehicle not found")
 
+    is_local = _settings.vision_backend == "local_inference"
+
     try:
         target_path = analyzed.image_path
 
-        # 크롭이 없는 경우(원본 == image_path) → bbox로 크롭 생성
-        if analyzed.image_path == analyzed.original_image_path:
+        if is_local:
+            # 자체 추론 모드: 자체 API가 YOLO+분류를 모두 수행하므로 crop 우회.
+            # 원본 이미지를 그대로 전달하고, selected_bbox는 vision 응답으로 갱신한다.
+            target_path = analyzed.original_image_path
+        elif analyzed.image_path == analyzed.original_image_path:
+            # 크롭이 없는 경우(원본 == image_path) → bbox로 크롭 생성
             bbox = analyzed.selected_bbox
             if not bbox and analyzed.yolo_detections:
                 bbox = analyzed.yolo_detections[0].get("bbox")
@@ -1048,8 +1070,8 @@ async def analyze_single_image(
         with SessionLocal() as write_db:
             matcher = VehicleMatcher(write_db, auto_insert=True)
             match_result = matcher.match_vehicle(
-                vision_result.get("manufacturer_code", ""),
-                vision_result.get("model_code", ""),
+                vision_result.get("manufacturer_code", "") or "",
+                vision_result.get("model_code", "") or "",
                 vision_confidence=vision_result.get("confidence")
             )
 
@@ -1066,6 +1088,13 @@ async def analyze_single_image(
             analyzed_fresh.is_verified = False
             analyzed_fresh.review_status = 'pending'
             analyzed_fresh.review_reason = None
+
+            # 자체 추론 모드: 응답의 bbox로 selected_bbox 갱신, image_path는 원본 유지
+            if is_local:
+                local_bbox = vision_result.get("selected_bbox")
+                if local_bbox:
+                    analyzed_fresh.selected_bbox = local_bbox
+                analyzed_fresh.image_path = analyzed_fresh.original_image_path
 
             write_db.commit()
             write_db.refresh(analyzed_fresh)

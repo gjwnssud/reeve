@@ -30,13 +30,17 @@ class VehicleMatcher:
 
     @staticmethod
     def _sanitize_code(code: str) -> str:
-        """앞뒤 공백·특수문자 제거 후 소문자 반환"""
-        return re.sub(r'[^a-z0-9_]', '', code.strip().lower())
+        """앞뒤 공백·특수문자만 제거 (대소문자·한글 원본 보존)
+
+        매칭은 호출 측에서 ``.lower()`` 적용으로 대소문자 무시 비교한다.
+        저장 시에는 이 결과를 그대로 사용해 입력 원본을 보존한다.
+        """
+        return re.sub(r'[^A-Za-z0-9_가-힣]', '', code.strip())
 
     @staticmethod
     def _normalize_code(code: str) -> str:
-        """비교용 정규화: 영문자·숫자만 남기고 소문자화 (구분자 무시)"""
-        return re.sub(r'[^a-z0-9]', '', code.lower())
+        """비교용 정규화: 영문자·숫자·한글만 남기고 소문자화 (구분자·대소문자 무시)"""
+        return re.sub(r'[^a-z0-9가-힣]', '', code.lower())
 
     def match_manufacturer_by_code(
         self,
@@ -54,15 +58,15 @@ class VehicleMatcher:
         if not manufacturer_code:
             return None
 
-        # 입력 정제 (공백·특수문자 제거)
+        # 입력 정제 (공백·특수문자 제거, 대소문자·한글 원본 보존)
         clean_code = self._sanitize_code(manufacturer_code)
         if not clean_code:
             return None
 
-        # 코드로 정확 매칭 (대소문자 무시, ilike의 _ 와일드카드 문제 방지)
+        # 코드로 정확 매칭 (대소문자 무시)
         from sqlalchemy import func
         manufacturer = self.db.query(Manufacturer).filter(
-            func.lower(Manufacturer.code) == clean_code
+            func.lower(Manufacturer.code) == clean_code.lower()
         ).first()
 
         if manufacturer:
@@ -150,13 +154,13 @@ class VehicleMatcher:
         if not model_code:
             return None
 
-        # 코드로 정확 매칭 (대소문자 무시, ilike wildcard 문제 방지)
+        # 코드로 정확 매칭 (대소문자 무시)
         clean_code = self._sanitize_code(model_code)
         if not clean_code:
             return None
         from sqlalchemy import func
         query = self.db.query(VehicleModel).filter(
-            func.lower(VehicleModel.code) == clean_code
+            func.lower(VehicleModel.code) == clean_code.lower()
         )
 
         if manufacturer_id:
@@ -464,13 +468,11 @@ class VehicleMatcher:
                 logger.warning(f"Manufacturer code already exists (normalized): {manufacturer_code}")
                 return None
 
-            # 한글명/영문명은 code를 capitalize한 형태로 사용
-            # 예: "hyundai" → korean_name: "Hyundai", english_name: "Hyundai"
-            korean_name = clean_code.capitalize()
-            english_name = clean_code.capitalize()
-
-            # 국내/해외 판단 (기본값: 해외)
-            is_domestic = False
+            # 응답 원본을 그대로 저장 (대소문자·한글 보존)
+            # 한글 포함 시 국산으로 가정. 검수에서 수정 가능.
+            korean_name = clean_code
+            english_name = clean_code
+            is_domestic = bool(re.search(r'[가-힣]', clean_code))
 
             # DB에 삽입
             new_manufacturer = Manufacturer(
@@ -592,10 +594,9 @@ class VehicleMatcher:
                 logger.warning(f"Model code already exists (normalized): {model_code}")
                 return None
 
-            # 한글명/영문명은 code를 capitalize한 형태로 사용
-            # 예: "casper" → korean_name: "Casper", english_name: "Casper"
-            korean_name = clean_code.capitalize()
-            english_name = clean_code.capitalize()
+            # 응답 원본을 그대로 저장 (대소문자·한글 보존)
+            korean_name = clean_code
+            english_name = clean_code
 
             # DB에 삽입
             new_model = VehicleModel(
