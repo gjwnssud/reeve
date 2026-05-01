@@ -86,6 +86,7 @@ function rowStatus(item: AnalyzedVehicle): RowStatus {
           ? { variant: "default", label: "분석완료" }
           : { variant: "destructive", label: "분석실패" };
       }
+      if (stage === "no_vehicle") return { variant: "destructive", label: "탐지실패" };
       return { variant: "secondary", label: stage ?? "대기" };
     }
   }

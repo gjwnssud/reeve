@@ -241,19 +241,7 @@ async def stream_analysis_progress(
         vision_result = await vision_service.analyze_vehicle_image(crop_path_str)
 
         # local_inference 모드: Studio YOLO bbox를 selected_bbox로 사용 (추론서버 bbox 무시)
-        # 제조사/모델 모두 None이면 분류 실패 → 탐지 실패로 처리
-        if is_local and vision_result.get("manufacturer_code") is None and vision_result.get("model_code") is None:
-            def _mark_no_vehicle():
-                if not analyzed_id:
-                    return
-                with SessionLocal() as db:
-                    row = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
-                    if row:
-                        row.processing_stage = 'no_vehicle'
-                        db.commit()
-            await loop.run_in_executor(None, _mark_no_vehicle)
-            yield f"data: {json.dumps({'event': 'error', 'message': '차량을 탐지하지 못했습니다'})}\n\n"
-            return
+        # 분류 실패(manufacturer/model 모두 None)는 analysis_complete + null값으로 저장 → 어드민 "분석실패" 표시
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)
