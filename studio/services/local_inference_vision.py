@@ -5,8 +5,8 @@ VISION_BACKEND=local_inference 일 때 사용.
 외부 추론 API(POST /infer)에 multipart/form-data로 이미지를 보내고
 {vehicles[], count, inference_time_ms} 응답을 받아 VisionBackend Protocol 스키마로 정규화한다.
 
-기존 OpenAI/Gemini/Ollama 백엔드와 달리 자체 API는 내부에서 YOLO+분류를 모두 수행하므로
-Studio가 별도 YOLO를 돌리지 않는다. 응답의 vehicles[i].bbox를 selected_bbox로 사용한다.
+Studio가 먼저 YOLO로 차량을 탐지·크롭한 뒤 크롭 이미지를 이 서비스에 전달한다.
+selected_bbox는 Studio YOLO bbox를 사용하므로 이 서비스의 vehicles[i].bbox는 무시된다.
 제조사/모델은 한글명으로 반환되며, 그대로 raw 결과의 manufacturer_code/model_code에 매핑된다.
 """
 import json

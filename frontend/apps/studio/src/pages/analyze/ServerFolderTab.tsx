@@ -9,7 +9,7 @@ import {
   detectVehicle,
   streamAnalyze,
 } from "../../lib/analyzeApi";
-import type { ServerFileInfo, Bbox } from "../../lib/analyzeApi";
+import type { ServerFileInfo } from "../../lib/analyzeApi";
 import { ImageGrid } from "./ImageGrid";
 import type { ImageState } from "../../stores/analyze-store";
 
@@ -55,19 +55,11 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const [serverPath, setServerPath] = useState("");
   const [running, setRunning] = useState(false);
   const [resumedFrom, setResumedFrom] = useState(0);
-  const skipYoloRef = useRef(false);
   const { addImage, updateImage, clearImages, setFolderWatchRunning, incrementStat, resetStats } = useAnalyzeStore();
   const abortRef = useRef(new AbortController());
   const detectSema = useRef(new Semaphore(4));
   const analyzeSema = useRef(new Semaphore(3));
   const processedCount = useRef(0);
-
-  useEffect(() => {
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then((d) => { skipYoloRef.current = d.vision_backend === "local_inference"; })
-      .catch(() => {});
-  }, []);
 
   const stats = useAnalyzeStore((s) => s.serverStats);
   const serverImages = Object.values(useAnalyzeStore((s) => s.images)).filter(
@@ -76,7 +68,6 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
   const displayImages = serverImages.slice(-MAX_DISPLAY).reverse();
 
   // Stage 2+3: 복사·등록 + 탐지 (복사 동시 무제한, 탐지 최대 4개)
-  // skipYolo=true(local_inference 모드)이면 YOLO 탐지 건너뛰고 바로 분석 단계로 진행
   const registerAndDetect = useCallback(
     async (f: ServerFileInfo): Promise<string | null> => {
       const signal = abortRef.current.signal;
@@ -94,13 +85,6 @@ export function ServerFolderTab({ onSelectImage, onRunningChange }: Props) {
         updateImage(id, { analyzedId: result.analyzed_id, originalImagePath: result.original_image_path });
 
         if (signal.aborted) return null;
-
-        if (skipYoloRef.current) {
-          // local_inference 모드: 자체 API가 YOLO를 수행하므로 Studio YOLO 건너뜀
-          incrementStat("server", "detected");
-          updateImage(id, { selectedBbox: [0, 0, 0, 0] as Bbox, status: "queued" });
-          return id;
-        }
 
         // 탐지 세마포어(4) 획득 후 즉시 탐지
         const releaseDetect = await detectSema.current.acquire();
