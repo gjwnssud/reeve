@@ -162,7 +162,7 @@ async def stream_analysis_progress(
 
     Args:
         file_path: 원본 이미지 경로
-        bbox: 크롭할 바운딩 박스 [x1, y1, x2, y2]
+        bbox: 크롭할 바운딩 박스 [x1, y1, x2, y2] — local_inference 포함 모든 모드에서 Studio YOLO bbox 사용
 
     Yields:
         SSE 형식의 진행 상황 및 결과
@@ -174,63 +174,57 @@ async def stream_analysis_progress(
     is_local = settings.vision_backend == "local_inference"
 
     try:
-        if is_local:
-            # 자체 추론 모드: 자체 API가 YOLO+분류를 모두 수행하므로 crop 단계를 건너뛰고
-            # 원본 이미지를 그대로 전달한다. selected_bbox는 vision 응답에서 받아 채운다.
-            yield f"data: {json.dumps({'event': 'progress', 'progress': 10, 'message': '자체 추론 API 호출 준비'})}\n\n"
-            await asyncio.sleep(0.1)
-            crop_path_str = file_path
-        else:
-            # 1단계: 이미지 크롭 — cv2 blocking I/O를 스레드풀에서 실행
-            yield f"data: {json.dumps({'event': 'progress', 'progress': 10, 'message': '이미지 크롭 중'})}\n\n"
-            await asyncio.sleep(0.1)
+        # 1단계: 이미지 크롭 — cv2 blocking I/O를 스레드풀에서 실행
+        # local_inference 모드도 Studio YOLO bbox로 crop하여 추론서버에 분류만 요청
+        yield f"data: {json.dumps({'event': 'progress', 'progress': 10, 'message': '이미지 크롭 중'})}\n\n"
+        await asyncio.sleep(0.1)
 
-            def _crop():
-                image = cv2.imread(file_path)
-                if image is None:
-                    raise ValueError("Failed to load image")
-                h, w = image.shape[:2]
-                x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-                x1, x2 = min(x1, x2), max(x1, x2)
-                y1, y2 = min(y1, y2), max(y1, y2)
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(w, x2), min(h, y2)
-                if x2 <= x1 or y2 <= y1:
-                    raise ValueError(f"유효하지 않은 bbox: [{x1},{y1},{x2},{y2}] (이미지 크기: {w}x{h})")
-                cropped = image[y1:y2, x1:x2]
-                if cropped.size == 0:
-                    raise ValueError("크롭 결과가 비어있습니다")
-                from datetime import datetime
-                date_str = datetime.now().strftime("%Y-%m-%d")
-                crop_dir = Path(f"data/crops/{date_str}")
-                crop_dir.mkdir(parents=True, exist_ok=True)
-                crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
-                cv2.imwrite(str(crop_path), cropped)
-                return str(crop_path)
+        def _crop():
+            image = cv2.imread(file_path)
+            if image is None:
+                raise ValueError("Failed to load image")
+            h, w = image.shape[:2]
+            x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            if x2 <= x1 or y2 <= y1:
+                raise ValueError(f"유효하지 않은 bbox: [{x1},{y1},{x2},{y2}] (이미지 크기: {w}x{h})")
+            cropped = image[y1:y2, x1:x2]
+            if cropped.size == 0:
+                raise ValueError("크롭 결과가 비어있습니다")
+            from datetime import datetime
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            crop_dir = Path(f"data/crops/{date_str}")
+            crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_path = crop_dir / f"{os.urandom(16).hex()}_crop.jpg"
+            cv2.imwrite(str(crop_path), cropped)
+            return str(crop_path)
 
-            crop_path_str = await loop.run_in_executor(None, _crop)
+        crop_path_str = await loop.run_in_executor(None, _crop)
 
-            # 1.5단계: 크롭 경로를 DB에 즉시 반영
-            # (Vision 실패 시에도 크롭 이미지가 DB와 연결되어 수동 입력 → 학습 데이터 적재 시 사용 가능)
-            def _persist_crop():
-                if not analyzed_id:
+        # 1.5단계: 크롭 경로를 DB에 즉시 반영
+        # (Vision 실패 시에도 크롭 이미지가 DB와 연결되어 수동 입력 → 학습 데이터 적재 시 사용 가능)
+        def _persist_crop():
+            if not analyzed_id:
+                return
+            with SessionLocal() as db:
+                row = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
+                if not row:
                     return
-                with SessionLocal() as db:
-                    row = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
-                    if not row:
-                        return
-                    if row.image_path and row.image_path != row.original_image_path and row.image_path != crop_path_str:
-                        old_crop = Path(row.image_path)
-                        if old_crop.exists():
-                            try:
-                                old_crop.unlink()
-                            except OSError:
-                                pass
-                    row.image_path = crop_path_str
-                    row.selected_bbox = bbox
-                    db.commit()
+                if row.image_path and row.image_path != row.original_image_path and row.image_path != crop_path_str:
+                    old_crop = Path(row.image_path)
+                    if old_crop.exists():
+                        try:
+                            old_crop.unlink()
+                        except OSError:
+                            pass
+                row.image_path = crop_path_str
+                row.selected_bbox = bbox
+                db.commit()
 
-            await loop.run_in_executor(None, _persist_crop)
+        await loop.run_in_executor(None, _persist_crop)
 
         # 2단계: Vision API 호출 (이미 async)
         if is_local:
@@ -246,26 +240,8 @@ async def stream_analysis_progress(
         vision_service = get_vision_backend()
         vision_result = await vision_service.analyze_vehicle_image(crop_path_str)
 
-        # 자체 추론 모드는 응답의 selected_bbox로 사용자 입력 bbox를 덮어쓴다.
-        # (자체 API가 YOLO 결과로 직접 결정하므로)
-        bbox_for_save = bbox
-        if is_local:
-            local_bbox = vision_result.get("selected_bbox")
-            if local_bbox:
-                bbox_for_save = local_bbox
-            else:
-                # vehicles=[] 또는 "unknown" 필터링으로 탐지 결과 없음 → 탐지 실패 처리
-                def _mark_no_vehicle():
-                    if not analyzed_id:
-                        return
-                    with SessionLocal() as db:
-                        row = db.query(AnalyzedVehicle).filter(AnalyzedVehicle.id == analyzed_id).first()
-                        if row:
-                            row.processing_stage = 'no_vehicle'
-                            db.commit()
-                await loop.run_in_executor(None, _mark_no_vehicle)
-                yield f"data: {json.dumps({'event': 'error', 'message': '차량을 탐지하지 못했습니다'})}\n\n"
-                return
+        # local_inference 모드: Studio YOLO bbox를 selected_bbox로 사용 (추론서버 bbox 무시)
+        # 분류 실패(manufacturer/model 모두 None)는 analysis_complete + null값으로 저장 → 어드민 "분석실패" 표시
 
         yield f"data: {json.dumps({'event': 'progress', 'progress': 60, 'message': 'DB 매칭 중'})}\n\n"
         await asyncio.sleep(0.1)
@@ -274,7 +250,7 @@ async def stream_analysis_progress(
         yield f"data: {json.dumps({'event': 'progress', 'progress': 80, 'message': '결과 저장 중'})}\n\n"
         await asyncio.sleep(0.1)
 
-        new_raw_result = {**vision_result, "original_image": file_path, "bbox": bbox_for_save}
+        new_raw_result = {**vision_result, "original_image": file_path, "bbox": bbox}
 
         def _match_and_save():
             with SessionLocal() as db:
@@ -311,7 +287,7 @@ async def stream_analysis_progress(
                     analyzed.review_status = 'pending'
                     analyzed.review_reason = None
                     analyzed.processing_stage = 'analysis_complete'
-                    analyzed.selected_bbox = bbox_for_save
+                    analyzed.selected_bbox = bbox
                 else:
                     analyzed = AnalyzedVehicle(
                         image_path=crop_path_str,
@@ -325,7 +301,7 @@ async def stream_analysis_progress(
                         confidence_score=new_confidence,
                         is_verified=False,
                         processing_stage='analysis_complete',
-                        selected_bbox=bbox_for_save,
+                        selected_bbox=bbox,
                     )
                     db.add(analyzed)
 

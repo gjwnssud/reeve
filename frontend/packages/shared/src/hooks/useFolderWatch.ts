@@ -64,8 +64,12 @@ export function useFolderWatch(opts: UseFolderWatchOptions) {
           seen.current.add(name);
           if (!exts.has(ext)) continue;
           const fileHandle = handle as FileSystemFileHandle;
-          const file = await fileHandle.getFile();
-          if (file.type.startsWith('image/')) newFiles.push({ name, handle: fileHandle, file });
+          const rawFile = await fileHandle.getFile();
+          if (!rawFile.type.startsWith('image/')) continue;
+          // arrayBuffer()로 즉시 읽어 메모리 기반 File 생성 — removeEntry 후에도 blob URL 유지
+          const buf = await rawFile.arrayBuffer();
+          const file = new File([buf], rawFile.name, { type: rawFile.type });
+          newFiles.push({ name, handle: fileHandle, file });
         }
 
         if (newFiles.length === 0) return;
